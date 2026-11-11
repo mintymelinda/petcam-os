@@ -1,0 +1,47 @@
+name: Build PetCam OS image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "config"
+      - "stage-petcam/**"
+      - ".github/workflows/build-image.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out PetCam OS
+        uses: actions/checkout@v4
+
+      - name: Check out pi-gen
+        uses: actions/checkout@v4
+        with:
+          repository: RPi-Distro/pi-gen
+          ref: master
+          path: pi-gen
+
+      - name: Add PetCam image stage
+        run: |
+          cp config pi-gen/config
+          cp -a stage-petcam pi-gen/stage-petcam
+          mkdir -p pi-gen/deploy
+
+      - name: Build Raspberry Pi OS image
+        run: |
+          cd pi-gen
+          sudo ./build-docker.sh
+
+      - name: Upload image artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: petcam-os-image
+          path: pi-gen/deploy/*
+          if-no-files-found: error
+          retention-days: 14
