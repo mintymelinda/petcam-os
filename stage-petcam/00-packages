@@ -1,0 +1,10 @@
+avahi-daemon
+avahi-utils
+git
+build-essential
+pkg-config
+libevent-dev
+libjpeg-dev
+libbsd-dev
+libv4l-dev
+v4l-utils
