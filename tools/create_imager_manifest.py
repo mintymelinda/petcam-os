@@ -41,6 +41,7 @@ def create_manifest(image: Path, output: Path, icon: str | None = None) -> None:
         "image_download_sha256": compressed_hash.hexdigest(),
         "release_date": datetime.date.fromtimestamp(image.stat().st_mtime).isoformat(),
         "init_format": "systemd",
+        "devices": ["pi0", "pi0w", "pi02w", "pi1", "pi2", "pi3", "pi4", "pi5", "pi400", "cm1", "cm3", "cm4", "cm5"],
     }
 
     output.write_text(
