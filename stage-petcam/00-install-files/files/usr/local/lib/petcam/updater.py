@@ -115,6 +115,44 @@ def verify_signature(manifest: bytes, signature: bytes, public_key: Path = PUBLI
         raise UpdateError("Release manifest signature verification failed")
 
 
+
+def download_archive(url: str, destination: Path, expected_size: int, expected_digest: str) -> None:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise UpdateError("Update downloads must use HTTPS")
+    request = urllib.request.Request(url, headers={"User-Agent": "PetCam-Updater/1"})
+    digest = hashlib.sha256()
+    received = 0
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            if urllib.parse.urlparse(response.geturl()).scheme != "https":
+                raise UpdateError("Update server redirected to a non-HTTPS URL")
+            length = response.headers.get("Content-Length")
+            if length and int(length) != expected_size:
+                raise UpdateError("Release Content-Length does not match the signed manifest")
+            with destination.open("wb") as output:
+                while True:
+                    chunk = response.read(64 * 1024)
+                    if not chunk:
+                        break
+                    received += len(chunk)
+                    if received > expected_size or received > MAX_ARCHIVE:
+                        raise UpdateError("Release archive exceeds its signed size limit")
+                    digest.update(chunk)
+                    output.write(chunk)
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
+        destination.unlink(missing_ok=True)
+        if isinstance(exc, UpdateError):
+            raise
+        raise UpdateError(f"Unable to download release archive: {exc}") from exc
+    if received != expected_size:
+        destination.unlink(missing_ok=True)
+        raise UpdateError("Downloaded release size does not match the signed manifest")
+    if digest.hexdigest() != expected_digest:
+        destination.unlink(missing_ok=True)
+        raise UpdateError("Downloaded release SHA-256 does not match the signed manifest")
+
+
 def parse_manifest(raw: bytes) -> dict[str, object]:
     if len(raw) > MAX_MANIFEST:
         raise UpdateError("Release manifest is too large")
