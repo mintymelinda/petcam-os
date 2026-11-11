@@ -1,6 +1,7 @@
 import subprocess
 import io
 import json
+import hashlib
 import tarfile
 import tempfile
 import unittest
@@ -12,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "stage-petcam/00-in
 from updater import (
     MAX_ARCHIVE,
     UpdateError,
+    download_archive,
     parse_manifest,
     safe_extract,
     validate_release,
@@ -82,6 +84,36 @@ class UpdateManifestTests(unittest.TestCase):
             verify_signature(message.read_bytes(), signature.read_bytes(), public)
             with self.assertRaises(UpdateError):
                 verify_signature(message.read_bytes() + b" ", signature.read_bytes(), public)
+
+
+    def test_download_streams_and_verifies_archive_bytes(self):
+        payload = b"release archive bytes"
+        digest = hashlib.sha256(payload).hexdigest()
+
+        class Response(io.BytesIO):
+            headers = {"Content-Length": str(len(payload))}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                self.close()
+
+            def geturl(self):
+                return "https://example.com/release.tar.gz"
+
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "release.tar.gz"
+            with mock.patch("updater.urllib.request.urlopen", return_value=Response(payload)):
+                download_archive("https://example.com/release.tar.gz", destination, len(payload), digest)
+            self.assertEqual(destination.read_bytes(), payload)
+
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "release.tar.gz"
+            with mock.patch("updater.urllib.request.urlopen", return_value=Response(payload)):
+                with self.assertRaises(UpdateError):
+                    download_archive("https://example.com/release.tar.gz", destination, len(payload), "0" * 64)
+            self.assertFalse(destination.exists())
 
     def test_semver_comparison_is_numeric(self):
         self.assertGreater(version_tuple("1.10.0"), version_tuple("1.9.9"))
