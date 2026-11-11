@@ -69,7 +69,7 @@ sudo systemctl start petcam-update.service
 sudo journalctl -u petcam-update.service
 ~~~
 
-The update is staged before activation. Activation atomically switches /opt/petcam/current, reloads systemd, restarts the stream and web services, then checks that both services are active and the local web manager responds. If the health check fails, the updater restores the previous active release and restarts the services.
+The update is staged before activation. Activation atomically switches /opt/petcam/current, reloads systemd, restarts the stream and web services, then checks that the web manager is active and responds locally. The stream service is also restarted, but a missing or disconnected camera is reported as a warning rather than treated as a failed application update. If the web health check fails, the updater restores the previous active release and restarts the services.
 
 A camera being absent does not itself fail the update health check; camera availability is hardware state, not release integrity. The previous release is retained. The updater does not automatically delete old releases.
 
