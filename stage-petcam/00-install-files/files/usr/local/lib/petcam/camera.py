@@ -121,6 +121,93 @@ def mode_supports_fps(mode, fps):
         return abs(steps - round(steps)) < 0.001
     return limits["min_interval_seconds"] <= interval <= limits["max_interval_seconds"]
 
+CSI_CAMERA_RE = re.compile(r"^\s*(\d+)\s*:\s*(\S+)\s*\[(\d+)x(\d+)\]")
+CSI_MODE_RE = re.compile(r"(\d+)x(\d+)\s+\[([\d.]+)\s+fps")
+
+
+def parse_csi_cameras(output):
+    cameras = []
+    current = None
+    for line in output.splitlines():
+        camera_match = CSI_CAMERA_RE.search(line)
+        if camera_match:
+            current = {
+                "index": int(camera_match.group(1)),
+                "sensor": camera_match.group(2),
+                "sensor_width": int(camera_match.group(3)),
+                "sensor_height": int(camera_match.group(4)),
+                "modes": [],
+            }
+            cameras.append(current)
+            continue
+        mode_match = CSI_MODE_RE.search(line)
+        if mode_match and current:
+            mode = {
+                "width": int(mode_match.group(1)),
+                "height": int(mode_match.group(2)),
+                "fps": float(mode_match.group(3)),
+            }
+            if mode not in current["modes"]:
+                current["modes"].append(mode)
+    return cameras
+
+
+def discover_csi_cameras():
+    result = subprocess.run(
+        ["rpicam-hello", "--list-cameras"],
+        capture_output=True, text=True, check=False, timeout=15,
+    )
+    if result.returncode:
+        return []
+    return parse_csi_cameras(result.stdout + "\n" + result.stderr)
+
+
+def select_csi_mode(cameras, tier, requested_camera=None, resolution="auto", fps="auto"):
+    if requested_camera is not None:
+        cameras = [camera for camera in cameras if camera["index"] == requested_camera]
+    candidates = []
+    for camera in cameras:
+        for mode in camera["modes"]:
+            candidates.append((
+                mode["width"] * mode["height"] * mode["fps"],
+                mode["width"] * mode["height"],
+                mode["fps"],
+                camera,
+                mode,
+            ))
+    if not candidates:
+        return None
+    if resolution != "auto":
+        match = re.fullmatch(r"(\d+)x(\d+)", resolution)
+        if not match:
+            raise ValueError("Resolution must be 'auto' or WIDTHxHEIGHT.")
+        width, height = map(int, match.groups())
+        candidates = [item for item in candidates if item[4]["width"] == width and item[4]["height"] == height]
+        if not candidates:
+            raise ValueError(f"CSI resolution {resolution} is not advertised by the selected camera.")
+    if fps != "auto":
+        if not fps.isdigit() or int(fps) < 1:
+            raise ValueError("FPS must be 'auto' or a positive integer.")
+        requested_fps = int(fps)
+        candidates = [item for item in candidates if abs(item[4]["fps"] - requested_fps) < 0.1]
+        if not candidates:
+            raise ValueError(f"CSI frame rate {fps} is not advertised for the selected resolution.")
+    budget = PIXEL_BUDGETS[tier]
+    within_budget = [item for item in candidates if item[0] <= budget]
+    chosen = max(within_budget, key=lambda item: (item[1], item[2])) if within_budget else min(candidates, key=lambda item: item[0])
+    camera, mode = chosen[3], chosen[4]
+    return {
+        "camera": camera["index"],
+        "sensor": camera["sensor"],
+        "resolution": f'{mode["width"]}x{mode["height"]}',
+        "fps": int(mode["fps"]) if mode["fps"].is_integer() else mode["fps"],
+        "mode_fps": [item["fps"] for item in camera["modes"] if item["width"] == mode["width"] and item["height"] == mode["height"]],
+        "estimated_pixels_per_second": chosen[0],
+        "hardware_budget_pixels_per_second": budget,
+        "performance_warning": chosen[0] > budget,
+    }
+
+
 def model_tier(model):
     value = model.lower()
     if "zero 2" in value or "zero 2 w" in value:
@@ -211,8 +298,9 @@ def select_mode(devices, tier):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("discover", "select", "status"))
+    parser.add_argument("command", choices=("discover", "select", "discover-csi", "select-csi", "status"))
     parser.add_argument("--device")
+    parser.add_argument("--camera", type=int)
     parser.add_argument("--format", default="auto")
     parser.add_argument("--resolution", default="auto")
     parser.add_argument("--fps", default="auto")
@@ -229,7 +317,23 @@ def main():
         ]
 
     if args.command == "discover":
-        print(json.dumps({"model": model, "tier": tier, "devices": devices}, indent=2))
+        print(json.dumps({"model": model, "tier": tier, "usb_devices": devices, "csi_cameras": discover_csi_cameras()}, indent=2))
+        return 0
+    if args.command == "discover-csi":
+        print(json.dumps({"model": model, "tier": tier, "csi_cameras": discover_csi_cameras()}, indent=2))
+        return 0
+    if args.command == "select-csi":
+        try:
+            selected_csi = select_csi_mode(
+                discover_csi_cameras(), tier, args.camera, args.resolution, args.fps
+            )
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        if not selected_csi:
+            print("No supported CSI camera or camera mode found. Check the ribbon cable and camera-stack detection.", file=sys.stderr)
+            return 1
+        print(json.dumps({"backend": "csi", "model": model, "tier": tier, **selected_csi}))
         return 0
     if args.command == "select":
         devices = filter_devices_by_format(devices, args.format)
