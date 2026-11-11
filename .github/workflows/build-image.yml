@@ -2,6 +2,11 @@ name: Build PetCam OS image
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "config"
+      - "stage-petcam/**"
+      - ".github/workflows/build-image.yml"
   push:
     branches: [main]
     paths:
