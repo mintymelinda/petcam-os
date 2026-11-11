@@ -55,7 +55,7 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn("chmod 0750 /etc/petcam", script)
         self.assertIn("chown petcam:petcam /etc/petcam/petcam.conf", script)
         self.assertIn("chmod 0640 /etc/petcam/petcam.conf", script)
-        self.assertNotIn(r"\\nchmod", script)
+        self.assertNotIn(r"\nchmod", script)
 
     def test_release_manifest_schema_is_versioned(self):
         script = INSTALL.read_text()
