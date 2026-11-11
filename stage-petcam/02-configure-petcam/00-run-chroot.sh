@@ -62,7 +62,7 @@ start_usb() {
     fi
     echo "PetCam backend: usb; hardware tier: $tier"
     echo "Starting USB camera $camera at $resolution, format=$format, requested_fps=$fps, encoder=$encoder"
-    exec /usr/local/bin/ustreamer --device="$camera" --host=0.0.0.0 --port="$PORT" --format="$format" --encoder="$encoder" --resolution="$resolution" --desired-fps="$fps" --perf
+    exec /usr/local/bin/ustreamer --device="$camera" --host=127.0.0.1 --port="$PORT" --format="$format" --encoder="$encoder" --resolution="$resolution" --desired-fps="$fps" --perf
 }
 
 start_csi() {
@@ -82,7 +82,7 @@ start_csi() {
     fi
     echo "PetCam backend: csi; hardware tier: $tier"
     echo "Starting CSI camera index=$camera at $resolution, requested_fps=$fps, MJPEG quality=$CSI_QUALITY"
-    exec python3 /usr/local/lib/petcam/csi_stream.py --camera "$camera" --resolution "$resolution" --fps "$fps" --quality "$CSI_QUALITY" --host 0.0.0.0 --port "$PORT"
+    exec python3 /usr/local/lib/petcam/csi_stream.py --camera "$camera" --resolution "$resolution" --fps "$fps" --quality "$CSI_QUALITY" --host 127.0.0.1 --port "$PORT"
 }
 
 case "$SOURCE" in
