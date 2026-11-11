@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 MODE_RE = re.compile(r"Size: Discrete (\d+)x(\d+)")
@@ -166,11 +167,17 @@ def main():
             if mode["fps"] and not any(value >= fps_value for value in mode["fps"]):
                 print(f"Requested {fps_value} FPS is not advertised for {width} {fmt}.", file=sys.stderr)
                 return 2
+        selected_fps = int(fps) if fps != "0" else max(mode["fps"], default=30)
+        pixel_rate = mode["width"] * mode["height"] * selected_fps
+        warning = pixel_rate > PIXEL_BUDGETS[tier] or not native
         print(json.dumps({
             "device": device["device"], "resolution": width, "fps": fps,
             "format": "JPEG" if fmt in ("MJPG", "MJPEG") else fmt,
             "encoder": encoder, "native_mjpeg": native, "model": model,
             "tier": tier, "mode_fps": mode["fps"],
+            "estimated_pixels_per_second": pixel_rate,
+            "hardware_budget_pixels_per_second": PIXEL_BUDGETS[tier],
+            "performance_warning": warning,
         }))
         return 0
     # Runtime snapshot: captured FPS is taken from uStreamer performance logs.
@@ -189,11 +196,16 @@ def main():
     except OSError:
         log = ""
     fps_values = re.findall(r"captured_fps=(\d+)", log)
-    tx_bytes = 0
-    for line in Path("/proc/net/dev").read_text().splitlines()[2:]:
-        fields = line.split()
-        if len(fields) >= 10 and fields[0].rstrip(":") != "lo":
-            tx_bytes += int(fields[9])
+    def transmitted_bytes():
+        total = 0
+        for line in Path("/proc/net/dev").read_text().splitlines()[2:]:
+            fields = line.split()
+            if len(fields) >= 10 and fields[0].rstrip(":") != "lo":
+                total += int(fields[9])
+        return total
+    tx_before = transmitted_bytes()
+    time.sleep(1)
+    tx_after = transmitted_bytes()
     temp = "unavailable"
     for path in ("/sys/class/thermal/thermal_zone0/temp",):
         try:
@@ -205,7 +217,8 @@ def main():
         "model": model,
         "service": status,
         "latest_captured_fps": int(fps_values[-1]) if fps_values else None,
-        "network_transmitted_bytes_since_boot": tx_bytes,
+        "network_transmitted_bytes_since_boot": tx_after,
+        "network_interface_tx_mbps_sampled": round(max(0, tx_after - tx_before) * 8 / 1_000_000, 3),
         "temperature": temp,
         "dropped_frames": None,
         "dropped_frames_note": "The standard UVC/µStreamer interface does not expose a reliable cumulative dropped-frame counter; not inferred.",
