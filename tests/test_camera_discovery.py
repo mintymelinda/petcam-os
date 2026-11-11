@@ -28,6 +28,8 @@ class CameraDiscoveryTests(unittest.TestCase):
         self.assertEqual((modes[0]["width"], modes[0]["height"]), (1920, 1080))
         self.assertEqual(modes[0]["fps"], [60.0, 30.0])
         self.assertEqual(modes[2]["format"], "YUYV")
+        self.assertTrue(MODULE.mode_supports_fps(modes[0], 30))
+        self.assertFalse(MODULE.mode_supports_fps(modes[0], 45))
 
     def test_prefers_native_mjpeg_and_uses_least_demanding_when_over_budget(self):
         devices = [{"device": "/dev/video0", "modes": MODULE.parse_modes(SAMPLE)}]
