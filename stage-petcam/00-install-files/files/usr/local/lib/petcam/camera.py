@@ -481,7 +481,7 @@ def main():
         "service": status,
         "http_endpoint_reachable": http_status is not None,
         "http_status": http_status,
-        "camera_devices_detected": len(devices),
+        "camera_devices_detected": len(devices) + len(discover_csi_cameras()),
         "usb_camera_devices_detected": len(devices),
         "csi_cameras_detected": len(discover_csi_cameras()),
         "active_backend": backend_values[-1] if backend_values else ("csi" if csi_start else ("usb" if start_config else None)),
