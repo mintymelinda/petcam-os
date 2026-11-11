@@ -68,11 +68,7 @@ The current capture interfaces do not provide a reliable cumulative dropped-fram
 
 ## First boot and Wi-Fi
 
-Raspberry Pi Imager 2 treats a locally selected image as having no customization support. The build artifact therefore includes `create_imager_manifest.py` alongside the compressed image. After extracting the artifact, open a terminal in that folder and run:
-
-~~~bash
-python3 create_imager_manifest.py image_YYYY-MM-DD-PetCamOS-petcam.img.xz
-~~~
+Raspberry Pi Imager 2 treats a locally selected image as having no customization support. The build artifact therefore includes `create_imager_manifest.py` alongside the compressed image. After extracting the artifact, double-click `prepare-imager.bat` on Windows. On Linux, run `./prepare-imager.sh` from the extracted folder. The helper finds the image, generates the local manifest with verified checksums, and opens it in Raspberry Pi Imager 2.
 
 This creates `petcam-os.rpi-imager-manifest` with the image's local path, verified compressed and extracted SHA-256 hashes, supported Pi device tags, and `init_format: cloudinit-rpi`. Double-click the manifest to open it in Raspberry Pi Imager 2 (or choose it through App Options → Content Repository → Edit → Use custom file, then Apply & Restart). Select PetCam OS from the OS list; the Customisation step will then be available.
 
