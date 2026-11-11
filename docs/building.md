@@ -46,7 +46,7 @@ The current starting budgets are pixel-rate heuristics, not benchmark guarantees
 | Pi 4 / Pi 400 | 124.4 megapixels/second |
 | Pi 5 | 248.8 megapixels/second |
 
-If every native-MJPEG mode exceeds the detected board's budget, PetCam starts with the least demanding advertised MJPEG mode and logs a warning. Explicit supported modes are never blocked.
+For USB, if every native-MJPEG mode exceeds the detected board's budget, PetCam starts with the least demanding advertised MJPEG mode and logs a warning. For CSI, the same budget guides sensor-mode selection. If no CSI mode fits, the least demanding advertised mode is selected with a warning. Explicit supported modes are never blocked.
 
 Inspect USB and CSI camera discovery:
 
@@ -85,7 +85,7 @@ Supported settings:
 - CSI_QUALITY: CSI MJPEG quality from 1 to 100, default 70
 - PORT: HTTP port, default 8080
 
-For USB, automatic FPS uses µStreamer's no-application-cap request (`--desired-fps=0`). For CSI, automatic selection chooses an advertised sensor mode within the model's starting pixel-rate budget, or the least demanding advertised mode with a warning if none fit. Unsupported explicit modes fail clearly rather than silently falling back. If a USB camera has no native MJPEG mode, PetCam may select a supported raw V4L2 mode and use CPU JPEG encoding, with a performance warning. CSI is encoded to MJPEG by `rpicam-vid`.
+For USB, automatic FPS uses µStreamer's no-application-cap request (`--desired-fps=0`). For CSI, automatic selection chooses an advertised sensor mode within the model's starting pixel-rate budget, or the least demanding advertised mode with a warning if none fit. Unsupported explicit modes fail clearly rather than silently falling back. If a USB camera has no native MJPEG mode, PetCam may select a supported raw V4L2 mode and use CPU JPEG encoding, with a performance warning. CSI is encoded to MJPEG by `rpicam-vid`; this encoder workload can be significant on older Pi boards, so verify sustained capture on the target hardware and reduce resolution, FPS, or `CSI_QUALITY` if needed.
 
 ## Runtime diagnostics
 
