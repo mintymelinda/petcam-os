@@ -283,7 +283,7 @@ def main():
         body_started = False
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=2) as stream:
-                stream.sendall(b"GET /stream HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n")
+                stream.sendall(b"GET /stream HTTP/1.1\r\nHost: localhost\r\n\r\n")
                 while time.monotonic() - started < 1.0:
                     stream.settimeout(min(0.2, max(0.05, 1.0 - (time.monotonic() - started))))
                     try:
@@ -294,9 +294,9 @@ def main():
                         break
                     if not body_started:
                         header += chunk
-                        separator = header.find(b"\\r\\n\\r\\n")
+                        separator = header.find(b"\r\n\r\n")
                         if separator >= 0:
-                            if not header.startswith(b"HTTP/1.1 200"):
+                            if not header.startswith((b"HTTP/1.1 200", b"HTTP/1.0 200")):
                                 return None
                             received += len(header) - separator - 4
                             body_started = True
