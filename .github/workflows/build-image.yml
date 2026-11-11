@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - "config"
+      - "VERSION"
       - "stage-petcam/**"
       - "tests/**"
       - "tools/**"
