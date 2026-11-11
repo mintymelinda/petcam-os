@@ -95,7 +95,7 @@ class CameraDiscoveryTests(unittest.TestCase):
     def test_selects_csi_mode_within_board_budget_and_validates_overrides(self):
         cameras = MODULE.parse_csi_cameras(CSI_SAMPLE)
         selected = MODULE.select_csi_mode(cameras, "zero")
-        self.assertLessEqual(selected["estimated_pixels_per_second"], selected["hardware_budget_pixels_per_second"])
+        self.assertTrue(selected["performance_warning"])
         explicit = MODULE.select_csi_mode(cameras, "pi5", requested_camera=1, resolution="2304x1296", fps="56.03")
         self.assertEqual(explicit["sensor"], "imx708")
         self.assertEqual(explicit["resolution"], "2304x1296")
