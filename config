@@ -1,0 +1,10 @@
+IMG_NAME="PetCamOS"
+RELEASE="trixie"
+DEPLOY_DIR="${WORKDIR}/deploy"
+DEPLOY_COMPRESSION="xz"
+ENABLE_SSH=1
+LOCALE_DEFAULT="en_CA.UTF-8"
+TIMEZONE_DEFAULT="America/Toronto"
+KEYBOARD_KEYMAP="us"
+KEYBOARD_LAYOUT="English (US)"
+STAGE_LIST="stage0 stage1 stage2 stage-petcam"
