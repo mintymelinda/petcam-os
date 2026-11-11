@@ -10,7 +10,7 @@ usermod -a -G video petcam
 
 install -d -m 0755 /opt
 git clone --depth 1 https://github.com/pikvm/ustreamer.git /opt/ustreamer
-make -C /opt/ustreamer -j"$(nproc)" WITH_SYSTEMD=0 WITH_GPIO=0
+make -C /opt/ustreamer -j1 WITH_SYSTEMD=0 WITH_GPIO=0
 make -C /opt/ustreamer install PREFIX=/usr/local
 ldconfig
 
