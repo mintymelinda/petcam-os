@@ -40,6 +40,8 @@ class CameraDiscoveryTests(unittest.TestCase):
     def test_model_tiers(self):
         self.assertEqual(MODULE.model_tier("Raspberry Pi Zero W Rev 1.1"), "zero")
         self.assertEqual(MODULE.model_tier("Raspberry Pi Zero 2 W Rev 1.0"), "zero2")
+        self.assertEqual(MODULE.model_tier("Raspberry Pi 1 Model B+ Rev 1.2"), "pi1")
+        self.assertEqual(MODULE.model_tier("Raspberry Pi 2 Model B Rev 1.1"), "pi2")
         self.assertEqual(MODULE.model_tier("Raspberry Pi 5 Model B Rev 1.0"), "pi5")
 
 
