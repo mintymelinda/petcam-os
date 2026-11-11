@@ -7,22 +7,26 @@ usermod -a -G video,i2c petcam
 
 install -d -m 0755 /opt
 git clone --depth 1 https://github.com/pikvm/ustreamer.git /opt/ustreamer
+git -C /opt/ustreamer checkout --detach 11fd828ab00c01a39bd0843ef442ef0b6d3cac41
 make -C /opt/ustreamer -j1 WITH_SYSTEMD=0 WITH_GPIO=0
 make -C /opt/ustreamer install PREFIX=/usr/local
 ldconfig
 
+APP_VERSION="$(cat /opt/petcam/releases/*/VERSION)"
+ln -sfn "releases/$APP_VERSION" /opt/petcam/current
+
 cat > /usr/local/bin/petcam-camera <<'SCRIPT'
 #!/bin/sh
-exec python3 /usr/local/lib/petcam/camera.py "$@"
+exec python3 /opt/petcam/current/lib/camera.py "$@"
 SCRIPT
 cat > /usr/local/bin/petcam-status <<'SCRIPT'
 #!/bin/sh
-exec python3 /usr/local/lib/petcam/camera.py status
+exec python3 /opt/petcam/current/lib/camera.py status
 SCRIPT
 chmod 0755 /usr/local/bin/petcam-camera /usr/local/bin/petcam-status
 
-install -d -m 0755 /usr/local/lib/petcam /etc/petcam
-cat > /usr/local/lib/petcam/start-stream.sh <<'SCRIPT'
+install -d -m 0755 "/opt/petcam/releases/$APP_VERSION/lib" /etc/petcam
+cat > "/opt/petcam/releases/$APP_VERSION/lib/start-stream.sh" <<'SCRIPT'
 #!/bin/bash
 set -euo pipefail
 CONFIG=/etc/petcam/petcam.conf
@@ -82,7 +86,7 @@ start_csi() {
     fi
     echo "PetCam backend: csi; hardware tier: $tier"
     echo "Starting CSI camera index=$camera at $resolution, requested_fps=$fps, MJPEG quality=$CSI_QUALITY"
-    exec python3 /usr/local/lib/petcam/csi_stream.py --camera "$camera" --resolution "$resolution" --fps "$fps" --quality "$CSI_QUALITY" --host 127.0.0.1 --port "$PORT"
+    exec python3 /opt/petcam/current/lib/csi_stream.py --camera "$camera" --resolution "$resolution" --fps "$fps" --quality "$CSI_QUALITY" --host 127.0.0.1 --port "$PORT"
 }
 
 case "$SOURCE" in
@@ -104,7 +108,7 @@ case "$SOURCE" in
         ;;
 esac
 SCRIPT
-chmod 0755 /usr/local/lib/petcam/start-stream.sh
+chmod 0755 "/opt/petcam/releases/$APP_VERSION/lib/start-stream.sh"
 
 cat > /etc/petcam/petcam.conf <<'CONF'
 # SOURCE=auto selects USB when available, then falls back to CSI; force usb or csi if preferred.
@@ -117,9 +121,12 @@ FORMAT=auto
 RESOLUTION=auto
 FPS=auto
 CSI_QUALITY=70
-PORT=8080
+PORT=8081
 CONF
-chown petcam:petcam /etc/petcam\nchmod 0750 /etc/petcam\nchown petcam:petcam /etc/petcam/petcam.conf\nchmod 0640 /etc/petcam/petcam.conf
+chown petcam:petcam /etc/petcam
+chmod 0750 /etc/petcam
+chown petcam:petcam /etc/petcam/petcam.conf
+chmod 0640 /etc/petcam/petcam.conf
 
 cat > /etc/systemd/system/petcam-stream.service <<'UNIT'
 [Unit]
@@ -132,7 +139,7 @@ Type=simple
 User=petcam
 Group=video
 SupplementaryGroups=video i2c
-ExecStart=/usr/local/lib/petcam/start-stream.sh
+ExecStart=/opt/petcam/current/lib/start-stream.sh
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
@@ -165,7 +172,7 @@ Type=simple
 User=petcam
 Group=video
 SupplementaryGroups=video i2c
-ExecStart=/usr/bin/python3 /usr/local/lib/petcam/web_manager.py
+ExecStart=/usr/bin/python3 /opt/petcam/current/lib/web_manager.py
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
