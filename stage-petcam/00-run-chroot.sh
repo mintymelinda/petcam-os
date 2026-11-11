@@ -48,7 +48,7 @@ find_camera() {
 }
 camera="$(find_camera)"
 echo "Starting PetCam on $camera at $RESOLUTION / $FPS FPS"
-exec /usr/local/bin/ustreamer --device="$camera" --host=0.0.0.0 --port="$PORT" --format=MJPEG --resolution="$RESOLUTION" --desired-fps="$FPS"
+exec /usr/local/bin/ustreamer --device="$camera" --host=0.0.0.0 --port="$PORT" --format=MJPEG --encoder=HW --resolution="$RESOLUTION" --desired-fps="$FPS"
 SCRIPT
 chmod 0755 /usr/local/lib/petcam/start-stream.sh
 
