@@ -13,6 +13,24 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 BOUNDARY = b"petcamframe"
 
 
+def extract_jpeg_frames(buffer):
+    frames = []
+    while True:
+        start = buffer.find(b"\xff\xd8")
+        if start < 0:
+            if len(buffer) > 1:
+                del buffer[:-1]
+            break
+        end = buffer.find(b"\xff\xd9", start + 2)
+        if end < 0:
+            if start:
+                del buffer[:start]
+            break
+        frames.append(bytes(buffer[start:end + 2]))
+        del buffer[:end + 2]
+    return frames
+
+
 class CSIFrameSource:
     def __init__(self, camera, width, height, fps, quality):
         self.command = [
@@ -44,19 +62,7 @@ class CSIFrameSource:
                 if not chunk:
                     break
                 buffer.extend(chunk)
-                while True:
-                    start = buffer.find(b"\xff\xd8")
-                    if start < 0:
-                        if len(buffer) > 1:
-                            del buffer[:-1]
-                        break
-                    end = buffer.find(b"\xff\xd9", start + 2)
-                    if end < 0:
-                        if start:
-                            del buffer[:start]
-                        break
-                    jpeg = bytes(buffer[start:end + 2])
-                    del buffer[:end + 2]
+                for jpeg in extract_jpeg_frames(buffer):
                     with self.condition:
                         self.frame = jpeg
                         self.frame_number += 1
