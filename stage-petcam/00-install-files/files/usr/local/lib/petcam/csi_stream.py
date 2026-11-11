@@ -71,6 +71,11 @@ class CSIFrameSource:
             with self.condition:
                 self.condition.notify_all()
 
+    def wait_for_first_frame(self, timeout=20):
+        with self.condition:
+            self.condition.wait_for(lambda: self.frame is not None or self.error is not None, timeout=timeout)
+            return self.frame is not None
+
     def snapshot(self):
         with self.condition:
             age = None if self.last_frame_at is None else round(time.monotonic() - self.last_frame_at, 3)
@@ -170,6 +175,9 @@ def main():
     source = CSIFrameSource(args.camera, width, height, args.fps, args.quality)
     PetCamHandler.source = source
     source.start()
+    if not source.wait_for_first_frame(timeout=20):
+        source.stop()
+        raise SystemExit(f"CSI camera did not produce a frame: {source.error or 'capture startup timed out'}")
     server = ThreadingHTTPServer((args.host, args.port), PetCamHandler)
     server.daemon_threads = True
 
@@ -182,6 +190,12 @@ def main():
         "Starting CSI camera %s at %sx%s %s FPS on port %s",
         args.camera, width, height, args.fps, args.port,
     )
+    monitor = threading.Thread(
+        target=lambda: (source.reader.join(), server.shutdown()),
+        name="csi-capture-watchdog",
+        daemon=True,
+    )
+    monitor.start()
     try:
         server.serve_forever(poll_interval=0.5)
     finally:
