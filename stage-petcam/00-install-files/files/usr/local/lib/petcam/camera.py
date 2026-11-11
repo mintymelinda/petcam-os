@@ -174,6 +174,17 @@ def discover_devices():
             devices.append({"device": device, "modes": modes})
     return devices
 
+def filter_devices_by_format(devices, requested_format):
+    if requested_format == "auto":
+        return devices
+    requested_format = requested_format.upper()
+    return [
+        {**device, "modes": [mode for mode in device["modes"] if mode["format"] == requested_format]}
+        for device in devices
+        if any(mode["format"] == requested_format for mode in device["modes"])
+    ]
+
+
 def select_mode(devices, tier):
     candidates = []
     for device in devices:
@@ -202,6 +213,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("discover", "select", "status"))
     parser.add_argument("--device")
+    parser.add_argument("--format", default="auto")
     parser.add_argument("--resolution", default="auto")
     parser.add_argument("--fps", default="auto")
     args = parser.parse_args()
@@ -220,6 +232,7 @@ def main():
         print(json.dumps({"model": model, "tier": tier, "devices": devices}, indent=2))
         return 0
     if args.command == "select":
+        devices = filter_devices_by_format(devices, args.format)
         selected = select_mode(devices, tier)
         if not selected:
             print("No usable V4L2 capture device or supported mode found.", file=sys.stderr)
