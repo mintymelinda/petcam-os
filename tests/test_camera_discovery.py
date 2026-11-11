@@ -50,7 +50,8 @@ class CameraDiscoveryTests(unittest.TestCase):
         self.assertFalse(MODULE.mode_supports_resolution(mode, 1281, 720))
         self.assertAlmostEqual(mode["fps_range"]["min"], 10.0)
         self.assertAlmostEqual(mode["fps_range"]["max"], 100.0)
-        self.assertTrue(MODULE.mode_supports_fps(mode, 60))
+        self.assertTrue(MODULE.mode_supports_fps(mode, 50))
+        self.assertFalse(MODULE.mode_supports_fps(mode, 60))
         self.assertFalse(MODULE.mode_supports_fps(mode, 120))
 
     def test_model_tiers(self):
