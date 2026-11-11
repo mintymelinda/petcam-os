@@ -1,0 +1,47 @@
+import importlib.util
+import unittest
+
+SPEC = importlib.util.spec_from_file_location("petcam_camera", "stage-petcam/files/usr/local/lib/petcam/camera.py")
+MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(MODULE)
+
+
+SAMPLE = """ioctl: VIDIOC_ENUM_FMT
+ Type: Video Capture
+ [0]: 'MJPG' (Motion-JPEG, compressed)
+   Size: Discrete 1920x1080
+     Interval: Discrete 0.033s (30.000 fps)
+     Interval: Discrete 0.017s (60.000 fps)
+   Size: Discrete 1280x720
+     Interval: Discrete 0.017s (60.000 fps)
+ [1]: 'YUYV' ( absent )
+   Size: Discrete 640x480
+     Interval: Discrete 0.033s (30.000 fps)
+"""
+
+
+class CameraDiscoveryTests(unittest.TestCase):
+    def test_parses_formats_resolutions_and_frame_rates(self):
+        modes = MODULE.parse_modes(SAMPLE)
+        self.assertEqual(len(modes), 3)
+        self.assertEqual(modes[0]["format"], "MJPG")
+        self.assertEqual((modes[0]["width"], modes[0]["height"]), (1920, 1080))
+        self.assertEqual(modes[0]["fps"], [60.0, 30.0])
+        self.assertEqual(modes[2]["format"], "YUYV")
+
+    def test_prefers_native_mjpeg_and_selects_within_zero_budget(self):
+        devices = [{"device": "/dev/video0", "modes": MODULE.parse_modes(SAMPLE)}]
+        device, mode, native = MODULE.select_mode(devices, "zero")
+        self.assertTrue(native)
+        self.assertEqual(mode["format"], "MJPG")
+        self.assertEqual((mode["width"], mode["height"]), (1280, 720))
+        self.assertEqual(device["device"], "/dev/video0")
+
+    def test_model_tiers(self):
+        self.assertEqual(MODULE.model_tier("Raspberry Pi Zero W Rev 1.1"), "zero")
+        self.assertEqual(MODULE.model_tier("Raspberry Pi Zero 2 W Rev 1.0"), "zero2")
+        self.assertEqual(MODULE.model_tier("Raspberry Pi 5 Model B Rev 1.0"), "pi5")
+
+
+if __name__ == "__main__":
+    unittest.main()
