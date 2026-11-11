@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
 import lzma
@@ -20,7 +21,7 @@ def image_metadata(image: Path) -> tuple[int, str]:
     return size, digest.hexdigest()
 
 
-def create_manifest(image: Path, output: Path, icon: Path | None = None) -> None:
+def create_manifest(image: Path, output: Path, icon: str | None = None) -> None:
     image = image.resolve()
     output = output.resolve()
     compressed_hash = hashlib.sha256()
@@ -32,21 +33,18 @@ def create_manifest(image: Path, output: Path, icon: Path | None = None) -> None
     entry = {
         "name": "PetCam OS",
         "description": "Camera-agnostic Raspberry Pi OS for LAN MJPEG streaming",
+        "icon": icon or "https://raw.githubusercontent.com/mintymelinda/petcam-os/main/assets/petcam-icon.svg",
         "url": str(image),
         "extract_size": extract_size,
         "extract_sha256": extract_hash,
         "image_download_size": image.stat().st_size,
         "image_download_sha256": compressed_hash.hexdigest(),
-        "release_date": image.stat().st_mtime_ns and __import__("datetime").date.fromtimestamp(
-            image.stat().st_mtime
-        ).isoformat(),
+        "release_date": datetime.date.fromtimestamp(image.stat().st_mtime).isoformat(),
         "init_format": "systemd",
     }
-    if icon is not None:
-        entry["icon"] = str(icon.resolve())
 
     output.write_text(
-        json.dumps({"os_list": [entry]}, indent=2) + "\n",
+        json.dumps({"os_list": [entry]}, indent=2) + "\\n",
         encoding="utf-8",
     )
 
@@ -59,7 +57,7 @@ def main() -> None:
         type=Path,
         help="Manifest output path (defaults beside the image)",
     )
-    parser.add_argument("--icon", type=Path, help="Optional local SVG/PNG icon")
+    parser.add_argument("--icon", help="Optional icon URL")
     args = parser.parse_args()
 
     if not args.image.is_file() or args.image.suffix != ".xz":
