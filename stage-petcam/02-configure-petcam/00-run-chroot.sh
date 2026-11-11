@@ -119,7 +119,7 @@ FPS=auto
 CSI_QUALITY=70
 PORT=8080
 CONF
-chown petcam:petcam /etc/petcam/petcam.conf\nchmod 0640 /etc/petcam/petcam.conf
+chown petcam:petcam /etc/petcam\nchmod 0750 /etc/petcam\nchown petcam:petcam /etc/petcam/petcam.conf\nchmod 0640 /etc/petcam/petcam.conf
 
 cat > /etc/systemd/system/petcam-stream.service <<'UNIT'
 [Unit]
