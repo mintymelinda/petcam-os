@@ -9,7 +9,7 @@ from tools.create_imager_manifest import create_manifest
 
 
 class ImagerManifestTests(unittest.TestCase):
-    def test_manifest_describes_local_image_and_enables_cloudinit-rpi_customisation(self):
+    def test_manifest_describes_local_image_and_enables_cloudinit_rpi_customisation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             image = root / "petcam.img.xz"
