@@ -72,6 +72,12 @@ sudo petcam-status reports service and HTTP endpoint health, USB/CSI detection c
 
 The current capture interfaces do not provide a reliable cumulative dropped-frame counter across all supported USB and CSI drivers. PetCam reports this as unavailable rather than inventing a value. Compare reported capture FPS with the selected mode's advertised frame interval and inspect the service journal for device/stream errors.
 
+## Application updates
+
+The image includes a signed, root-owned application updater that stages versioned releases, atomically switches the active release, restarts PetCam services, and restores the previous release if the web manager fails its health check. It does not update Raspberry Pi OS, firmware, or the boot partition. See [docs/update-engine.md](docs/update-engine.md) for the release-signing contract and operational details.
+
+Updates are disabled by default until the official Ed25519 release-signing public key and signed release endpoint are provisioned. The updater fails closed without both; no unsigned or locally substituted release key is accepted. The web UI does not expose update controls yet.
+
 ## First boot and Wi-Fi
 
 Raspberry Pi Imager 2 treats a locally selected image as having no customization support. The build artifact therefore includes `create_imager_manifest.py` alongside the compressed image. After extracting the artifact, double-click `prepare-imager.bat` on Windows. On Linux, run `./prepare-imager.sh` from the extracted folder. The helper finds the image, generates the local manifest with verified checksums, and opens it in Raspberry Pi Imager 2.
