@@ -53,7 +53,7 @@ sudo systemctl restart petcam-stream
 
 ### Runtime diagnostics
 
-sudo petcam-status reports service state, the latest capture FPS reported by µStreamer performance logs, sampled aggregate network-interface transmit throughput, cumulative transmitted bytes, and SoC temperature. Network throughput is interface-wide, not isolated to the video stream.
+sudo petcam-status reports service and HTTP endpoint health, detected/active camera, selected resolution and format, latest capture FPS from µStreamer performance logs, a one-second local MJPEG stream bitrate sample, aggregate network-interface transmit throughput, cumulative transmitted bytes, and SoC temperature. The local stream sample opens one temporary loopback viewer; interface throughput is aggregate traffic, not video-only.
 
 The standard UVC/µStreamer interface does not provide a reliable cumulative dropped-frame counter for every camera driver. PetCam reports this as unavailable rather than inventing a value. Compare reported capture FPS with the selected mode's advertised frame interval and inspect the service journal for device/stream errors.
 
