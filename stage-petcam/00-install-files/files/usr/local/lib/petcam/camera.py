@@ -150,14 +150,17 @@ def read_model():
 
 def discover_devices():
     paths = []
+    seen_devices = set()
     for pattern in ("/dev/v4l/by-id/*", "/dev/video*"):
         for entry in sorted(Path("/").glob(pattern.lstrip("/"))):
             try:
                 resolved = str(entry.resolve(strict=True))
             except OSError:
                 continue
-            if resolved not in paths:
-                paths.append(resolved)
+            if resolved not in seen_devices:
+                seen_devices.add(resolved)
+                # Preserve stable by-id symlinks when available; otherwise use /dev/videoN.
+                paths.append(str(entry))
     devices = []
     for device in paths:
         result = subprocess.run(
@@ -170,7 +173,6 @@ def discover_devices():
         if modes:
             devices.append({"device": device, "modes": modes})
     return devices
-
 
 def select_mode(devices, tier):
     candidates = []
@@ -208,7 +210,11 @@ def main():
     tier = model_tier(model)
     devices = discover_devices()
     if args.device:
-        devices = [item for item in devices if item["device"] == str(Path(args.device).resolve()) or item["device"] == args.device]
+        requested = str(Path(args.device).resolve())
+        devices = [
+            item for item in devices
+            if item["device"] == args.device or str(Path(item["device"]).resolve()) == requested
+        ]
 
     if args.command == "discover":
         print(json.dumps({"model": model, "tier": tier, "devices": devices}, indent=2))
