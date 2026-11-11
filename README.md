@@ -20,12 +20,18 @@ The workflow builds a 32-bit Raspberry Pi OS Lite image and adds PetCam's camera
 
 ## Camera stream
 
-PetCam selects the appropriate capture backend automatically. USB UVC cameras use [µStreamer](https://github.com/pikvm/ustreamer), preferring native MJPEG passthrough and falling back to CPU JPEG encoding for supported raw formats when needed. CSI modules use Raspberry Pi's `rpicam-vid` camera stack with MJPEG output. Both backends expose the same `/stream` and `/` endpoints on port 8080.
+PetCam selects the appropriate capture backend automatically. USB UVC cameras use [µStreamer](https://github.com/pikvm/ustreamer), preferring native MJPEG passthrough and falling back to CPU JPEG encoding for supported raw formats when needed. CSI modules use Raspberry Pi's `rpicam-vid` camera stack with MJPEG output. Both backends expose the same `/stream` endpoint internally; the PetCam web interface provides the public port 8080 page and stream proxy.
 
 - Stream endpoint: http://petcam.local:8080/stream
 - Stream viewer/status page: http://petcam.local:8080/
 
 If mDNS is unavailable, use the Pi's DHCP address instead.
+
+### Web camera management
+
+Open http://petcam.local:8080/ to view the live stream and manage the active camera. The lightweight built-in page is served by Python's standard library; it adds no Node.js runtime, frontend framework, database, or background camera polling. Use **Refresh cameras** after plugging in or removing a camera, select an advertised mode, preview it, and apply it. The selected USB/CSI camera and mode are saved in /etc/petcam/petcam.conf and survive reboots. Applying a selection briefly restarts the capture backend; the public stream URL remains unchanged. The capture backend listens only on loopback, while the management interface proxies the stream and exposes the camera controls.
+
+Camera discovery runs when the page is opened or refreshed, not continuously in the background. The page is intentionally small to conserve memory and CPU on the original Zero W.
 
 ### Discover and choose camera modes
 
