@@ -6,7 +6,7 @@ A minimal, reproducible Raspberry Pi OS image for Raspberry Pi boards, USB UVC w
 
 - Raspberry Pi Zero W (initial low-resource target); automatic hardware profiles also recognize Zero 2 W, Pi 1/2/3, Pi 4/400, and Pi 5.
 - USB UVC webcams connected through the board's USB host/OTG port. A powered hub is recommended, especially for bus-powered webcams.
-- Raspberry Pi CSI camera modules supported by the Raspberry Pi camera stack, including OV5647 (Camera Module v1), IMX219 (v2), IMX708 (v3), IMX477 (HQ), and other sensors supported by the installed `libcamera` pipeline.
+- Raspberry Pi CSI camera modules supported by the Raspberry Pi camera stack, including OV5647 (Camera Module v1), IMX219/IMX355 (v2 sensor revisions), IMX708 (v3), IMX477 (HQ), and other sensors supported by the installed `libcamera` pipeline.
 - USB and CSI cameras share the same image and stream URL; no separate image is needed.
 - OBS on another computer on the same LAN.
 
@@ -23,7 +23,7 @@ The workflow builds a 32-bit Raspberry Pi OS Lite image and adds PetCam's camera
 PetCam selects the appropriate capture backend automatically. USB UVC cameras use [µStreamer](https://github.com/pikvm/ustreamer), preferring native MJPEG passthrough and falling back to CPU JPEG encoding for supported raw formats when needed. CSI modules use Raspberry Pi's `rpicam-vid` camera stack with MJPEG output. Both backends expose the same `/stream` and `/` endpoints on port 8080.
 
 - Stream endpoint: http://petcam.local:8080/stream
-- µStreamer status/UI: http://petcam.local:8080/
+- Stream viewer/status page: http://petcam.local:8080/
 
 If mDNS is unavailable, use the Pi's DHCP address instead.
 
@@ -54,7 +54,7 @@ CSI_QUALITY=70        # CSI MJPEG quality, 1..100
 PORT=8080
 ~~~
 
-SOURCE=auto prefers a usable USB camera, then falls back to CSI. Set SOURCE=usb or SOURCE=csi to force a backend. FORMAT applies to USB only; CSI output is MJPEG. Use RESOLUTION=auto and FPS=auto to return to automatic selection. FPS=auto asks µStreamer not to impose an application-side frame-rate cap. Unsupported explicit modes fail clearly rather than silently falling back. Restart after changes:
+SOURCE=auto prefers a usable USB camera, then falls back to CSI. Set SOURCE=usb or SOURCE=csi to force a backend. FORMAT applies to USB only; CSI output is MJPEG. Use RESOLUTION=auto and FPS=auto to return to automatic selection. For USB, FPS=auto asks µStreamer not to impose an application-side frame-rate cap. For CSI, automatic selection chooses a sensor-advertised frame rate. Unsupported explicit modes fail clearly rather than silently falling back. Restart after changes:
 
 ~~~bash
 sudo systemctl restart petcam-stream
@@ -62,9 +62,9 @@ sudo systemctl restart petcam-stream
 
 ### Runtime diagnostics
 
-sudo petcam-status reports service and HTTP endpoint health, detected/active camera, selected resolution and format, latest capture FPS from µStreamer performance logs, a one-second local MJPEG stream bitrate sample, aggregate network-interface transmit throughput, cumulative transmitted bytes, and SoC temperature. The local stream sample opens one temporary loopback viewer; interface throughput is aggregate traffic, not video-only.
+sudo petcam-status reports service and HTTP endpoint health, USB/CSI detection counts, active backend and camera, selected resolution and format, latest capture FPS (from µStreamer or the CSI capture process), a one-second local MJPEG stream bitrate sample, aggregate network-interface transmit throughput, cumulative transmitted bytes, and SoC temperature. The local stream sample opens one temporary loopback viewer; interface throughput is aggregate traffic, not video-only.
 
-The standard UVC/µStreamer interface does not provide a reliable cumulative dropped-frame counter for every camera driver. PetCam reports this as unavailable rather than inventing a value. Compare reported capture FPS with the selected mode's advertised frame interval and inspect the service journal for device/stream errors.
+The current capture interfaces do not provide a reliable cumulative dropped-frame counter across all supported USB and CSI drivers. PetCam reports this as unavailable rather than inventing a value. Compare reported capture FPS with the selected mode's advertised frame interval and inspect the service journal for device/stream errors.
 
 ## First boot and Wi-Fi
 
