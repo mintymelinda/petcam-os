@@ -36,6 +36,18 @@ The camera stream has no authentication and is intended only for a trusted LAN.
 
 At boot, PetCam enumerates V4L2 video nodes and parses each node's advertised formats, discrete/stepwise/continuous frame sizes, and discrete or ranged frame intervals. Automatic selection prefers native MJPEG, then chooses a starting mode within a conservative pixel-throughput budget associated with the detected Pi family. The budget only guides automatic selection; it is not a hard maximum.
 
+The current starting budgets are pixel-rate heuristics, not benchmark guarantees:
+
+| Board family | Automatic selection budget |
+| --- | ---: |
+| Pi 1 | 9.2 megapixels/second |
+| Pi Zero W, Pi 2 | 27.6 megapixels/second |
+| Pi Zero 2 W, Pi 3 | 62.2 megapixels/second |
+| Pi 4 / Pi 400 | 124.4 megapixels/second |
+| Pi 5 | 248.8 megapixels/second |
+
+If every native-MJPEG mode exceeds the detected board's budget, PetCam starts with the least demanding advertised MJPEG mode and logs a warning. Explicit supported modes are never blocked.
+
 Inspect all advertised modes:
 
 ~~~bash
