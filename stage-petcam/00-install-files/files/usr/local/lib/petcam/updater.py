@@ -214,44 +214,50 @@ def check_update(config: dict[str, str]) -> dict[str, object]:
     }
 
 
-def safe_extract(archive: bytes, destination: Path) -> None:
-    with tempfile.NamedTemporaryFile(prefix="petcam-release-", suffix=".tar.gz") as handle:
-        handle.write(archive)
-        handle.flush()
-        try:
-            with tarfile.open(handle.name, "r:gz") as bundle:
-                members = bundle.getmembers()
-                if not members:
-                    raise UpdateError("Release archive is empty")
-                if len(members) > MAX_ARCHIVE_MEMBERS:
-                    raise UpdateError("Release archive contains too many entries")
-                expanded_size = sum(member.size for member in members if member.isfile())
-                if expanded_size > MAX_EXPANDED_ARCHIVE:
-                    raise UpdateError("Expanded release archive exceeds the size limit")
-                for member in members:
-                    name = PurePosixPath(member.name)
-                    if name.is_absolute() or not name.parts or any(part in ("", ".", "..") for part in name.parts):
-                        raise UpdateError("Release archive contains an unsafe path")
-                    if not (member.isdir() or member.isfile()):
-                        raise UpdateError("Release archive contains a link or special file")
-                    target = destination.joinpath(*name.parts)
-                    if not target.resolve().is_relative_to(destination.resolve()):
-                        raise UpdateError("Release archive escapes the staging directory")
-                    if member.isdir():
-                        target.mkdir(parents=True, exist_ok=True)
-                        target.chmod(0o755)
-                        continue
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    source = bundle.extractfile(member)
-                    if source is None:
-                        raise UpdateError("Unable to read release archive member")
-                    with source, target.open("xb") as output:
-                        shutil.copyfileobj(source, output)
-                    target.chmod(0o755 if member.mode & 0o111 else 0o644)
-        except (tarfile.TarError, OSError) as exc:
-            if isinstance(exc, UpdateError):
-                raise
-            raise UpdateError(f"Unable to extract release archive: {exc}") from exc
+def safe_extract(archive: bytes | Path, destination: Path) -> None:
+    temporary_archive = None
+    if isinstance(archive, bytes):
+        temporary_archive = tempfile.NamedTemporaryFile(prefix="petcam-release-", suffix=".tar.gz")
+        temporary_archive.write(archive)
+        temporary_archive.flush()
+        archive_path = temporary_archive.name
+    else:
+        archive_path = str(archive)
+    try:
+        with tarfile.open(archive_path, "r:gz") as bundle:
+            members = bundle.getmembers()
+            if not members:
+                raise UpdateError("Release archive is empty")
+            if len(members) > MAX_ARCHIVE_MEMBERS:
+                raise UpdateError("Release archive contains too many entries")
+            expanded_size = sum(member.size for member in members if member.isfile())
+            if expanded_size > MAX_EXPANDED_ARCHIVE:
+                raise UpdateError("Expanded release archive exceeds the size limit")
+            for member in members:
+                name = PurePosixPath(member.name)
+                if name.is_absolute() or not name.parts or any(part in ("", ".", "..") for part in name.parts):
+                    raise UpdateError("Release archive contains an unsafe path")
+                if not (member.isdir() or member.isfile()):
+                    raise UpdateError("Release archive contains a link or special file")
+                target = destination.joinpath(*name.parts)
+                if not target.resolve().is_relative_to(destination.resolve()):
+                    raise UpdateError("Release archive escapes the staging directory")
+                if member.isdir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    target.chmod(0o755)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                source = bundle.extractfile(member)
+                if source is None:
+                    raise UpdateError("Unable to read release archive member")
+                with source, target.open("xb") as output:
+                    shutil.copyfileobj(source, output)
+                target.chmod(0o755 if member.mode & 0o111 else 0o644)
+    except (tarfile.TarError, OSError) as exc:
+        raise UpdateError(f"Unable to extract release archive: {exc}") from exc
+    finally:
+        if temporary_archive is not None:
+            temporary_archive.close()
 
 
 def validate_release(directory: Path, version: str) -> None:
