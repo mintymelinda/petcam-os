@@ -15,7 +15,7 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("Live preview", MODULE.PAGE)
         self.assertIn("Use selected camera and mode", MODULE.PAGE)
         self.assertIn("https://www.paypal.me/kimmynightmare", MODULE.PAGE)
-        self.assertIn("rel=\\"noopener noreferrer\\"", MODULE.PAGE)
+        self.assertIn('rel="noopener noreferrer"', MODULE.PAGE)
         self.assertIn("/api/cameras", MODULE.PAGE)
         self.assertIn("/api/select", MODULE.PAGE)
 
