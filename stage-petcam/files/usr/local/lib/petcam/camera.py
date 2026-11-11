@@ -141,15 +141,23 @@ def main():
             print("No usable V4L2 capture device or supported mode found.", file=sys.stderr)
             return 1
         device, mode, native = selected
+        if args.resolution != "auto":
+            match = re.fullmatch(r"(\\d+)x(\\d+)", args.resolution)
+            if not match:
+                print("Resolution must be 'auto' or WIDTHxHEIGHT.", file=sys.stderr)
+                return 2
+            width_value, height_value = map(int, match.groups())
+            matching = [m for m in device["modes"] if m["width"] == width_value and m["height"] == height_value]
+            if not matching:
+                print(f"Requested resolution {args.resolution} is not advertised by {device['device']}.", file=sys.stderr)
+                return 2
+            matching.sort(key=lambda m: (m["format"] not in ("MJPG", "MJPEG"), -max(m["fps"], default=0)))
+            mode = matching[0]
+            native = mode["format"] in ("MJPG", "MJPEG")
         width = args.resolution if args.resolution != "auto" else f'{mode["width"]}x{mode["height"]}'
         fps = args.fps if args.fps != "auto" else "0"
         fmt = mode["format"]
         encoder = "HW" if fmt in ("MJPG", "MJPEG") else "CPU"
-        if args.resolution != "auto":
-            match = re.fullmatch(r"(\d+)x(\d+)", args.resolution)
-            if not match or not any(m["width"] == int(match.group(1)) and m["height"] == int(match.group(2)) for m in device["modes"]):
-                print(f"Requested resolution {args.resolution} is not advertised by {device['device']}.", file=sys.stderr)
-                return 2
         if args.fps != "auto" and (not args.fps.isdigit() or int(args.fps) < 1):
             print("FPS must be 'auto' or a positive integer.", file=sys.stderr)
             return 2
@@ -160,7 +168,7 @@ def main():
                 return 2
         print(json.dumps({
             "device": device["device"], "resolution": width, "fps": fps,
-            "format": "MJPEG" if fmt in ("MJPG", "MJPEG") else fmt,
+            "format": "JPEG" if fmt in ("MJPG", "MJPEG") else fmt,
             "encoder": encoder, "native_mjpeg": native, "model": model,
             "tier": tier, "mode_fps": mode["fps"],
         }))
