@@ -2,7 +2,7 @@
 
 ## GitHub Actions (recommended)
 
-Open Actions → Build PetCam OS → Run workflow. The build uses the official Raspberry Pi pi-gen project on an Ubuntu GitHub-hosted runner, adds the PetCam stage, runs the camera-discovery unit tests, and uploads the generated image from pi-gen/deploy as a workflow artifact.
+Open Actions → Build PetCam OS → Run workflow. The build uses the official Raspberry Pi pi-gen project on an Ubuntu GitHub-hosted runner, adds the PetCam stage (including `rpicam-apps-lite` for CSI modules), runs USB and CSI camera-discovery unit tests, and uploads the generated image from pi-gen/deploy as a workflow artifact.
 
 The first build can take a while. The output is a compressed Raspberry Pi OS image suitable for Raspberry Pi Imager.
 
@@ -34,7 +34,7 @@ The camera stream has no authentication and is intended only for a trusted LAN.
 
 ## Camera discovery and configuration
 
-At boot, PetCam enumerates V4L2 video nodes and parses each node's advertised formats, discrete/stepwise/continuous frame sizes, and discrete or ranged frame intervals. Automatic selection prefers native MJPEG, then chooses a starting mode within a conservative pixel-throughput budget associated with the detected Pi family. The budget only guides automatic selection; it is not a hard maximum.
+At boot, PetCam detects both camera interfaces. USB UVC devices are enumerated through V4L2, parsing advertised formats, discrete/stepwise/continuous frame sizes, and discrete or ranged frame intervals. CSI modules are enumerated with `rpicam-hello --list-cameras`, and the camera stack's advertised sensor modes and frame rates are parsed. The same image supports both interfaces; both expose the same MJPEG HTTP stream endpoint. USB automatic selection prefers native MJPEG. CSI uses `rpicam-vid` to capture and encode MJPEG.
 
 The current starting budgets are pixel-rate heuristics, not benchmark guarantees:
 
@@ -48,16 +48,23 @@ The current starting budgets are pixel-rate heuristics, not benchmark guarantees
 
 If every native-MJPEG mode exceeds the detected board's budget, PetCam starts with the least demanding advertised MJPEG mode and logs a warning. Explicit supported modes are never blocked.
 
-Inspect all advertised modes:
+Inspect USB and CSI camera discovery:
 
 ~~~bash
 sudo petcam-camera discover
+sudo petcam-camera discover-csi
 ~~~
 
-Preview a supported manual mode:
+Preview a supported USB mode:
 
 ~~~bash
 sudo petcam-camera select --format MJPG --resolution 1920x1080 --fps 30
+~~~
+
+Preview a supported CSI mode (camera index is shown by `discover-csi`):
+
+~~~bash
+sudo petcam-camera select-csi --camera 0 --resolution 1920x1080 --fps 30
 ~~~
 
 Set the chosen values in /etc/petcam/petcam.conf and restart:
@@ -69,13 +76,16 @@ sudo systemctl restart petcam-stream
 
 Supported settings:
 
-- DEVICE: optional V4L2 node; prefer a stable path under /dev/v4l/by-id/ when available
-- FORMAT: auto or a µStreamer-supported V4L2 fourcc such as MJPG, YUYV, or UYVY
-- RESOLUTION: auto or an advertised WIDTHxHEIGHT for the selected format
-- FPS: auto or an advertised frame rate for that format and resolution
+- SOURCE: `auto` (prefer USB, fall back to CSI), `usb`, or `csi`
+- DEVICE: optional USB V4L2 node; prefer a stable path under /dev/v4l/by-id/ when available
+- CAMERA: CSI camera index from `petcam-camera discover-csi`, or `auto`
+- FORMAT: USB only; `auto` or a µStreamer-supported V4L2 fourcc such as MJPG, YUYV, or UYVY
+- RESOLUTION: `auto` or an advertised mode for the selected backend
+- FPS: `auto` or an advertised frame rate for the selected backend
+- CSI_QUALITY: CSI MJPEG quality from 1 to 100, default 70
 - PORT: HTTP port, default 8080
 
-Automatic FPS uses µStreamer's no-application-cap request (--desired-fps=0); the camera/driver determines the delivered cadence. Unsupported explicit modes fail clearly rather than silently falling back. If no native MJPEG mode is available, PetCam may select a raw V4L2 mode and use CPU JPEG encoding, with a performance warning.
+For USB, automatic FPS uses µStreamer's no-application-cap request (`--desired-fps=0`). For CSI, automatic selection chooses an advertised sensor mode within the model's starting pixel-rate budget, or the least demanding advertised mode with a warning if none fit. Unsupported explicit modes fail clearly rather than silently falling back. If a USB camera has no native MJPEG mode, PetCam may select a supported raw V4L2 mode and use CPU JPEG encoding, with a performance warning. CSI is encoded to MJPEG by `rpicam-vid`.
 
 ## Runtime diagnostics
 
@@ -85,13 +95,13 @@ systemctl status petcam-stream
 journalctl -u petcam-stream -b
 ~~~
 
-The status report includes systemd service state, a local HTTP endpoint health probe, detected and active camera details, capture resolution and format, the latest captured_fps value from µStreamer's performance log, a one-second MJPEG bitrate sample measured by opening a temporary local stream client, aggregate network-interface transmit throughput, cumulative transmitted bytes, and SoC temperature. The local MJPEG sample is stream-specific; the network-interface rate includes other interface traffic.
+The status report includes systemd service state, a local HTTP endpoint health probe, USB and CSI discovery counts, active backend and camera details, capture resolution and format, latest capture FPS (µStreamer performance log for USB or the CSI frame counter for CSI), a one-second MJPEG bitrate sample measured by opening a temporary local stream client, aggregate network-interface transmit throughput, cumulative transmitted bytes, and SoC temperature. The local MJPEG sample is stream-specific; the network-interface rate includes other interface traffic.
 
-Dropped frames are reported as unavailable when the active UVC driver/µStreamer build does not expose a reliable cumulative counter. PetCam does not estimate or fabricate a dropped-frame count. Capture FPS and service/device errors remain available for diagnosing stream quality.
+Dropped frames are reported as unavailable when the active capture backend does not expose a reliable cumulative counter. PetCam does not estimate or fabricate a dropped-frame count. Capture FPS and service/device errors remain available for diagnosing stream quality.
 
 ## Hardware validation
 
-Software discovery only establishes what a camera advertises; it cannot guarantee sustained performance on a specific Pi, USB hub, power supply, or wireless network. Test each intended mode for several minutes while observing petcam-status and the service journal. A powered USB OTG hub is recommended for cameras with substantial power draw.
+Software discovery only establishes what a camera advertises; it cannot guarantee sustained performance on a specific Pi, USB hub, power supply, or wireless network. Test each intended mode for several minutes while observing petcam-status and the service journal. A powered USB OTG hub is recommended for USB cameras with substantial power draw. CSI modules require a compatible ribbon cable and camera connector; ensure the cable's contacts face the correct direction for the specific board.
 
 ## OBS
 
