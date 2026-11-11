@@ -45,7 +45,7 @@ def create_manifest(image: Path, output: Path, icon: str | None = None) -> None:
     }
 
     output.write_text(
-        json.dumps({"os_list": [entry]}, indent=2) + "\\n",
+        json.dumps({"os_list": [entry]}, indent=2) + chr(10),
         encoding="utf-8",
     )
 
