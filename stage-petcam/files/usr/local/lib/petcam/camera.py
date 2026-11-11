@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 MODE_RE = re.compile(r"Size: Discrete (\d+)x(\d+)")
@@ -151,7 +152,7 @@ def main():
             return 1
         device, mode, native = selected
         if args.resolution != "auto":
-            match = re.fullmatch(r"(\\d+)x(\\d+)", args.resolution)
+            match = re.fullmatch(r"(\d+)x(\d+)", args.resolution)
             if not match:
                 print("Resolution must be 'auto' or WIDTHxHEIGHT.", file=sys.stderr)
                 return 2
@@ -204,6 +205,19 @@ def main():
     except OSError:
         log = ""
     fps_values = re.findall(r"captured_fps=(\d+)", log)
+    port = 8080
+    try:
+        for config_line in Path("/etc/petcam/petcam.conf").read_text().splitlines():
+            match = re.match(r"\s*PORT\s*=\s*(\d+)", config_line)
+            if match:
+                port = int(match.group(1))
+    except OSError:
+        pass
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2) as response:
+            http_status = response.status
+    except Exception:
+        http_status = None
     def transmitted_bytes():
         total = 0
         for line in Path("/proc/net/dev").read_text().splitlines()[2:]:
@@ -224,6 +238,8 @@ def main():
     report = {
         "model": model,
         "service": status,
+        "http_endpoint_reachable": http_status is not None,
+        "http_status": http_status,
         "latest_captured_fps": int(fps_values[-1]) if fps_values else None,
         "network_transmitted_bytes_since_boot": tx_after,
         "network_interface_tx_mbps_sampled": round(max(0, tx_after - tx_before) * 8 / 1_000_000, 3),
