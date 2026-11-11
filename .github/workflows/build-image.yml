@@ -41,7 +41,7 @@ jobs:
 
       - name: Validate PetCam scripts
         run: |
-          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py tools/create_imager_manifest.py
+          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py tools/create_imager_manifest.py
           bash -n stage-petcam/00-install-files/00-run.sh stage-petcam/02-configure-petcam/00-run-chroot.sh
 
       - name: Test camera and Imager manifest support

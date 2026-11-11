@@ -30,7 +30,7 @@ if [[ -r "$CONFIG" ]]; then
     # shellcheck disable=SC1090
     source "$CONFIG"
 fi
-PORT="${PORT:-8080}"
+PORT="${PORT:-8081}"
 SOURCE="${SOURCE:-auto}"
 DEVICE="${DEVICE:-}"
 CAMERA="${CAMERA:-auto}"
@@ -62,7 +62,7 @@ start_usb() {
     fi
     echo "PetCam backend: usb; hardware tier: $tier"
     echo "Starting USB camera $camera at $resolution, format=$format, requested_fps=$fps, encoder=$encoder"
-    exec /usr/local/bin/ustreamer --device="$camera" --host=0.0.0.0 --port="$PORT" --format="$format" --encoder="$encoder" --resolution="$resolution" --desired-fps="$fps" --perf
+    exec /usr/local/bin/ustreamer --device="$camera" --host=127.0.0.1 --port="$PORT" --format="$format" --encoder="$encoder" --resolution="$resolution" --desired-fps="$fps" --perf
 }
 
 start_csi() {
@@ -82,7 +82,7 @@ start_csi() {
     fi
     echo "PetCam backend: csi; hardware tier: $tier"
     echo "Starting CSI camera index=$camera at $resolution, requested_fps=$fps, MJPEG quality=$CSI_QUALITY"
-    exec python3 /usr/local/lib/petcam/csi_stream.py --camera "$camera" --resolution "$resolution" --fps "$fps" --quality "$CSI_QUALITY" --host 0.0.0.0 --port "$PORT"
+    exec python3 /usr/local/lib/petcam/csi_stream.py --camera "$camera" --resolution "$resolution" --fps "$fps" --quality "$CSI_QUALITY" --host 127.0.0.1 --port "$PORT"
 }
 
 case "$SOURCE" in
@@ -119,7 +119,7 @@ FPS=auto
 CSI_QUALITY=70
 PORT=8080
 CONF
-chmod 0644 /etc/petcam/petcam.conf
+chown petcam:petcam /etc/petcam\nchmod 0750 /etc/petcam\nchown petcam:petcam /etc/petcam/petcam.conf\nchmod 0640 /etc/petcam/petcam.conf
 
 cat > /etc/systemd/system/petcam-stream.service <<'UNIT'
 [Unit]
@@ -147,3 +147,36 @@ UNIT
 
 systemctl enable avahi-daemon.service
 systemctl enable petcam-stream.service
+
+cat > /etc/sudoers.d/petcam-web <<'SUDO'
+petcam ALL=(root) NOPASSWD: /usr/bin/systemctl restart petcam-stream.service
+SUDO
+chmod 0440 /etc/sudoers.d/petcam-web
+visudo -cf /etc/sudoers.d/petcam-web
+
+cat > /etc/systemd/system/petcam-web.service <<'UNIT'
+[Unit]
+Description=PetCam lightweight camera management web interface
+After=network-online.target petcam-stream.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=petcam
+Group=video
+SupplementaryGroups=video i2c
+ExecStart=/usr/bin/python3 /usr/local/lib/petcam/web_manager.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/etc/petcam /var/lib/petcam
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl enable avahi-daemon.service
+systemctl enable petcam-stream.service
+systemctl enable petcam-web.service
