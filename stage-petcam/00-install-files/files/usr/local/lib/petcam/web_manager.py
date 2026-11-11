@@ -149,7 +149,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404); return
         origin = self.headers.get("Origin", "")
         host = self.headers.get("Host", "").split(":")[0]
-        if not origin or urlparse(origin).netloc != self.headers.get("Host") or host not in ("petcam.local", "localhost") and not host:
+        if not origin or urlparse(origin).netloc != self.headers.get("Host"):
             self.send_json(403, {"error": "Request origin is not allowed"}); return
         try:
             length = int(self.headers.get("Content-Length", "0"))
