@@ -127,8 +127,9 @@ def parse_manifest(raw: bytes) -> dict[str, object]:
     if manifest["schema_version"] != 1 or manifest["application"] != "petcam-os":
         raise UpdateError("Unsupported release manifest")
     version_tuple(str(manifest["version"]))
-    if manifest["architecture"] != "armhf":
-        raise UpdateError("Release does not target the PetCam armhf image")
+    machine = platform.machine().lower()
+    if manifest["architecture"] != "armhf" or machine not in ("armv6l", "armv7l", "armhf"):
+        raise UpdateError(f"Release does not target this PetCam armhf device (machine={machine})")
     archive_url = manifest["archive_url"]
     if not isinstance(archive_url, str) or urllib.parse.urlparse(archive_url).scheme != "https":
         raise UpdateError("Release archive URL must use HTTPS")
@@ -246,12 +247,11 @@ def service(action: str) -> None:
 
 
 def healthy() -> bool:
-    active = subprocess.run(
-        ["systemctl", "is-active", "--quiet", "petcam-stream.service", "petcam-web.service"],
-        check=False,
-    ).returncode == 0
-    if not active:
-        return False
+    for unit in ("petcam-stream.service", "petcam-web.service"):
+        if subprocess.run(
+            ["systemctl", "is-active", "--quiet", unit], check=False
+        ).returncode != 0:
+            return False
     try:
         with urllib.request.urlopen("http://127.0.0.1:8080/", timeout=3) as response:
             return response.status == 200
@@ -321,6 +321,8 @@ def main() -> int:
     parser.add_argument("command", choices=("check", "install"))
     args = parser.parse_args()
     try:
+        if args.command == "install" and os.geteuid() != 0:
+            raise UpdateError("Installing updates requires root; use the petcam-update.service unit")
         config = read_config()
         result = check_update(config) if args.command == "check" else install_update(config)
         print(json.dumps(result, indent=2))
