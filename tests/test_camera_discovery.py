@@ -39,6 +39,12 @@ class CameraDiscoveryTests(unittest.TestCase):
         self.assertEqual((mode["width"], mode["height"]), (1280, 720))
         self.assertEqual(device["device"], "/dev/video0")
 
+    def test_filters_to_user_selected_supported_pixel_format(self):
+        devices = [{"device": "/dev/video0", "modes": MODULE.parse_modes(SAMPLE)}]
+        selected = MODULE.filter_devices_by_format(devices, "yuyv")
+        self.assertEqual([mode["format"] for mode in selected[0]["modes"]], ["YUYV"])
+        self.assertEqual(MODULE.filter_devices_by_format(devices, "H264"), [])
+
     def test_falls_back_to_supported_raw_format_and_ignores_unknown_fourcc(self):
         raw_device = [{"device": "/dev/video1", "modes": [MODULE.parse_modes(SAMPLE)[2]]}]
         device, mode, native = MODULE.select_mode(raw_device, "zero")
