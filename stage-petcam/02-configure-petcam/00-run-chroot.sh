@@ -6,10 +6,12 @@ fi
 usermod -a -G video,i2c petcam
 
 install -d -m 0755 /opt
-git clone --depth 1 https://github.com/pikvm/ustreamer.git /opt/ustreamer
-git -C /opt/ustreamer checkout --detach 11fd828ab00c01a39bd0843ef442ef0b6d3cac41
+git init /opt/ustreamer
+git -C /opt/ustreamer fetch --depth 1 https://github.com/pikvm/ustreamer.git 11fd828ab00c01a39bd0843ef442ef0b6d3cac41
+git -C /opt/ustreamer checkout --detach FETCH_HEAD
 make -C /opt/ustreamer -j1 WITH_SYSTEMD=0 WITH_GPIO=0
 make -C /opt/ustreamer install PREFIX=/usr/local
+rm -rf /opt/ustreamer
 ldconfig
 
 APP_VERSION="$(cat /opt/petcam/releases/*/VERSION)"
