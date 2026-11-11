@@ -6,12 +6,18 @@ on:
     paths:
       - "config"
       - "stage-petcam/**"
+      - "tests/**"
+      - "README.md"
+      - "docs/**"
       - ".github/workflows/build-image.yml"
   push:
     branches: [main]
     paths:
       - "config"
       - "stage-petcam/**"
+      - "tests/**"
+      - "README.md"
+      - "docs/**"
       - ".github/workflows/build-image.yml"
 
 permissions:
@@ -24,6 +30,9 @@ jobs:
     steps:
       - name: Check out PetCam OS
         uses: actions/checkout@v4
+
+      - name: Test camera capability discovery
+        run: python3 -m unittest discover -s tests -v
 
       - name: Check out pi-gen
         uses: actions/checkout@v4
