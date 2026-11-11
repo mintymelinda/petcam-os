@@ -24,7 +24,7 @@ cd ../pi-gen
 sudo ./build-docker.sh
 ~~~
 
-The resulting image is written to pi-gen/deploy/.
+The resulting image is written to pi-gen/deploy/. PetCam's application is installed under `/opt/petcam/releases/<version>/`, and `/opt/petcam/current` selects the active release. `/etc/petcam/petcam.conf` and `/var/lib/petcam/` remain outside the versioned application tree so future application updates can preserve device configuration and state.
 
 ## Raspberry Pi Imager 2 customisation
 
@@ -82,6 +82,8 @@ sudo nano /etc/petcam/petcam.conf
 sudo systemctl restart petcam-stream
 ~~~
 
+The camera backend listens on loopback port 8081. The PetCam web manager proxies it through the public LAN endpoint on port 8080.
+
 Supported settings:
 
 - SOURCE: `auto` (prefer USB, fall back to CSI), `usb`, or `csi`
@@ -91,7 +93,7 @@ Supported settings:
 - RESOLUTION: `auto` or an advertised mode for the selected backend
 - FPS: `auto` or an advertised frame rate for the selected backend
 - CSI_QUALITY: CSI MJPEG quality from 1 to 100, default 70
-- PORT: HTTP port, default 8080
+- PORT: internal camera-backend HTTP port, default 8081 (loopback only); the web manager remains on public LAN port 8080
 
 For USB, automatic FPS uses µStreamer's no-application-cap request (`--desired-fps=0`). For CSI, automatic selection chooses an advertised sensor mode within the model's starting pixel-rate budget, or the least demanding advertised mode with a warning if none fit. Unsupported explicit modes fail clearly rather than silently falling back. If a USB camera has no native MJPEG mode, PetCam may select a supported raw V4L2 mode and use CPU JPEG encoding, with a performance warning. CSI is encoded to MJPEG by `rpicam-vid`; this encoder workload can be significant on older Pi boards, so verify sustained capture on the target hardware and reduce resolution, FPS, or `CSI_QUALITY` if needed.
 

@@ -16,7 +16,7 @@ USB camera modes are discovered from V4L2. CSI camera modules are discovered thr
 
 The image is built with the official [Raspberry Pi pi-gen](https://github.com/RPi-Distro/pi-gen) tool. The build host uses Docker; Docker is not installed on the Pi.
 
-The workflow builds a 32-bit Raspberry Pi OS Lite image and adds PetCam's camera streamer service. The flashable image is published by GitHub Actions.
+The workflow builds a 32-bit Raspberry Pi OS Lite image and adds PetCam's camera streamer service. PetCam application files are installed into a versioned release under `/opt/petcam/releases/`, with `/opt/petcam/current` pointing to the active release. The flashable image is published by GitHub Actions.
 
 ## Camera stream
 
@@ -57,7 +57,7 @@ FORMAT=MJPG           # USB only
 RESOLUTION=1920x1080
 FPS=30
 CSI_QUALITY=70        # CSI MJPEG quality, 1..100
-PORT=8080
+PORT=8081           # internal camera backend; web interface remains on port 8080
 ~~~
 
 SOURCE=auto prefers a usable USB camera, then falls back to CSI. Set SOURCE=usb or SOURCE=csi to force a backend. FORMAT applies to USB only; CSI output is MJPEG. Use RESOLUTION=auto and FPS=auto to return to automatic selection. For USB, FPS=auto asks µStreamer not to impose an application-side frame-rate cap. For CSI, automatic selection chooses a sensor-advertised frame rate. Unsupported explicit modes fail clearly rather than silently falling back. Restart after changes:
@@ -92,4 +92,4 @@ Camera mode discovery and automatic selection are software features; they do not
 
 ## Security
 
-The streamer binds to the LAN interface on port 8080. Keep the device on a trusted private network; do not port-forward the stream to the internet.
+The web manager exposes the public stream and management page on port 8080. The camera backend listens only on loopback at port 8081. Keep the device on a trusted private network; do not port-forward port 8080 to the internet.
