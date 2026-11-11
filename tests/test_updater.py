@@ -4,8 +4,11 @@ import json
 import tarfile
 import tempfile
 import unittest
+import sys
 from pathlib import Path
 from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "stage-petcam/00-install-files/files/usr/local/lib/petcam"))
 
 from updater import (
     MAX_ARCHIVE,
