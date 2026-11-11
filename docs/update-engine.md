@@ -81,3 +81,12 @@ A camera being absent does not itself fail the update health check; camera avail
 - The web UI does not yet expose update controls; that is the next integration step.
 - Automatic periodic checks and automatic installation are not enabled.
 - Release publishing and signing automation must be implemented separately before this can be used by end users.
+
+
+## Web manager integration
+
+The camera management page includes a Software updates panel with manual signed-release checks, installed/available versions, release notes and archive size, an explicit install confirmation, progress/status polling, and recent updater journal output. A browser-local preference can trigger a check whenever that browser opens the PetCam page; it does not schedule background work or install updates automatically.
+
+The web manager remains unprivileged. Its sudoers allowlist grants only three fixed operations: checking signed metadata, starting the dedicated one-shot update service, and reading that service's recent journal. It cannot invoke an arbitrary root command or run the updater's install command directly. The install endpoint validates the request origin, and the updater still performs all signature, digest, archive, and rollback checks.
+
+The update panel reports application releases only. It does not offer operating-system, kernel, firmware, or bootloader updates.
