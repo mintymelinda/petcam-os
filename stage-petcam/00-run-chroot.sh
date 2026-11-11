@@ -54,10 +54,14 @@ fps="$(json_value fps)"
 format="$(json_value format)"
 encoder="$(json_value encoder)"
 native_mjpeg="$(json_value native_mjpeg)"
+warning="$(json_value performance_warning)"
 tier="$(json_value tier)"
 
 if [[ "$native_mjpeg" != "True" && "$native_mjpeg" != "true" ]]; then
     echo "WARNING: camera has no native MJPEG mode at the selected resolution; CPU JPEG encoding will be used." >&2
+fi
+if [[ "$warning" == "True" || "$warning" == "true" ]]; then
+    echo "WARNING: selected mode exceeds the automatic performance budget for this Pi model; it is not blocked, but sustained FPS and stability should be checked." >&2
 fi
 echo "PetCam hardware tier: $tier"
 echo "Starting camera $camera at $resolution, format=$format, requested_fps=$fps, encoder=$encoder"
