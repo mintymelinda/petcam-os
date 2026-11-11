@@ -28,11 +28,7 @@ The resulting image is written to pi-gen/deploy/.
 
 ## Raspberry Pi Imager 2 customisation
 
-Imager 2 deliberately disables customisation for an arbitrary local image because it cannot infer the image's first-boot mechanism. The build artifact includes `create_imager_manifest.py`. After extracting the artifact, run this from the extracted directory:
-
-~~~bash
-python3 create_imager_manifest.py image_YYYY-MM-DD-PetCamOS-petcam.img.xz
-~~~
+Imager 2 deliberately disables customisation for an arbitrary local image because it cannot infer the image's first-boot mechanism. The build artifact includes `create_imager_manifest.py`. After extracting the artifact, double-click `prepare-imager.bat` on Windows or run `./prepare-imager.sh` on Linux. The helper finds the image, generates the local manifest with verified checksums, and opens it in Raspberry Pi Imager 2.
 
 The helper creates `petcam-os.rpi-imager-manifest` beside the image. It calculates the compressed download size and SHA-256, decompresses the image as a stream to calculate the extracted size and SHA-256, and declares `init_format: cloudinit-rpi` for the Raspberry Pi OS cloud-init first-boot integration. It includes the supported Raspberry Pi device tags. No credentials or Wi-Fi details are written into the image or manifest.
 
