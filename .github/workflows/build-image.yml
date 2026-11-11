@@ -71,6 +71,7 @@ jobs:
       - name: Package Imager 2 local-manifest helper
         run: |
           cp tools/create_imager_manifest.py pi-gen/deploy/
+          cp tools/prepare-imager.bat tools/prepare-imager.sh pi-gen/deploy/
           cp assets/petcam-icon.svg pi-gen/deploy/
 
       - name: Upload image artifacts
