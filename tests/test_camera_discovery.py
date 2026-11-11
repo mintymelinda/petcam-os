@@ -29,13 +29,27 @@ class CameraDiscoveryTests(unittest.TestCase):
         self.assertEqual(modes[0]["fps"], [60.0, 30.0])
         self.assertEqual(modes[2]["format"], "YUYV")
 
-    def test_prefers_native_mjpeg_and_selects_within_zero_budget(self):
+    def test_prefers_native_mjpeg_and_uses_least_demanding_when_over_budget(self):
         devices = [{"device": "/dev/video0", "modes": MODULE.parse_modes(SAMPLE)}]
         device, mode, native = MODULE.select_mode(devices, "zero")
         self.assertTrue(native)
         self.assertEqual(mode["format"], "MJPG")
         self.assertEqual((mode["width"], mode["height"]), (1280, 720))
         self.assertEqual(device["device"], "/dev/video0")
+
+    def test_parses_stepwise_sizes_and_frame_intervals(self):
+        output = """[0]: 'MJPG' (Motion-JPEG, compressed)
+  Size: Stepwise 320x240 - 1920x1080 with step 16/8
+    Interval: Stepwise 0.010s - 0.100s with step 0.001s
+"""
+        mode = MODULE.parse_modes(output)[0]
+        self.assertEqual((mode["width"], mode["height"]), (1920, 1080))
+        self.assertTrue(MODULE.mode_supports_resolution(mode, 1280, 720))
+        self.assertFalse(MODULE.mode_supports_resolution(mode, 1281, 720))
+        self.assertAlmostEqual(mode["fps_range"]["min"], 10.0)
+        self.assertAlmostEqual(mode["fps_range"]["max"], 100.0)
+        self.assertTrue(MODULE.mode_supports_fps(mode, 60))
+        self.assertFalse(MODULE.mode_supports_fps(mode, 120))
 
     def test_model_tiers(self):
         self.assertEqual(MODULE.model_tier("Raspberry Pi Zero W Rev 1.1"), "zero")
