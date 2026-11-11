@@ -1,4 +1,5 @@
 import hashlib
+import subprocess
 import io
 import json
 import tarfile
@@ -16,6 +17,7 @@ from updater import (
     parse_manifest,
     safe_extract,
     validate_release,
+    verify_signature,
     version_tuple,
 )
 
@@ -56,6 +58,32 @@ class UpdateManifestTests(unittest.TestCase):
             manifest[key] = value
             with self.subTest(key=key), self.assertRaises(UpdateError):
                 parse_manifest(json.dumps(manifest).encode())
+
+
+    def test_ed25519_signature_accepts_original_manifest_and_rejects_tampering(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            private = root / "private.pem"
+            public = root / "public.pem"
+            message = root / "manifest.json"
+            signature = root / "manifest.sig"
+            message.write_bytes(b'{"application":"petcam-os","version":"1.2.3"}')
+            subprocess.run(
+                ["openssl", "genpkey", "-algorithm", "ED25519", "-out", str(private)],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["openssl", "pkey", "-in", str(private), "-pubout", "-out", str(public)],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["openssl", "pkeyutl", "-sign", "-inkey", str(private), "-rawin",
+                 "-in", str(message), "-out", str(signature)],
+                check=True, capture_output=True,
+            )
+            verify_signature(message.read_bytes(), signature.read_bytes(), public)
+            with self.assertRaises(UpdateError):
+                verify_signature(message.read_bytes() + b" ", signature.read_bytes(), public)
 
     def test_semver_comparison_is_numeric(self):
         self.assertGreater(version_tuple("1.10.0"), version_tuple("1.9.9"))
