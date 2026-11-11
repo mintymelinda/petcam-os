@@ -68,7 +68,17 @@ The current capture interfaces do not provide a reliable cumulative dropped-fram
 
 ## First boot and Wi-Fi
 
-Use Raspberry Pi Imager's OS customization before writing the image to set the hostname to petcam, configure Wi-Fi, select the WLAN regulatory country where the Pi will operate, enable SSH if desired, and create an administrator account. The image intentionally has no hard-coded Wi-Fi country. Imager applies the selection during first boot. To change it later, use sudo raspi-config → Localisation Options → WLAN Country.
+Raspberry Pi Imager 2 treats a locally selected image as having no customization support. The build artifact therefore includes `create_imager_manifest.py` alongside the compressed image. After extracting the artifact, open a terminal in that folder and run:
+
+~~~bash
+python3 create_imager_manifest.py image_YYYY-MM-DD-PetCamOS-petcam.img.xz
+~~~
+
+This creates `petcam-os.rpi-imager-manifest` with the image's local path, verified compressed and extracted SHA-256 hashes, supported Pi device tags, and `init_format: systemd`. Double-click the manifest to open it in Raspberry Pi Imager 2 (or choose it through App Options → Content Repository → Edit → Use custom file, then Apply & Restart). Select PetCam OS from the OS list; the Customisation step will then be available.
+
+In Customisation, set hostname `petcam`, configure Wi-Fi, select the WLAN regulatory country where the Pi will operate, create the administrator account, and enable SSH if desired. The image intentionally has no hard-coded Wi-Fi country. Imager applies these settings on first boot. To change the country later, use sudo raspi-config → Localisation Options → WLAN Country.
+
+The helper uses only Python's standard library and validates the exact image bytes through the manifest checksums. Keep the image and generated manifest together until Imager has finished writing.
 
 ## Build locally
 
