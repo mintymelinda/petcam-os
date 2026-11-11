@@ -89,7 +89,9 @@ case "$SOURCE" in
     usb) start_usb ;;
     csi) start_csi ;;
     auto)
-        if [[ -z "$DEVICE" ]] && /usr/local/bin/petcam-camera select --format "$FORMAT" --resolution "$RESOLUTION" --fps "$FPS" >/dev/null 2>&1; then
+        usb_probe=(select --format "$FORMAT" --resolution "$RESOLUTION" --fps "$FPS")
+        if [[ -n "$DEVICE" ]]; then usb_probe+=(--device "$DEVICE"); fi
+        if /usr/local/bin/petcam-camera "${usb_probe[@]}" >/dev/null 2>&1; then
             start_usb
         else
             echo "No usable USB camera selected; trying Raspberry Pi CSI camera stack."
