@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
@@ -275,6 +276,37 @@ def main():
             http_status = response.status
     except Exception:
         http_status = None
+    def sample_stream_mbps():
+        received = 0
+        started = time.monotonic()
+        header = b""
+        body_started = False
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=2) as stream:
+                stream.sendall(b"GET /stream HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n")
+                while time.monotonic() - started < 1.0:
+                    stream.settimeout(min(0.2, max(0.05, 1.0 - (time.monotonic() - started))))
+                    try:
+                        chunk = stream.recv(65536)
+                    except socket.timeout:
+                        continue
+                    if not chunk:
+                        break
+                    if not body_started:
+                        header += chunk
+                        separator = header.find(b"\\r\\n\\r\\n")
+                        if separator >= 0:
+                            if not header.startswith(b"HTTP/1.1 200"):
+                                return None
+                            received += len(header) - separator - 4
+                            body_started = True
+                    else:
+                        received += len(chunk)
+        except OSError:
+            return None
+        elapsed = max(time.monotonic() - started, 0.001)
+        return round(received * 8 / elapsed / 1_000_000, 3) if body_started else None
+
     def transmitted_bytes():
         total = 0
         for line in Path("/proc/net/dev").read_text().splitlines()[2:]:
@@ -283,7 +315,7 @@ def main():
                 total += int(fields[9])
         return total
     tx_before = transmitted_bytes()
-    time.sleep(1)
+    stream_mbps = sample_stream_mbps()
     tx_after = transmitted_bytes()
     temp = "unavailable"
     for path in ("/sys/class/thermal/thermal_zone0/temp",):
@@ -304,6 +336,7 @@ def main():
         "active_capture_format": formats[-1] if formats else None,
         "network_transmitted_bytes_since_boot": tx_after,
         "network_interface_tx_mbps_sampled": round(max(0, tx_after - tx_before) * 8 / 1_000_000, 3),
+        "local_mjpeg_stream_mbps_sampled": stream_mbps,
         "temperature": temp,
         "dropped_frames": None,
         "dropped_frames_note": "The standard UVC/µStreamer interface does not expose a reliable cumulative dropped-frame counter; not inferred.",
