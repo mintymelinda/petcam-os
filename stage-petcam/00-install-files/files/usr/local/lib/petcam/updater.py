@@ -28,6 +28,8 @@ CONFIG = Path("/etc/petcam/update.conf")
 PUBLIC_KEY = Path("/etc/petcam/update-signing.pub")
 MAX_MANIFEST = 64 * 1024
 MAX_ARCHIVE = 300 * 1024 * 1024
+MAX_EXPANDED_ARCHIVE = 512 * 1024 * 1024
+MAX_ARCHIVE_MEMBERS = 10000
 REQUIRED_FILES = (
     "VERSION",
     "manifest.json",
@@ -183,6 +185,11 @@ def safe_extract(archive: bytes, destination: Path) -> None:
                 members = bundle.getmembers()
                 if not members:
                     raise UpdateError("Release archive is empty")
+                if len(members) > MAX_ARCHIVE_MEMBERS:
+                    raise UpdateError("Release archive contains too many entries")
+                expanded_size = sum(member.size for member in members if member.isfile())
+                if expanded_size > MAX_EXPANDED_ARCHIVE:
+                    raise UpdateError("Expanded release archive exceeds the size limit")
                 for member in members:
                     name = PurePosixPath(member.name)
                     if name.is_absolute() or not name.parts or any(part in ("", ".", "..") for part in name.parts):
