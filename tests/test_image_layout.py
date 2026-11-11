@@ -1,4 +1,3 @@
-import json
 import re
 import unittest
 from pathlib import Path
@@ -17,7 +16,7 @@ STAGE_VERSION = (
 class ImageLayoutTests(unittest.TestCase):
     def test_image_and_stage_versions_match_semver(self):
         self.assertEqual(VERSION, STAGE_VERSION)
-        self.assertRegex(VERSION, re.compile(r"^[0-9]+\\.[0-9]+\\.[0-9]+$"))
+        self.assertRegex(VERSION, re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$"))
 
     def test_install_stage_creates_versioned_release_and_manifest(self):
         script = INSTALL.read_text()
@@ -47,7 +46,8 @@ class ImageLayoutTests(unittest.TestCase):
     def test_ustreamer_source_is_pinned_and_config_permissions_are_valid(self):
         script = CONFIGURE.read_text()
         self.assertIn(
-            "git -C /opt/ustreamer checkout --detach "
+            "git -C /opt/ustreamer fetch --depth 1 "
+            "https://github.com/pikvm/ustreamer.git "
             "11fd828ab00c01a39bd0843ef442ef0b6d3cac41",
             script,
         )
