@@ -5,16 +5,14 @@ if ! id petcam >/dev/null 2>&1; then
 fi
 usermod -a -G video,i2c petcam
 
+APP_VERSION="$(cat /opt/petcam/releases/*/VERSION)"
 install -d -m 0755 /opt
 git init /opt/ustreamer
 git -C /opt/ustreamer fetch --depth 1 https://github.com/pikvm/ustreamer.git 11fd828ab00c01a39bd0843ef442ef0b6d3cac41
 git -C /opt/ustreamer checkout --detach FETCH_HEAD
 make -C /opt/ustreamer -j1 WITH_SYSTEMD=0 WITH_GPIO=0
-make -C /opt/ustreamer install PREFIX=/usr/local
+make -C /opt/ustreamer install PREFIX="/opt/petcam/releases/$APP_VERSION/vendor"
 rm -rf /opt/ustreamer
-ldconfig
-
-APP_VERSION="$(cat /opt/petcam/releases/*/VERSION)"
 ln -sfn "releases/$APP_VERSION" /opt/petcam/current
 
 cat > /usr/local/bin/petcam-camera <<'SCRIPT'
@@ -68,7 +66,7 @@ start_usb() {
     fi
     echo "PetCam backend: usb; hardware tier: $tier"
     echo "Starting USB camera $camera at $resolution, format=$format, requested_fps=$fps, encoder=$encoder"
-    exec /usr/local/bin/ustreamer --device="$camera" --host=127.0.0.1 --port="$PORT" --format="$format" --encoder="$encoder" --resolution="$resolution" --desired-fps="$fps" --perf
+    exec /opt/petcam/current/vendor/bin/ustreamer --device="$camera" --host=127.0.0.1 --port="$PORT" --format="$format" --encoder="$encoder" --resolution="$resolution" --desired-fps="$fps" --perf
 }
 
 start_csi() {
