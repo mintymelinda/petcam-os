@@ -26,7 +26,7 @@ If mDNS is unavailable, use the Pi's DHCP address instead.
 
 ## First boot and Wi-Fi
 
-Use Raspberry Pi Imager's OS customization to set the hostname to `petcam`, configure the 2.4 GHz Wi-Fi network, enable SSH if desired, and create an administrator account before writing the image. The first boot expands the filesystem as usual.
+Use Raspberry Pi Imager's OS customization before writing the image to set the hostname to `petcam`, configure the 2.4 GHz Wi-Fi network, select the **WLAN regulatory country where the Pi will operate**, enable SSH if desired, and create an administrator account. The image intentionally has no hard-coded Wi-Fi country, so the correct country is chosen per installation rather than inheriting Canada's setting. Imager applies the selection during first boot. To change it later, use `sudo raspi-config` → **Localisation Options** → **WLAN Country**.
 
 ## Build locally
 
