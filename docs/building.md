@@ -15,6 +15,7 @@ git clone https://github.com/RPi-Distro/pi-gen.git
 git clone https://github.com/mintymelinda/petcam-os.git
 cp petcam-os/config pi-gen/config
 cp -a petcam-os/stage-petcam pi-gen/stage-petcam
+touch pi-gen/stage2/SKIP_IMAGES
 chmod 0755 pi-gen/stage-petcam/00-run-chroot.sh
 cd pi-gen
 sudo ./build-docker.sh
