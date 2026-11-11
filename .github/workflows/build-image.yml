@@ -37,6 +37,7 @@ jobs:
           cp config pi-gen/config
           cp -a stage-petcam pi-gen/stage-petcam
           touch pi-gen/stage2/SKIP_IMAGES
+          chmod 0755 pi-gen/stage-petcam/prerun.sh
           chmod 0755 pi-gen/stage-petcam/00-run-chroot.sh
           mkdir -p pi-gen/deploy
 
