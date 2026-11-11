@@ -157,7 +157,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--resolution", required=True)
-    parser.add_argument("--fps", required=True, type=int)
+    parser.add_argument("--fps", required=True, type=float)
     parser.add_argument("--quality", type=int, default=70)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
