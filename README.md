@@ -29,7 +29,7 @@ If mDNS is unavailable, use the Pi's DHCP address instead.
 
 ~~~bash
 sudo petcam-camera discover
-sudo petcam-camera select --resolution 1920x1080 --fps 30
+sudo petcam-camera select --format MJPG --resolution 1920x1080 --fps 30
 sudo petcam-status
 ~~~
 
@@ -39,7 +39,8 @@ Edit /etc/petcam/petcam.conf to override:
 
 ~~~bash
 # Optional: pin a specific V4L2 node
-# DEVICE=/dev/video0
+# DEVICE=/dev/v4l/by-id/your-camera-video-index0
+FORMAT=MJPG
 RESOLUTION=1920x1080
 FPS=30
 PORT=8080
