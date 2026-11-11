@@ -296,6 +296,7 @@ def main():
     resolutions = re.findall(r"Using resolution: (\d+x\d+)", log)
     formats = re.findall(r"Using format: ([A-Za-z0-9_-]+)", log)
     devices_in_log = re.findall(r"Using V4L2 device: (\S+)", log)
+    start_config = re.findall(r"Starting camera (\S+) at (\d+x\d+), format=([^,]+)", log)
     port = 8080
     try:
         for config_line in Path("/etc/petcam/petcam.conf").read_text().splitlines():
@@ -363,10 +364,10 @@ def main():
         "http_endpoint_reachable": http_status is not None,
         "http_status": http_status,
         "camera_devices_detected": len(devices),
-        "active_camera_device": devices_in_log[-1] if devices_in_log else None,
+        "active_camera_device": devices_in_log[-1] if devices_in_log else (start_config[-1][0] if start_config else None),
         "latest_captured_fps": int(fps_values[-1]) if fps_values else None,
-        "active_resolution": resolutions[-1] if resolutions else None,
-        "active_capture_format": formats[-1] if formats else None,
+        "active_resolution": resolutions[-1] if resolutions else (start_config[-1][1] if start_config else None),
+        "active_capture_format": formats[-1] if formats else (start_config[-1][2] if start_config else None),
         "network_transmitted_bytes_since_boot": tx_after,
         "network_interface_tx_mbps_sampled": round(max(0, tx_after - tx_before) * 8 / 1_000_000, 3),
         "local_mjpeg_stream_mbps_sampled": stream_mbps,
