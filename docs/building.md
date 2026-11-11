@@ -17,7 +17,7 @@ cp petcam-os/config pi-gen/config
 cp -a petcam-os/stage-petcam pi-gen/stage-petcam
 touch pi-gen/stage2/SKIP_IMAGES
 chmod 0755 pi-gen/stage-petcam/prerun.sh
-chmod 0755 pi-gen/stage-petcam/00-run-chroot.sh
+chmod 0755 pi-gen/stage-petcam/00-install-files/00-run.sh
 cd petcam-os
 python3 -m unittest discover -s tests -v
 cd ../pi-gen
