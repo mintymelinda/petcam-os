@@ -246,21 +246,27 @@ def atomic_activate(release: Path) -> str | None:
     return previous
 
 
-def service(action: str) -> None:
-    result = subprocess.run(
-        ["systemctl", action, "petcam-stream.service", "petcam-web.service"],
+def restart_services() -> str:
+    web = subprocess.run(
+        ["systemctl", "restart", "petcam-web.service"],
         capture_output=True, text=True, check=False,
     )
-    if result.returncode:
-        raise UpdateError(f"Unable to {action} PetCam services: {result.stderr.strip()}")
+    if web.returncode:
+        raise UpdateError(f"Unable to restart PetCam web service: {web.stderr.strip()}")
+    stream = subprocess.run(
+        ["systemctl", "restart", "petcam-stream.service"],
+        capture_output=True, text=True, check=False,
+    )
+    if stream.returncode:
+        return "Camera stream did not start; check camera connection and petcam-stream.service logs"
+    return ""
 
 
 def healthy() -> bool:
-    for unit in ("petcam-stream.service", "petcam-web.service"):
-        if subprocess.run(
-            ["systemctl", "is-active", "--quiet", unit], check=False
-        ).returncode != 0:
-            return False
+    if subprocess.run(
+        ["systemctl", "is-active", "--quiet", "petcam-web.service"], check=False
+    ).returncode != 0:
+        return False
     try:
         with urllib.request.urlopen("http://127.0.0.1:8080/", timeout=3) as response:
             return response.status == 200
@@ -304,12 +310,12 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
         atomic_activate(final)
         switched = True
         subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
-        service("restart")
+        stream_warning = restart_services()
         deadline = time.monotonic() + 45
         while time.monotonic() < deadline:
             if healthy():
                 return {"status": "installed", "installed_version": version,
-                        "previous_version": old_version}
+                        "previous_version": old_version, "warning": stream_warning}
             time.sleep(2)
         raise UpdateError("New release failed its post-install health check")
     except Exception as exc:
@@ -317,7 +323,7 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
             try:
                 atomic_activate(RELEASES / old_version)
                 subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
-                service("restart")
+                restart_services()
             except Exception as rollback_error:
                 raise UpdateError(
                     f"Update failed ({exc}); automatic rollback also failed ({rollback_error})"
