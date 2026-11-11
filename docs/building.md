@@ -23,15 +23,19 @@ sudo ./build-docker.sh
 
 The resulting image is written to `pi-gen/deploy/`.
 
-## Wi-Fi and initial administrator
+## First boot and Wi-Fi
 
-In Raspberry Pi Imager, select the generated custom image. Before writing it, open OS Customisation and configure:
+Wi-Fi country is deliberately **not baked into the image**. Select the regulatory country for the place where the camera will operate during Raspberry Pi Imager's OS Customisation before writing the card. This lets the same PetCam image be used in different countries without carrying Canada's regulatory setting into every installation.
+
+In Raspberry Pi Imager, configure:
 
 - Hostname: `petcam`
 - Your 2.4 GHz Wi-Fi SSID and password
-- Country: Canada (or your actual regulatory country)
+- **Wireless LAN country: select the country where the Pi will be used** (do not leave this at an assumed/default country)
 - Create an administrator username and password
 - Enable SSH if you want remote administration
+
+Imager applies the selected country during first boot. The Wi-Fi country is a regulatory setting, not the Wi-Fi network's location inferred from its SSID. If you need to change it after installation, run `sudo raspi-config`, open **Localisation Options → WLAN Country**, select the correct country, and reboot if requested.
 
 Use a strong unique password. The camera stream itself has no authentication and is intended only for a trusted LAN.
 
