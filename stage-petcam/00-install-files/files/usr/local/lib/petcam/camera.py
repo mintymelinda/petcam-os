@@ -403,7 +403,9 @@ def main():
     resolutions = re.findall(r"Using resolution: (\d+x\d+)", log)
     formats = re.findall(r"Using format: ([A-Za-z0-9_-]+)", log)
     devices_in_log = re.findall(r"Using V4L2 device: (\S+)", log)
-    start_config = re.findall(r"Starting camera (\S+) at (\d+x\d+), format=([^,]+)", log)
+    start_config = re.findall(r"Starting USB camera (\S+) at (\d+x\d+), format=([^,]+)", log)
+    csi_start = re.findall(r"Starting CSI camera index=(\d+) at (\d+x\d+), requested_fps=([\d.]+)", log)
+    backend_values = re.findall(r"PetCam backend: (usb|csi)", log)
     port = 8080
     try:
         for config_line in Path("/etc/petcam/petcam.conf").read_text().splitlines():
@@ -417,6 +419,15 @@ def main():
             http_status = response.status
     except Exception:
         http_status = None
+    csi_status = None
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/status", timeout=2) as response:
+            payload = json.loads(response.read().decode())
+            if payload.get("backend") == "csi":
+                csi_status = payload
+    except Exception:
+        pass
+
     def sample_stream_mbps():
         received = 0
         started = time.monotonic()
@@ -473,10 +484,12 @@ def main():
         "camera_devices_detected": len(devices),
         "usb_camera_devices_detected": len(devices),
         "csi_cameras_detected": len(discover_csi_cameras()),
-        "active_camera_device": devices_in_log[-1] if devices_in_log else (start_config[-1][0] if start_config else None),
-        "latest_captured_fps": int(fps_values[-1]) if fps_values else None,
-        "active_resolution": resolutions[-1] if resolutions else (start_config[-1][1] if start_config else None),
-        "active_capture_format": formats[-1] if formats else (start_config[-1][2] if start_config else None),
+        "active_backend": backend_values[-1] if backend_values else ("csi" if csi_start else ("usb" if start_config else None)),
+        "active_camera_device": devices_in_log[-1] if devices_in_log else (start_config[-1][0] if start_config else (f"CSI camera {csi_start[-1][0]}" if csi_start else None)),
+        "latest_captured_fps": int(fps_values[-1]) if fps_values else (csi_status.get("captured_fps_average") if csi_status else None),
+        "active_resolution": resolutions[-1] if resolutions else (start_config[-1][1] if start_config else (csi_start[-1][1] if csi_start else None)),
+        "active_capture_format": formats[-1] if formats else ("MJPEG" if csi_start else (start_config[-1][2] if start_config else None)),
+        "csi_capture": csi_status,
         "network_transmitted_bytes_since_boot": tx_after,
         "network_interface_tx_mbps_sampled": round(max(0, tx_after - tx_before) * 8 / 1_000_000, 3),
         "local_mjpeg_stream_mbps_sampled": stream_mbps,
