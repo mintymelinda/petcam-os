@@ -1,0 +1,73 @@
+name: Build PetCam OS image
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "config"
+      - "stage-petcam/**"
+      - "tests/**"
+      - "README.md"
+      - "docs/**"
+      - ".github/workflows/build-image.yml"
+  push:
+    branches: [main]
+    paths:
+      - "config"
+      - "stage-petcam/**"
+      - "tests/**"
+      - "README.md"
+      - "docs/**"
+      - ".github/workflows/build-image.yml"
+
+concurrency:
+  group: petcam-os-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out PetCam OS
+        uses: actions/checkout@v4
+
+      - name: Validate PetCam scripts
+        run: |
+          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py
+          bash -n stage-petcam/00-install-files/00-run.sh stage-petcam/02-configure-petcam/00-run-chroot.sh
+
+      - name: Test camera capability discovery
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Check out pi-gen
+        uses: actions/checkout@v4
+        with:
+          repository: RPi-Distro/pi-gen
+          ref: master
+          path: pi-gen
+
+      - name: Add PetCam image stage
+        run: |
+          cp config pi-gen/config
+          cp -a stage-petcam pi-gen/stage-petcam
+          touch pi-gen/stage2/SKIP_IMAGES
+          chmod 0755 pi-gen/stage-petcam/prerun.sh
+          chmod 0755 pi-gen/stage-petcam/00-install-files/00-run.sh
+          mkdir -p pi-gen/deploy
+
+      - name: Build Raspberry Pi OS image
+        run: |
+          cd pi-gen
+          sudo ./build-docker.sh
+
+      - name: Upload image artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: petcam-os-image
+          path: pi-gen/deploy/*
+          if-no-files-found: error
+          retention-days: 14

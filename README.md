@@ -1,40 +1,82 @@
 # PetCam OS
 
-A minimal, reproducible Raspberry Pi OS image for a Raspberry Pi Zero W and a USB UVC camera (initial target: Razer Kiyo). It serves the camera as native MJPEG over the local network for OBS.
+A minimal, reproducible Raspberry Pi OS image for Raspberry Pi boards, USB UVC webcams, and Raspberry Pi CSI camera modules. It serves camera video over the local network for OBS through one consistent MJPEG endpoint.
 
-## Target hardware
+## Supported hardware
 
-- Original Raspberry Pi Zero W (ARMv6, 512 MB RAM)
-- USB UVC webcam connected through a micro-USB OTG adapter; use a powered hub for the Razer Kiyo
-- microSD card and 2.4 GHz Wi-Fi network
-- OBS on another computer on the same LAN
+- Raspberry Pi Zero W (initial low-resource target); automatic hardware profiles also recognize Zero 2 W, Pi 1/2/3, Pi 4/400, and Pi 5.
+- USB UVC webcams connected through the board's USB host/OTG port. A powered hub is recommended, especially for bus-powered webcams.
+- Raspberry Pi CSI camera modules supported by the Raspberry Pi camera stack, including OV5647 (Camera Module v1), IMX219/IMX355 (v2 sensor revisions), IMX708 (v3), IMX477 (HQ), and other sensors supported by the installed `libcamera` pipeline.
+- USB and CSI cameras share the same image and stream URL; no separate image is needed.
+- OBS on another computer on the same LAN.
+
+USB camera modes are discovered from V4L2. CSI camera modules are discovered through `rpicam-hello --list-cameras`, with sensor modes and frame rates reported by the Raspberry Pi camera stack.
 
 ## Image build
 
 The image is built with the official [Raspberry Pi pi-gen](https://github.com/RPi-Distro/pi-gen) tool. The build host uses Docker; Docker is not installed on the Pi.
 
-The initial workflow builds a 32-bit Raspberry Pi OS Lite image and adds PetCam's camera streamer service. The image artifact is published by GitHub Actions.
+The workflow builds a 32-bit Raspberry Pi OS Lite image and adds PetCam's camera streamer service. The flashable image is published by GitHub Actions.
 
 ## Camera stream
 
-PetCam uses [µStreamer](https://github.com/pikvm/ustreamer) in native MJPEG mode. It does not transcode or re-encode camera frames on the Zero W. The service chooses a V4L2 device that advertises MJPEG and starts with a conservative 1280x720 at 30 FPS profile. Actual supported modes depend on the webcam, USB bandwidth, power, and network conditions.
+PetCam selects the appropriate capture backend automatically. USB UVC cameras use [µStreamer](https://github.com/pikvm/ustreamer), preferring native MJPEG passthrough and falling back to CPU JPEG encoding for supported raw formats when needed. CSI modules use Raspberry Pi's `rpicam-vid` camera stack with MJPEG output. Both backends expose the same `/stream` and `/` endpoints on port 8080.
 
-- Stream endpoint: `http://petcam.local:8080/stream`
-- Status/UI: `http://petcam.local:8080/`
+- Stream endpoint: http://petcam.local:8080/stream
+- Stream viewer/status page: http://petcam.local:8080/
 
 If mDNS is unavailable, use the Pi's DHCP address instead.
 
+### Discover and choose camera modes
+
+~~~bash
+sudo petcam-camera discover
+sudo petcam-camera discover-csi
+sudo petcam-camera select --format MJPG --resolution 1920x1080 --fps 30
+sudo petcam-camera select-csi --camera 0 --resolution 1920x1080 --fps 30
+sudo petcam-status
+~~~
+
+discover reports USB V4L2 devices and detected CSI modules. discover-csi reports CSI sensor modes. Use select for USB and select-csi for CSI to preview a chosen configuration. Automatic mode prefers MJPEG and uses a conservative starting pixel-throughput budget for the detected Pi model. Explicit camera-supported modes are not blocked; a warning is emitted when a selection exceeds the model's automatic starting budget.
+
+Edit /etc/petcam/petcam.conf to override:
+
+~~~bash
+SOURCE=auto          # auto, usb, or csi
+# USB only: pin a specific V4L2 node
+# DEVICE=/dev/v4l/by-id/your-camera-video-index0
+# CSI only: camera index from petcam-camera discover-csi
+CAMERA=0
+FORMAT=MJPG           # USB only
+RESOLUTION=1920x1080
+FPS=30
+CSI_QUALITY=70        # CSI MJPEG quality, 1..100
+PORT=8080
+~~~
+
+SOURCE=auto prefers a usable USB camera, then falls back to CSI. Set SOURCE=usb or SOURCE=csi to force a backend. FORMAT applies to USB only; CSI output is MJPEG. Use RESOLUTION=auto and FPS=auto to return to automatic selection. For USB, FPS=auto asks µStreamer not to impose an application-side frame-rate cap. For CSI, automatic selection chooses a sensor-advertised frame rate. Unsupported explicit modes fail clearly rather than silently falling back. Restart after changes:
+
+~~~bash
+sudo systemctl restart petcam-stream
+~~~
+
+### Runtime diagnostics
+
+sudo petcam-status reports service and HTTP endpoint health, USB/CSI detection counts, active backend and camera, selected resolution and format, latest capture FPS (from µStreamer or the CSI capture process), a one-second local MJPEG stream bitrate sample, aggregate network-interface transmit throughput, cumulative transmitted bytes, and SoC temperature. The local stream sample opens one temporary loopback viewer; interface throughput is aggregate traffic, not video-only.
+
+The current capture interfaces do not provide a reliable cumulative dropped-frame counter across all supported USB and CSI drivers. PetCam reports this as unavailable rather than inventing a value. Compare reported capture FPS with the selected mode's advertised frame interval and inspect the service journal for device/stream errors.
+
 ## First boot and Wi-Fi
 
-Use Raspberry Pi Imager's OS customization to set the hostname to `petcam`, configure the 2.4 GHz Wi-Fi network, enable SSH if desired, and create an administrator account before writing the image. The first boot expands the filesystem as usual.
+Use Raspberry Pi Imager's OS customization before writing the image to set the hostname to petcam, configure Wi-Fi, select the WLAN regulatory country where the Pi will operate, enable SSH if desired, and create an administrator account. The image intentionally has no hard-coded Wi-Fi country. Imager applies the selection during first boot. To change it later, use sudo raspi-config → Localisation Options → WLAN Country.
 
 ## Build locally
 
-See [docs/building.md](docs/building.md). The GitHub Actions workflow is the recommended reproducible build path.
+See docs/building.md. The GitHub Actions workflow is the recommended reproducible build path.
 
-## Status
+## Validation status
 
-This is the first image-builder scaffold. It still needs a hardware validation pass on the actual Zero W + Kiyo combination before the image should be considered release-ready. In particular, verify the camera's V4L2 modes and sustained stream stability on the target board.
+Camera mode discovery and automatic selection are software features; they do not prove a mode is sustainable on a particular Pi, USB hub, camera, or network. Run a sustained hardware test on the actual combination before treating a high-resolution/high-FPS mode as reliable.
 
 ## Security
 
