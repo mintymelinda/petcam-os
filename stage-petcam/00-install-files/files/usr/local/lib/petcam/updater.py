@@ -127,9 +127,8 @@ def parse_manifest(raw: bytes) -> dict[str, object]:
     if manifest["schema_version"] != 1 or manifest["application"] != "petcam-os":
         raise UpdateError("Unsupported release manifest")
     version_tuple(str(manifest["version"]))
-    machine = platform.machine().lower()
-    if manifest["architecture"] != "armhf" or machine not in ("armv6l", "armv7l", "armhf"):
-        raise UpdateError(f"Release does not target this PetCam armhf device (machine={machine})")
+    if manifest["architecture"] != "armhf":
+        raise UpdateError("Release does not target the PetCam armhf image")
     archive_url = manifest["archive_url"]
     if not isinstance(archive_url, str) or urllib.parse.urlparse(archive_url).scheme != "https":
         raise UpdateError("Release archive URL must use HTTPS")
@@ -161,6 +160,9 @@ def check_update(config: dict[str, str]) -> dict[str, object]:
     signature = fetch(manifest_url + ".sig", 4096)
     verify_signature(raw, signature, Path(config.get("PUBLIC_KEY", str(PUBLIC_KEY))))
     manifest = parse_manifest(raw)
+    machine = platform.machine().lower()
+    if machine not in ("armv6l", "armv7l", "armhf"):
+        raise UpdateError(f"Updater requires a 32-bit ARM PetCam image (machine={machine})")
     installed = current_version()
     available = str(manifest["version"])
     return {
