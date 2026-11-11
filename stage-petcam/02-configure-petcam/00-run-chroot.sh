@@ -30,19 +30,19 @@ if [[ -r "$CONFIG" ]]; then
     # shellcheck disable=SC1090
     source "$CONFIG"
 fi
-PORT="\${PORT:-8080}"
-SOURCE="\${SOURCE:-auto}"
-DEVICE="\${DEVICE:-}"
-CAMERA="\${CAMERA:-auto}"
-FORMAT="\${FORMAT:-auto}"
-RESOLUTION="\${RESOLUTION:-auto}"
-FPS="\${FPS:-auto}"
-CSI_QUALITY="\${CSI_QUALITY:-70}"
+PORT="${PORT:-8080}"
+SOURCE="${SOURCE:-auto}"
+DEVICE="${DEVICE:-}"
+CAMERA="${CAMERA:-auto}"
+FORMAT="${FORMAT:-auto}"
+RESOLUTION="${RESOLUTION:-auto}"
+FPS="${FPS:-auto}"
+CSI_QUALITY="${CSI_QUALITY:-70}"
 
 start_usb() {
     args=(select --format "$FORMAT" --resolution "$RESOLUTION" --fps "$FPS")
     if [[ -n "$DEVICE" ]]; then args+=(--device "$DEVICE"); fi
-    selection="$(/usr/local/bin/petcam-camera "\${args[@]}")"
+    selection="$(/usr/local/bin/petcam-camera "${args[@]}")"
     json_value() {
         python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1" <<< "$selection"
     }
@@ -68,7 +68,7 @@ start_usb() {
 start_csi() {
     args=(select-csi --resolution "$RESOLUTION" --fps "$FPS")
     if [[ "$CAMERA" != "auto" ]]; then args+=(--camera "$CAMERA"); fi
-    selection="$(/usr/local/bin/petcam-camera "\${args[@]}")"
+    selection="$(/usr/local/bin/petcam-camera "${args[@]}")"
     json_value() {
         python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1" <<< "$selection"
     }
