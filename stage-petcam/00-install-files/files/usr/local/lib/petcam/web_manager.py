@@ -24,6 +24,12 @@ video,img{display:block;width:100%;max-height:55vh;object-fit:contain;background
 small,.muted{color:#aeb7c2}#message{min-height:1.5em;color:#b9d8ff}.row{display:flex;gap:.5rem;flex-wrap:wrap}
 </style>
 <body><h1>PetCam <small>Camera</small></h1>
+<section id="updates"><div class="row" style="justify-content:space-between;align-items:center"><h2>Software updates</h2><span id="update-state" class="muted">Not checked</span></div>
+<p id="update-message" role="status" class="muted">Check for signed PetCam application releases. Operating system and firmware updates are managed separately.</p>
+<div class="row"><button id="check-updates">Check for updates</button><button id="install-update" disabled>Install update</button></div>
+<label style="display:flex;gap:.5rem;align-items:center"><input id="auto-check" type="checkbox"> Check automatically when opening this page</label>
+<details><summary>Update details and diagnostics</summary><p id="update-details" class="muted">No update information yet.</p><pre id="update-logs" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
+</section>
 <section><h2>Live preview</h2><img src="/stream" alt="Live camera preview"><p class="muted">The preview uses the same stream OBS receives.</p></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera selection</h2><button id="refresh">Refresh cameras</button></div>
 <p id="message" role="status">Discovering cameras…</p>
@@ -41,6 +47,14 @@ async function refresh(){ $("message").textContent="Scanning connected cameras�
 $("refresh").onclick=refresh;$("camera").onchange=fillModes;
 $("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,device:c.device,camera:c.camera,mode:JSON.parse(m)})});$("message").textContent="Camera settings saved. Stream restarted.";setTimeout(refresh,1200)}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
 refresh();
+const autoCheck=$("auto-check");autoCheck.checked=localStorage.getItem("petcam-auto-update-check")==="true";
+autoCheck.onchange=()=>localStorage.setItem("petcam-auto-update-check",String(autoCheck.checked));
+let updateAvailable=false,updateBusy=false;
+async function updateStatus(){try{const s=await request("/api/update/status");updateBusy=s.active;$("update-state").textContent=s.active?"Installing…":s.result==="failed"?"Last install failed":s.result==="success"?"Installed":"Idle";$("update-logs").textContent=s.logs||"";if(!s.active&&updateBusy){updateBusy=false;await checkUpdates()}$("install-update").disabled=!updateAvailable||s.active}catch(e){$("update-message").textContent=e.message}}
+async function checkUpdates(){const b=$("check-updates");b.disabled=true;$("update-message").textContent="Checking signed release metadata…";try{const d=await request("/api/update/check");updateAvailable=d.update_available;$("update-state").textContent=updateAvailable?"Update available":"Up to date";$("update-message").textContent=updateAvailable?"A verified application release is available. Review the notes before installing.":"This device is running the latest published PetCam application."; $("update-details").textContent="Installed: "+(d.installed_version||"unknown")+" · Available: "+d.available_version+" · Download: "+Math.ceil(d.archive_size/1048576)+" MiB\n\n"+(d.release_notes||"No release notes provided.");$("install-update").disabled=!updateAvailable||updateBusy}catch(e){$("update-state").textContent="Check failed";$("update-message").textContent=e.message}finally{b.disabled=false}}
+$("check-updates").onclick=checkUpdates;
+$("install-update").onclick=async()=>{if(!updateAvailable||updateBusy)return;if(!confirm("Install the signed PetCam application update now? The camera stream and web interface will briefly restart."))return;$("install-update").disabled=true;$("check-updates").disabled=true;$("update-message").textContent="Starting verified update…";try{await request("/api/update/install",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});updateBusy=true;$("update-state").textContent="Installing…";$("update-message").textContent="The update is downloading and staging. This page may briefly disconnect while services restart.";const poll=async()=>{await updateStatus();if(updateBusy)setTimeout(poll,2000)};setTimeout(poll,1500)}catch(e){$("update-message").textContent=e.message;$("install-update").disabled=false}finally{$("check-updates").disabled=false}};
+if(autoCheck.checked)checkUpdates();updateStatus();
 </script></body></html>"""
 
 
@@ -116,6 +130,43 @@ def save_selection(data):
                    check=True, timeout=30, capture_output=True, text=True)
 
 
+def update_check():
+    result = subprocess.run(["sudo", "-n", "/usr/local/bin/petcam-update", "check"],
+                            capture_output=True, text=True, timeout=45, check=False)
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or "Update check failed")
+    return json.loads(result.stdout)
+
+
+def update_status():
+    result = subprocess.run(
+        ["/usr/bin/systemctl", "show", "petcam-update.service",
+         "--property=ActiveState", "--property=Result", "--property=ExecMainStatus", "--value"],
+        capture_output=True, text=True, timeout=5, check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or "Unable to read update service status")
+    values = result.stdout.splitlines()
+    values += ["unknown"] * (3 - len(values))
+    logs = subprocess.run(
+        ["sudo", "-n", "/usr/bin/journalctl", "-u", "petcam-update.service",
+         "-n", "20", "--no-pager", "-o", "cat"],
+        capture_output=True, text=True, timeout=5, check=False,
+    )
+    return {"active": values[0] in ("active", "activating", "deactivating"),
+            "result": "success" if values[1] == "success" else ("failed" if values[1] == "exit-code" else values[1]),
+            "exit_code": values[2], "logs": logs.stdout[-6000:] if logs.returncode == 0 else ""}
+
+
+def start_update():
+    result = subprocess.run(
+        ["sudo", "-n", "/usr/bin/systemctl", "start", "petcam-update.service"],
+        capture_output=True, text=True, timeout=10, check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or "Unable to start update service")
+
+
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, status, payload):
         body = json.dumps(payload).encode()
@@ -130,6 +181,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body))); self.send_header("Cache-Control", "no-store")
             self.end_headers(); self.wfile.write(body); return
+        if path == "/api/update/check":
+            try: self.send_json(200, update_check())
+            except Exception as error: self.send_json(503, {"error": str(error)})
+            return
+        if path == "/api/update/status":
+            try: self.send_json(200, update_status())
+            except Exception as error: self.send_json(503, {"error": str(error)})
+            return
         if path == "/api/cameras":
             try: self.send_json(200, {"cameras": camera_inventory()})
             except Exception as error: self.send_json(500, {"error": str(error)})
@@ -146,6 +205,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_POST(self):
+        if urlparse(self.path).path == "/api/update/install":
+            origin = self.headers.get("Origin", "")
+            if not origin or urlparse(origin).netloc != self.headers.get("Host"):
+                self.send_json(403, {"error": "Request origin is not allowed"}); return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length > 1024: raise ValueError("Invalid request size")
+                start_update()
+                self.send_json(202, {"ok": True, "status": "started"})
+            except Exception as error: self.send_json(503, {"error": str(error)})
+            return
         if urlparse(self.path).path != "/api/select":
             self.send_error(404); return
         origin = self.headers.get("Origin", "")
