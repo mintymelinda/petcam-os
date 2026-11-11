@@ -16,6 +16,8 @@ FORMAT_RE = re.compile(r"\[\d+\]: '([^']+)'")
 FPS_RE = re.compile(r"\(([\d.]+) fps\)")
 SIZE_RANGE_RE = re.compile(r"Size: (?:Stepwise|Continuous) (\d+)x(\d+) - (\d+)x(\d+)(?: with step (\d+)/(\d+))?")
 FPS_RANGE_RE = re.compile(r"Interval: (?:Stepwise|Continuous) ([\d.]+)s - ([\d.]+)s(?: with step ([\d.]+)s)?")
+NATIVE_JPEG_FORMATS = {"MJPG", "MJPEG", "JPEG"}
+USTREAMER_FORMATS = NATIVE_JPEG_FORMATS | {"YUYV", "YVYU", "UYVY", "YUV420", "YVU420", "RGB565", "RGB24", "GREY"}
 PIXEL_BUDGETS = {
     "zero": 1280 * 720 * 30,
     "pi1": 640 * 480 * 30,
@@ -174,8 +176,11 @@ def select_mode(devices, tier):
     candidates = []
     for device in devices:
         for mode in device["modes"]:
-            # Native MJPEG is preferred; uncompressed modes remain discoverable.
-            fmt_rank = 0 if mode["format"] in ("MJPG", "MJPEG") else 1
+            # Select only formats supported by µStreamer; discovery still lists
+            # every advertised fourcc, including formats that cannot be streamed.
+            if mode["format"] not in USTREAMER_FORMATS:
+                continue
+            fmt_rank = 0 if mode["format"] in NATIVE_JPEG_FORMATS else 1
             max_fps = mode_max_fps(mode)
             pixels_per_second = mode["width"] * mode["height"] * max_fps
             candidates.append((fmt_rank, pixels_per_second, mode["width"] * mode["height"], max_fps, device, mode))
@@ -220,17 +225,17 @@ def main():
                 print("Resolution must be 'auto' or WIDTHxHEIGHT.", file=sys.stderr)
                 return 2
             width_value, height_value = map(int, match.groups())
-            matching = [m for m in device["modes"] if mode_supports_resolution(m, width_value, height_value)]
+            matching = [m for m in device["modes"] if m["format"] in USTREAMER_FORMATS and mode_supports_resolution(m, width_value, height_value)]
             if not matching:
                 print(f"Requested resolution {args.resolution} is not advertised by {device['device']}.", file=sys.stderr)
                 return 2
-            matching.sort(key=lambda m: (m["format"] not in ("MJPG", "MJPEG"), -max(m["fps"], default=0)))
+            matching.sort(key=lambda m: (m["format"] not in NATIVE_JPEG_FORMATS, -mode_max_fps(m)))
             mode = matching[0]
-            native = mode["format"] in ("MJPG", "MJPEG")
+            native = mode["format"] in NATIVE_JPEG_FORMATS
         width = args.resolution if args.resolution != "auto" else f'{mode["width"]}x{mode["height"]}'
         fps = args.fps if args.fps != "auto" else "0"
         fmt = mode["format"]
-        encoder = "HW" if fmt in ("MJPG", "MJPEG") else "CPU"
+        encoder = "HW" if fmt in NATIVE_JPEG_FORMATS else "CPU"
         if args.fps != "auto" and (not args.fps.isdigit() or int(args.fps) < 1):
             print("FPS must be 'auto' or a positive integer.", file=sys.stderr)
             return 2
@@ -245,7 +250,7 @@ def main():
         warning = pixel_rate > PIXEL_BUDGETS[tier] or not native
         print(json.dumps({
             "device": device["device"], "resolution": width, "fps": fps,
-            "format": "JPEG" if fmt in ("MJPG", "MJPEG") else fmt,
+            "format": "JPEG" if fmt in NATIVE_JPEG_FORMATS else fmt,
             "encoder": encoder, "native_mjpeg": native, "model": model,
             "tier": tier, "mode_fps": mode["fps"],
             "estimated_pixels_per_second": pixel_rate,
