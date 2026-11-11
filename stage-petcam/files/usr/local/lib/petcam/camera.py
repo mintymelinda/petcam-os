@@ -46,15 +46,66 @@ def parse_modes(output):
             }
             modes.append(current_mode)
             continue
+        size_range = SIZE_RANGE_RE.search(line)
+        if size_range and current_format:
+            min_w, min_h, max_w, max_h = map(int, size_range.groups()[:4])
+            step_w, step_h = size_range.groups()[4:]
+            current_mode = {
+                "format": current_format,
+                "width": max_w,
+                "height": max_h,
+                "fps": [],
+                "size_range": {
+                    "min_width": min_w, "min_height": min_h,
+                    "max_width": max_w, "max_height": max_h,
+                    "step_width": int(step_w or 1), "step_height": int(step_h or 1),
+                },
+            }
+            modes.append(current_mode)
+            continue
         fps = FPS_RE.search(line)
         if fps and current_mode:
             value = float(fps.group(1))
             if value > 0 and value not in current_mode["fps"]:
                 current_mode["fps"].append(value)
+            continue
+        fps_range = FPS_RANGE_RE.search(line)
+        if fps_range and current_mode:
+            min_interval, max_interval = float(fps_range.group(1)), float(fps_range.group(2))
+            if min_interval > 0 and max_interval > 0:
+                current_mode["fps_range"] = {
+                    "min": round(1 / max_interval, 3),
+                    "max": round(1 / min_interval, 3),
+                    "interval_step_seconds": float(fps_range.group(3)) if fps_range.group(3) else None,
+                }
     for mode in modes:
         mode["fps"].sort(reverse=True)
     return modes
 
+
+def mode_supports_resolution(mode, width, height):
+    if mode["width"] == width and mode["height"] == height:
+        return True
+    bounds = mode.get("size_range")
+    if not bounds:
+        return False
+    return (
+        bounds["min_width"] <= width <= bounds["max_width"]
+        and bounds["min_height"] <= height <= bounds["max_height"]
+        and (width - bounds["min_width"]) % bounds["step_width"] == 0
+        and (height - bounds["min_height"]) % bounds["step_height"] == 0
+    )
+
+
+def mode_max_fps(mode):
+    return max(mode["fps"], default=mode.get("fps_range", {}).get("max", 30.0))
+
+
+def mode_supports_fps(mode, fps):
+    if any(abs(value - fps) < 0.1 for value in mode["fps"]):
+        return True
+    limits = mode.get("fps_range")
+    return bool(limits and limits["min"] <= fps <= limits["max"])
 
 def model_tier(model):
     value = model.lower()
@@ -113,7 +164,7 @@ def select_mode(devices, tier):
         for mode in device["modes"]:
             # Native MJPEG is preferred; uncompressed modes remain discoverable.
             fmt_rank = 0 if mode["format"] in ("MJPG", "MJPEG") else 1
-            max_fps = max(mode["fps"], default=30.0)
+            max_fps = mode_max_fps(mode)
             pixels_per_second = mode["width"] * mode["height"] * max_fps
             candidates.append((fmt_rank, pixels_per_second, mode["width"] * mode["height"], max_fps, device, mode))
     if not candidates:
@@ -157,7 +208,7 @@ def main():
                 print("Resolution must be 'auto' or WIDTHxHEIGHT.", file=sys.stderr)
                 return 2
             width_value, height_value = map(int, match.groups())
-            matching = [m for m in device["modes"] if m["width"] == width_value and m["height"] == height_value]
+            matching = [m for m in device["modes"] if mode_supports_resolution(m, width_value, height_value)]
             if not matching:
                 print(f"Requested resolution {args.resolution} is not advertised by {device['device']}.", file=sys.stderr)
                 return 2
@@ -173,10 +224,10 @@ def main():
             return 2
         if args.fps != "auto":
             fps_value = int(args.fps)
-            if mode["fps"] and not any(value >= fps_value for value in mode["fps"]):
+            if (mode["fps"] or mode.get("fps_range")) and not mode_supports_fps(mode, fps_value):
                 print(f"Requested {fps_value} FPS is not advertised for {width} {fmt}.", file=sys.stderr)
                 return 2
-        selected_fps = int(fps) if fps != "0" else max(mode["fps"], default=30)
+        selected_fps = int(fps) if fps != "0" else mode_max_fps(mode)
         pixel_rate = mode["width"] * mode["height"] * selected_fps
         warning = pixel_rate > PIXEL_BUDGETS[tier] or not native
         print(json.dumps({
