@@ -33,9 +33,10 @@ fi
 PORT="${PORT:-8080}"
 RESOLUTION="${RESOLUTION:-auto}"
 FPS="${FPS:-auto}"
+FORMAT="${FORMAT:-auto}"
 DEVICE="${DEVICE:-}"
 
-args=(select --resolution "$RESOLUTION" --fps "$FPS")
+args=(select --format "$FORMAT" --resolution "$RESOLUTION" --fps "$FPS")
 if [[ -n "$DEVICE" ]]; then
     args+=(--device "$DEVICE")
 fi
@@ -68,7 +69,8 @@ cat > /etc/petcam/petcam.conf <<'CONF'
 # Automatic mode selection prefers native MJPEG and chooses a conservative
 # starting mode for the detected Raspberry Pi. No camera-advertised mode is
 # hidden or hard-capped: use explicit values to request another supported mode.
-# DEVICE=/dev/video0
+# DEVICE=/dev/v4l/by-id/your-camera-video-index0
+FORMAT=auto
 RESOLUTION=auto
 FPS=auto
 PORT=8080
