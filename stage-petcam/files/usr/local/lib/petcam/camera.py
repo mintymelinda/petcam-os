@@ -340,7 +340,7 @@ def main():
         "temperature": temp,
         "dropped_frames": None,
         "dropped_frames_note": "The standard UVC/µStreamer interface does not expose a reliable cumulative dropped-frame counter; not inferred.",
-        "bitrate_note": "Cumulative interface bytes are reported; bitrate requires comparing two samples over a known interval.",
+        "bitrate_note": "The MJPEG stream rate is sampled locally for one second; interface transmit rate includes all non-loopback traffic.",
     }
     print(json.dumps(report, indent=2))
     return 0 if status == "active" else 1
