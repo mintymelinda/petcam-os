@@ -186,9 +186,12 @@ def select_csi_mode(cameras, tier, requested_camera=None, resolution="auto", fps
         if not candidates:
             raise ValueError(f"CSI resolution {resolution} is not advertised by the selected camera.")
     if fps != "auto":
-        if not fps.isdigit() or int(fps) < 1:
-            raise ValueError("FPS must be 'auto' or a positive integer.")
-        requested_fps = int(fps)
+        try:
+            requested_fps = float(fps)
+        except ValueError as error:
+            raise ValueError("FPS must be 'auto' or a positive number.") from error
+        if requested_fps <= 0:
+            raise ValueError("FPS must be 'auto' or a positive number.")
         candidates = [item for item in candidates if abs(item[4]["fps"] - requested_fps) < 0.1]
         if not candidates:
             raise ValueError(f"CSI frame rate {fps} is not advertised for the selected resolution.")
@@ -468,6 +471,8 @@ def main():
         "http_endpoint_reachable": http_status is not None,
         "http_status": http_status,
         "camera_devices_detected": len(devices),
+        "usb_camera_devices_detected": len(devices),
+        "csi_cameras_detected": len(discover_csi_cameras()),
         "active_camera_device": devices_in_log[-1] if devices_in_log else (start_config[-1][0] if start_config else None),
         "latest_captured_fps": int(fps_values[-1]) if fps_values else None,
         "active_resolution": resolutions[-1] if resolutions else (start_config[-1][1] if start_config else None),
@@ -477,7 +482,7 @@ def main():
         "local_mjpeg_stream_mbps_sampled": stream_mbps,
         "temperature": temp,
         "dropped_frames": None,
-        "dropped_frames_note": "The standard UVC/µStreamer interface does not expose a reliable cumulative dropped-frame counter; not inferred.",
+        "dropped_frames_note": "The active capture backend does not expose a reliable cumulative dropped-frame counter; not inferred.",
         "bitrate_note": "The MJPEG stream rate is sampled locally for one second; interface transmit rate includes all non-loopback traffic.",
     }
     print(json.dumps(report, indent=2))
