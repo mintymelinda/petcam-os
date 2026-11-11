@@ -74,7 +74,7 @@ Raspberry Pi Imager 2 treats a locally selected image as having no customization
 python3 create_imager_manifest.py image_YYYY-MM-DD-PetCamOS-petcam.img.xz
 ~~~
 
-This creates `petcam-os.rpi-imager-manifest` with the image's local path, verified compressed and extracted SHA-256 hashes, supported Pi device tags, and `init_format: systemd`. Double-click the manifest to open it in Raspberry Pi Imager 2 (or choose it through App Options → Content Repository → Edit → Use custom file, then Apply & Restart). Select PetCam OS from the OS list; the Customisation step will then be available.
+This creates `petcam-os.rpi-imager-manifest` with the image's local path, verified compressed and extracted SHA-256 hashes, supported Pi device tags, and `init_format: cloudinit-rpi`. Double-click the manifest to open it in Raspberry Pi Imager 2 (or choose it through App Options → Content Repository → Edit → Use custom file, then Apply & Restart). Select PetCam OS from the OS list; the Customisation step will then be available.
 
 In Customisation, set hostname `petcam`, configure Wi-Fi, select the WLAN regulatory country where the Pi will operate, create the administrator account, and enable SSH if desired. The image intentionally has no hard-coded Wi-Fi country. Imager applies these settings on first boot. To change the country later, use sudo raspi-config → Localisation Options → WLAN Country.
 
