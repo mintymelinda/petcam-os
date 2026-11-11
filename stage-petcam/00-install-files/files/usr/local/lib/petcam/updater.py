@@ -329,20 +329,19 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
     signature = fetch(manifest_url + ".sig", 4096)
     verify_signature(raw_manifest, signature, Path(config.get("PUBLIC_KEY", str(PUBLIC_KEY))))
     manifest = parse_manifest(raw_manifest)
-    archive = fetch(str(manifest["archive_url"]), MAX_ARCHIVE)
-    if len(archive) != manifest["archive_size"]:
-        raise UpdateError("Downloaded release size does not match the signed manifest")
-    if hashlib.sha256(archive).hexdigest() != manifest["archive_sha256"]:
-        raise UpdateError("Downloaded release SHA-256 does not match the signed manifest")
-
     STATE.mkdir(parents=True, exist_ok=True)
     RELEASES.mkdir(parents=True, exist_ok=True)
     staging_parent = STATE / "staging"
     staging_parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="release-", dir=staging_parent) as temporary:
+        archive_path = Path(temporary) / "release.tar.gz"
+        download_archive(
+            str(manifest["archive_url"]), archive_path,
+            int(manifest["archive_size"]), str(manifest["archive_sha256"]),
+        )
         staged = Path(temporary) / "release"
         staged.mkdir()
-        safe_extract(archive, staged)
+        safe_extract(archive_path, staged)
         validate_release(staged, version)
         final = RELEASES / version
         if final.exists():
