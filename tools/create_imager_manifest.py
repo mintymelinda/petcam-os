@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+"""Create a Raspberry Pi Imager 2 local manifest for a PetCam OS image."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import lzma
+from pathlib import Path
+
+
+def image_metadata(image: Path) -> tuple[int, str]:
+    digest = hashlib.sha256()
+    size = 0
+    with lzma.open(image, "rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            digest.update(chunk)
+            size += len(chunk)
+    return size, digest.hexdigest()
+
+
+def create_manifest(image: Path, output: Path, icon: Path | None = None) -> None:
+    image = image.resolve()
+    output = output.resolve()
+    compressed_hash = hashlib.sha256()
+    with image.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            compressed_hash.update(chunk)
+
+    extract_size, extract_hash = image_metadata(image)
+    entry = {
+        "name": "PetCam OS",
+        "description": "Camera-agnostic Raspberry Pi OS for LAN MJPEG streaming",
+        "url": str(image),
+        "extract_size": extract_size,
+        "extract_sha256": extract_hash,
+        "image_download_size": image.stat().st_size,
+        "image_download_sha256": compressed_hash.hexdigest(),
+        "release_date": image.stat().st_mtime_ns and __import__("datetime").date.fromtimestamp(
+            image.stat().st_mtime
+        ).isoformat(),
+        "init_format": "systemd",
+    }
+    if icon is not None:
+        entry["icon"] = str(icon.resolve())
+
+    output.write_text(
+        json.dumps({"os_list": [entry]}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("image", type=Path, help="PetCam .img.xz image")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Manifest output path (defaults beside the image)",
+    )
+    parser.add_argument("--icon", type=Path, help="Optional local SVG/PNG icon")
+    args = parser.parse_args()
+
+    if not args.image.is_file() or args.image.suffix != ".xz":
+        parser.error("image must be an existing .img.xz file")
+    output = args.output or args.image.with_name("petcam-os.rpi-imager-manifest")
+    create_manifest(args.image, output, args.icon)
+
+
+if __name__ == "__main__":
+    main()
