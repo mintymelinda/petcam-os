@@ -39,6 +39,7 @@ class ImageLayoutTests(unittest.TestCase):
         script = CONFIGURE.read_text()
         self.assertIn('PORT=8081', script)
         self.assertIn('--host=127.0.0.1', script)
+        self.assertIn('/opt/petcam/current/vendor/bin/ustreamer', script)
         self.assertIn('ThreadingHTTPServer(("0.0.0.0", 8080)', (
             STAGE / "00-install-files/files/usr/local/lib/petcam/web_manager.py"
         ).read_text())
