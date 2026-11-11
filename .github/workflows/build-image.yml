@@ -20,6 +20,10 @@ on:
       - "docs/**"
       - ".github/workflows/build-image.yml"
 
+concurrency:
+  group: petcam-os-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
