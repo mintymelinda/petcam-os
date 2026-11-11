@@ -1,7 +1,7 @@
 #!/bin/bash -e
 # This script runs inside the image root filesystem.
 apt-get update
-apt-get install -y --no-install-recommends avahi-daemon avahi-utils git build-essential pkg-config libevent-dev libjpeg-dev libbsd-dev libv4l-dev v4l-utils
+apt-get install -y --no-install-recommends avahi-daemon avahi-utils git build-essential pkg-config libevent-dev libjpeg-dev libbsd-dev libv4l-dev v4l-utils python3-minimal
 
 if ! id petcam >/dev/null 2>&1; then
     useradd --system --home-dir /var/lib/petcam --create-home --shell /usr/sbin/nologin petcam
@@ -14,6 +14,18 @@ make -C /opt/ustreamer -j1 WITH_SYSTEMD=0 WITH_GPIO=0
 make -C /opt/ustreamer install PREFIX=/usr/local
 ldconfig
 
+# The pi-gen stage's files/ tree is copied into the target root filesystem.
+chmod 0755 /usr/local/lib/petcam/camera.py
+cat > /usr/local/bin/petcam-camera <<'SCRIPT'
+#!/bin/sh
+exec python3 /usr/local/lib/petcam/camera.py "$@"
+SCRIPT
+cat > /usr/local/bin/petcam-status <<'SCRIPT'
+#!/bin/sh
+exec python3 /usr/local/lib/petcam/camera.py status
+SCRIPT
+chmod 0755 /usr/local/bin/petcam-camera /usr/local/bin/petcam-status
+
 install -d -m 0755 /usr/local/lib/petcam /etc/petcam
 cat > /usr/local/lib/petcam/start-stream.sh <<'SCRIPT'
 #!/bin/bash
@@ -24,46 +36,53 @@ if [[ -r "$CONFIG" ]]; then
     source "$CONFIG"
 fi
 PORT="${PORT:-8080}"
-RESOLUTION="${RESOLUTION:-1280x720}"
-FPS="${FPS:-30}"
+RESOLUTION="${RESOLUTION:-auto}"
+FPS="${FPS:-auto}"
 DEVICE="${DEVICE:-}"
 
-find_camera() {
-    local candidate
-    if [[ -n "$DEVICE" ]]; then
-        [[ -e "$DEVICE" ]] || { echo "Configured camera does not exist: $DEVICE" >&2; return 1; }
-        printf '%s\n' "$DEVICE"
-        return 0
-    fi
-    for candidate in /dev/v4l/by-id/* /dev/video*; do
-        [[ -e "$candidate" ]] || continue
-        if v4l2-ctl --device="$candidate" --list-formats-ext 2>/dev/null | grep -Eqi 'MJPG|MJPEG'; then
-            readlink -f "$candidate"
-            return 0
-        fi
-    done
-    echo "No V4L2 camera advertising native MJPEG was found." >&2
-    echo "Connect the webcam and inspect modes with: v4l2-ctl --list-formats-ext" >&2
-    return 1
+args=(select --resolution "$RESOLUTION" --fps "$FPS")
+if [[ -n "$DEVICE" ]]; then
+    args+=(--device "$DEVICE")
+fi
+selection="$(/usr/local/bin/petcam-camera "${args[@]}")"
+json_value() {
+    python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1" <<< "$selection"
 }
-camera="$(find_camera)"
-echo "Starting PetCam on $camera at $RESOLUTION / $FPS FPS"
-exec /usr/local/bin/ustreamer --device="$camera" --host=0.0.0.0 --port="$PORT" --format=MJPEG --encoder=HW --resolution="$RESOLUTION" --desired-fps="$FPS"
+camera="$(json_value device)"
+resolution="$(json_value resolution)"
+fps="$(json_value fps)"
+format="$(json_value format)"
+encoder="$(json_value encoder)"
+native_mjpeg="$(json_value native_mjpeg)"
+tier="$(json_value tier)"
+
+if [[ "$native_mjpeg" != "True" && "$native_mjpeg" != "true" ]]; then
+    echo "WARNING: camera has no native MJPEG mode at the selected resolution; CPU JPEG encoding will be used." >&2
+fi
+echo "PetCam hardware tier: $tier"
+echo "Starting camera $camera at $resolution, format=$format, requested_fps=$fps, encoder=$encoder"
+if [[ "$fps" == "0" ]]; then
+    exec /usr/local/bin/ustreamer --device="$camera" --host=0.0.0.0 --port="$PORT" --format="$format" --encoder="$encoder" --resolution="$resolution" --desired-fps=0 --perf
+else
+    exec /usr/local/bin/ustreamer --device="$camera" --host=0.0.0.0 --port="$PORT" --format="$format" --encoder="$encoder" --resolution="$resolution" --desired-fps="$fps" --perf
+fi
 SCRIPT
 chmod 0755 /usr/local/lib/petcam/start-stream.sh
 
 cat > /etc/petcam/petcam.conf <<'CONF'
-# Override these defaults after boot if required.
+# Automatic mode selection prefers native MJPEG and chooses a conservative
+# starting mode for the detected Raspberry Pi. No camera-advertised mode is
+# hidden or hard-capped: use explicit values to request another supported mode.
 # DEVICE=/dev/video0
-RESOLUTION=1280x720
-FPS=30
+RESOLUTION=auto
+FPS=auto
 PORT=8080
 CONF
 chmod 0644 /etc/petcam/petcam.conf
 
 cat > /etc/systemd/system/petcam-stream.service <<'UNIT'
 [Unit]
-Description=PetCam native MJPEG camera streamer
+Description=PetCam camera-agnostic UVC streamer
 After=network-online.target
 Wants=network-online.target
 
