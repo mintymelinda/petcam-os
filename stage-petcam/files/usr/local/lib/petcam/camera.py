@@ -115,15 +115,15 @@ def model_tier(model):
         return "zero2"
     if "zero" in value:
         return "zero"
-    if "raspberry pi 1" in value:
+    if "raspberry pi 1" in value or "raspberry pi model a" in value or "raspberry pi model b" in value:
         return "pi1"
     if "raspberry pi 2" in value:
         return "pi2"
-    if "raspberry pi 5" in value:
+    if "raspberry pi 5" in value or "raspberry pi 500" in value or "compute module 5" in value:
         return "pi5"
     if "raspberry pi 4" in value or "pi 400" in value or "compute module 4" in value:
         return "pi4"
-    if "raspberry pi 3" in value:
+    if "raspberry pi 3" in value or "compute module 3" in value:
         return "pi3"
     return "unknown"
 
@@ -258,6 +258,8 @@ def main():
     except OSError:
         log = ""
     fps_values = re.findall(r"captured_fps=(\d+)", log)
+    resolutions = re.findall(r"Using resolution: (\d+x\d+)", log)
+    formats = re.findall(r"Using format: ([A-Za-z0-9_-]+)", log)
     port = 8080
     try:
         for config_line in Path("/etc/petcam/petcam.conf").read_text().splitlines():
@@ -294,6 +296,8 @@ def main():
         "http_endpoint_reachable": http_status is not None,
         "http_status": http_status,
         "latest_captured_fps": int(fps_values[-1]) if fps_values else None,
+        "active_resolution": resolutions[-1] if resolutions else None,
+        "active_capture_format": formats[-1] if formats else None,
         "network_transmitted_bytes_since_boot": tx_after,
         "network_interface_tx_mbps_sampled": round(max(0, tx_after - tx_before) * 8 / 1_000_000, 3),
         "temperature": temp,
