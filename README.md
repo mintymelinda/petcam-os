@@ -1,14 +1,16 @@
 # PetCam OS
 
-A minimal, reproducible Raspberry Pi OS image for Raspberry Pi boards and USB UVC cameras. It serves camera video over the local network for OBS, preferring native MJPEG passthrough and avoiding transcoding whenever possible.
+A minimal, reproducible Raspberry Pi OS image for Raspberry Pi boards, USB UVC webcams, and Raspberry Pi CSI camera modules. It serves camera video over the local network for OBS through one consistent MJPEG endpoint.
 
 ## Supported hardware
 
 - Raspberry Pi Zero W (initial low-resource target); automatic hardware profiles also recognize Zero 2 W, Pi 1/2/3, Pi 4/400, and Pi 5.
-- USB UVC cameras connected through the board's USB host/OTG port. A powered hub is recommended, especially for bus-powered webcams.
+- USB UVC webcams connected through the board's USB host/OTG port. A powered hub is recommended, especially for bus-powered webcams.
+- Raspberry Pi CSI camera modules supported by the Raspberry Pi camera stack, including OV5647 (Camera Module v1), IMX219 (v2), IMX708 (v3), IMX477 (HQ), and other sensors supported by the installed `libcamera` pipeline.
+- USB and CSI cameras share the same image and stream URL; no separate image is needed.
 - OBS on another computer on the same LAN.
 
-The image is not tied to a specific webcam. Actual resolutions, formats, and frame intervals are discovered from each camera's V4L2 capabilities at boot.
+USB camera modes are discovered from V4L2. CSI camera modules are discovered through `rpicam-hello --list-cameras`, with sensor modes and frame rates reported by the Raspberry Pi camera stack.
 
 ## Image build
 
@@ -18,7 +20,7 @@ The workflow builds a 32-bit Raspberry Pi OS Lite image and adds PetCam's camera
 
 ## Camera stream
 
-PetCam uses [µStreamer](https://github.com/pikvm/ustreamer). It prefers native MJPEG modes and passes pre-encoded frames through without decoding or re-encoding. If a camera has no MJPEG mode, it can fall back to a raw V4L2 format with CPU JPEG encoding; this is substantially more demanding and is warned about.
+PetCam selects the appropriate capture backend automatically. USB UVC cameras use [µStreamer](https://github.com/pikvm/ustreamer), preferring native MJPEG passthrough and falling back to CPU JPEG encoding for supported raw formats when needed. CSI modules use Raspberry Pi's `rpicam-vid` camera stack with MJPEG output. Both backends expose the same `/stream` and `/` endpoints on port 8080.
 
 - Stream endpoint: http://petcam.local:8080/stream
 - µStreamer status/UI: http://petcam.local:8080/
@@ -29,24 +31,30 @@ If mDNS is unavailable, use the Pi's DHCP address instead.
 
 ~~~bash
 sudo petcam-camera discover
+sudo petcam-camera discover-csi
 sudo petcam-camera select --format MJPG --resolution 1920x1080 --fps 30
+sudo petcam-camera select-csi --camera 0 --resolution 1920x1080 --fps 30
 sudo petcam-status
 ~~~
 
-discover reports all detected V4L2 devices, formats, resolutions, and advertised frame intervals. select previews a chosen configuration. Automatic mode prefers MJPEG and uses a conservative starting pixel-throughput budget for the detected Pi model. Explicit camera-supported modes are not blocked; a warning is emitted when a selection exceeds the model's automatic starting budget.
+discover reports USB V4L2 devices and detected CSI modules. discover-csi reports CSI sensor modes. Use select for USB and select-csi for CSI to preview a chosen configuration. Automatic mode prefers MJPEG and uses a conservative starting pixel-throughput budget for the detected Pi model. Explicit camera-supported modes are not blocked; a warning is emitted when a selection exceeds the model's automatic starting budget.
 
 Edit /etc/petcam/petcam.conf to override:
 
 ~~~bash
-# Optional: pin a specific V4L2 node
+SOURCE=auto          # auto, usb, or csi
+# USB only: pin a specific V4L2 node
 # DEVICE=/dev/v4l/by-id/your-camera-video-index0
-FORMAT=MJPG
+# CSI only: camera index from petcam-camera discover-csi
+CAMERA=0
+FORMAT=MJPG           # USB only
 RESOLUTION=1920x1080
 FPS=30
+CSI_QUALITY=70        # CSI MJPEG quality, 1..100
 PORT=8080
 ~~~
 
-Use RESOLUTION=auto and FPS=auto to return to automatic selection. FPS=auto asks µStreamer not to impose an application-side frame-rate cap. Unsupported explicit modes fail clearly rather than silently falling back. Restart after changes:
+SOURCE=auto prefers a usable USB camera, then falls back to CSI. Set SOURCE=usb or SOURCE=csi to force a backend. FORMAT applies to USB only; CSI output is MJPEG. Use RESOLUTION=auto and FPS=auto to return to automatic selection. FPS=auto asks µStreamer not to impose an application-side frame-rate cap. Unsupported explicit modes fail clearly rather than silently falling back. Restart after changes:
 
 ~~~bash
 sudo systemctl restart petcam-stream
