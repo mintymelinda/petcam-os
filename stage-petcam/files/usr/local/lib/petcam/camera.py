@@ -230,7 +230,8 @@ def main():
                 print(f"Requested {fps_value} FPS is not advertised for {width} {fmt}.", file=sys.stderr)
                 return 2
         selected_fps = int(fps) if fps != "0" else mode_max_fps(mode)
-        pixel_rate = mode["width"] * mode["height"] * selected_fps
+        selected_width, selected_height = map(int, width.split("x"))
+        pixel_rate = selected_width * selected_height * selected_fps
         warning = pixel_rate > PIXEL_BUDGETS[tier] or not native
         print(json.dumps({
             "device": device["device"], "resolution": width, "fps": fps,
@@ -260,6 +261,7 @@ def main():
     fps_values = re.findall(r"captured_fps=(\d+)", log)
     resolutions = re.findall(r"Using resolution: (\d+x\d+)", log)
     formats = re.findall(r"Using format: ([A-Za-z0-9_-]+)", log)
+    devices_in_log = re.findall(r"Using V4L2 device: (\S+)", log)
     port = 8080
     try:
         for config_line in Path("/etc/petcam/petcam.conf").read_text().splitlines():
@@ -295,6 +297,8 @@ def main():
         "service": status,
         "http_endpoint_reachable": http_status is not None,
         "http_status": http_status,
+        "camera_devices_detected": len(devices),
+        "active_camera_device": devices_in_log[-1] if devices_in_log else None,
         "latest_captured_fps": int(fps_values[-1]) if fps_values else None,
         "active_resolution": resolutions[-1] if resolutions else None,
         "active_capture_format": formats[-1] if formats else None,
