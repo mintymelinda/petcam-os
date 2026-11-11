@@ -7,6 +7,8 @@ on:
       - "config"
       - "stage-petcam/**"
       - "tests/**"
+      - "tools/**"
+      - "assets/**"
       - "README.md"
       - "docs/**"
       - ".github/workflows/build-image.yml"
@@ -16,6 +18,8 @@ on:
       - "config"
       - "stage-petcam/**"
       - "tests/**"
+      - "tools/**"
+      - "assets/**"
       - "README.md"
       - "docs/**"
       - ".github/workflows/build-image.yml"
@@ -37,10 +41,10 @@ jobs:
 
       - name: Validate PetCam scripts
         run: |
-          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py
+          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py tools/create_imager_manifest.py
           bash -n stage-petcam/00-install-files/00-run.sh stage-petcam/02-configure-petcam/00-run-chroot.sh
 
-      - name: Test camera capability discovery
+      - name: Test camera and Imager manifest support
         run: python3 -m unittest discover -s tests -v
 
       - name: Check out pi-gen
@@ -63,6 +67,11 @@ jobs:
         run: |
           cd pi-gen
           sudo ./build-docker.sh
+
+      - name: Package Imager 2 local-manifest helper
+        run: |
+          cp tools/create_imager_manifest.py pi-gen/deploy/
+          cp assets/petcam-icon.svg pi-gen/deploy/
 
       - name: Upload image artifacts
         uses: actions/upload-artifact@v4
