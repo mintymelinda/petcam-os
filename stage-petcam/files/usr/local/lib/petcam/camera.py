@@ -14,6 +14,8 @@ FORMAT_RE = re.compile(r"\[\d+\]: '([^']+)'")
 FPS_RE = re.compile(r"\(([\d.]+) fps\)")
 PIXEL_BUDGETS = {
     "zero": 1280 * 720 * 30,
+    "pi1": 640 * 480 * 30,
+    "pi2": 1280 * 720 * 30,
     "zero2": 1920 * 1080 * 30,
     "pi3": 1920 * 1080 * 30,
     "pi4": 1920 * 1080 * 60,
@@ -57,8 +59,12 @@ def model_tier(model):
     value = model.lower()
     if "zero 2" in value or "zero 2 w" in value:
         return "zero2"
-    if "zero" in value or "model a" in value and "pi 1" in value:
+    if "zero" in value:
         return "zero"
+    if "raspberry pi 1" in value:
+        return "pi1"
+    if "raspberry pi 2" in value:
+        return "pi2"
     if "raspberry pi 5" in value:
         return "pi5"
     if "raspberry pi 4" in value or "pi 400" in value or "compute module 4" in value:
@@ -115,7 +121,9 @@ def select_mode(devices, tier):
     pool = native or candidates
     budget = PIXEL_BUDGETS[tier]
     within_budget = [item for item in pool if item[1] <= budget]
-    chosen = max(within_budget or pool, key=lambda item: (item[1] <= budget, item[2], item[3]))
+    # If every advertised native mode exceeds the heuristic budget, start
+    # with the least demanding one and warn; never hide a camera capability.
+    chosen = max(within_budget, key=lambda item: (item[2], item[3])) if within_budget else min(pool, key=lambda item: item[1])
     return chosen[4], chosen[5], bool(native)
 
 
