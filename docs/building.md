@@ -57,7 +57,7 @@ sudo petcam-camera discover
 Preview a supported manual mode:
 
 ~~~bash
-sudo petcam-camera select --resolution 1920x1080 --fps 30
+sudo petcam-camera select --format MJPG --resolution 1920x1080 --fps 30
 ~~~
 
 Set the chosen values in /etc/petcam/petcam.conf and restart:
@@ -69,9 +69,10 @@ sudo systemctl restart petcam-stream
 
 Supported settings:
 
-- DEVICE: optional V4L2 node, such as /dev/video0
-- RESOLUTION: auto or an advertised WIDTHxHEIGHT
-- FPS: auto or a frame rate advertised for that format and resolution
+- DEVICE: optional V4L2 node; prefer a stable path under /dev/v4l/by-id/ when available
+- FORMAT: auto or a µStreamer-supported V4L2 fourcc such as MJPG, YUYV, or UYVY
+- RESOLUTION: auto or an advertised WIDTHxHEIGHT for the selected format
+- FPS: auto or an advertised frame rate for that format and resolution
 - PORT: HTTP port, default 8080
 
 Automatic FPS uses µStreamer's no-application-cap request (--desired-fps=0); the camera/driver determines the delivered cadence. Unsupported explicit modes fail clearly rather than silently falling back. If no native MJPEG mode is available, PetCam may select a raw V4L2 mode and use CPU JPEG encoding, with a performance warning.
