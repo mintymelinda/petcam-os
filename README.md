@@ -76,7 +76,7 @@ The current capture interfaces do not provide a reliable cumulative dropped-fram
 
 The image includes a signed, root-owned application updater that stages versioned releases, atomically switches the active release, restarts PetCam services, and restores the previous release if the web manager fails its health check. It does not update Raspberry Pi OS, firmware, or the boot partition. See [docs/update-engine.md](docs/update-engine.md) for the release-signing contract and operational details.
 
-Updates are disabled by default until the official Ed25519 release-signing public key and signed release endpoint are provisioned. The updater fails closed without both; no unsigned or locally substituted release key is accepted. The web UI does not expose update controls yet.
+Updates are disabled by default until the official Ed25519 release-signing public key and signed release endpoint are provisioned. The updater fails closed without both; no unsigned or locally substituted release key is accepted. The web manager includes manual update checks, release details, install confirmation, and progress/status reporting. Automatic checks are an optional browser-local preference; updates are never installed automatically.
 
 ## First boot and Wi-Fi
 
