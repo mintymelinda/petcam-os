@@ -2,7 +2,7 @@
 
 ## GitHub Actions (recommended)
 
-Open **Actions → Build PetCam OS → Run workflow**. The build uses the official Raspberry Pi `pi-gen` project on an Ubuntu GitHub-hosted runner, adds the PetCam stage, and uploads the generated image from `pi-gen/deploy` as a workflow artifact.
+Open Actions → Build PetCam OS → Run workflow. The build uses the official Raspberry Pi pi-gen project on an Ubuntu GitHub-hosted runner, adds the PetCam stage, runs the camera-discovery unit tests, and uploads the generated image from pi-gen/deploy as a workflow artifact.
 
 The first build can take a while. The output is a compressed Raspberry Pi OS image suitable for Raspberry Pi Imager.
 
@@ -10,56 +10,84 @@ The first build can take a while. The output is a compressed Raspberry Pi OS ima
 
 Use a Linux x86-64 host with Docker, Git, and enough free disk space (allow at least 30 GB).
 
-```bash
+~~~bash
 git clone https://github.com/RPi-Distro/pi-gen.git
 git clone https://github.com/mintymelinda/petcam-os.git
 cp petcam-os/config pi-gen/config
 cp -a petcam-os/stage-petcam pi-gen/stage-petcam
 touch pi-gen/stage2/SKIP_IMAGES
+chmod 0755 pi-gen/stage-petcam/prerun.sh
 chmod 0755 pi-gen/stage-petcam/00-run-chroot.sh
-cd pi-gen
+cd petcam-os
+python3 -m unittest discover -s tests -v
+cd ../pi-gen
 sudo ./build-docker.sh
-```
+~~~
 
-The resulting image is written to `pi-gen/deploy/`.
+The resulting image is written to pi-gen/deploy/.
 
 ## First boot and Wi-Fi
 
-Wi-Fi country is deliberately **not baked into the image**. Select the regulatory country for the place where the camera will operate during Raspberry Pi Imager's OS Customisation before writing the card. This lets the same PetCam image be used in different countries without carrying Canada's regulatory setting into every installation.
+Wi-Fi country is deliberately not baked into the image. Select the regulatory country for the place where the camera will operate during Raspberry Pi Imager's OS Customisation before writing the card. Configure hostname petcam, Wi-Fi credentials, WLAN country, an administrator account, and optional SSH. Imager applies the country during first boot. To change it later, run sudo raspi-config → Localisation Options → WLAN Country.
 
-In Raspberry Pi Imager, configure:
+The camera stream has no authentication and is intended only for a trusted LAN.
 
-- Hostname: `petcam`
-- Your 2.4 GHz Wi-Fi SSID and password
-- **Wireless LAN country: select the country where the Pi will be used** (do not leave this at an assumed/default country)
-- Create an administrator username and password
-- Enable SSH if you want remote administration
+## Camera discovery and configuration
 
-Imager applies the selected country during first boot. The Wi-Fi country is a regulatory setting, not the Wi-Fi network's location inferred from its SSID. If you need to change it after installation, run `sudo raspi-config`, open **Localisation Options → WLAN Country**, select the correct country, and reboot if requested.
+At boot, PetCam enumerates V4L2 video nodes and parses each node's advertised formats, discrete frame sizes, and frame intervals. Automatic selection prefers native MJPEG, then chooses a starting mode within a conservative pixel-throughput budget associated with the detected Pi family. The budget only guides automatic selection; it is not a hard maximum.
 
-Use a strong unique password. The camera stream itself has no authentication and is intended only for a trusted LAN.
+Inspect all advertised modes:
+
+~~~bash
+sudo petcam-camera discover
+~~~
+
+Preview a supported manual mode:
+
+~~~bash
+sudo petcam-camera select --resolution 1920x1080 --fps 30
+~~~
+
+Set the chosen values in /etc/petcam/petcam.conf and restart:
+
+~~~bash
+sudo nano /etc/petcam/petcam.conf
+sudo systemctl restart petcam-stream
+~~~
+
+Supported settings:
+
+- DEVICE: optional V4L2 node, such as /dev/video0
+- RESOLUTION: auto or an advertised WIDTHxHEIGHT
+- FPS: auto or a frame rate advertised for that format and resolution
+- PORT: HTTP port, default 8080
+
+Automatic FPS uses µStreamer's no-application-cap request (--desired-fps=0); the camera/driver determines the delivered cadence. Unsupported explicit modes fail clearly rather than silently falling back. If no native MJPEG mode is available, PetCam may select a raw V4L2 mode and use CPU JPEG encoding, with a performance warning.
+
+## Runtime diagnostics
+
+~~~bash
+sudo petcam-status
+systemctl status petcam-stream
+journalctl -u petcam-stream -b
+~~~
+
+The status report includes service health, the latest captured_fps value from µStreamer's performance log, a one-second sample of aggregate network-interface transmit throughput, cumulative transmitted bytes, and SoC temperature. The throughput is interface-wide, not video-only.
+
+Dropped frames are reported as unavailable when the active UVC driver/µStreamer build does not expose a reliable cumulative counter. PetCam does not estimate or fabricate a dropped-frame count. Capture FPS and service/device errors remain available for diagnosing stream quality.
 
 ## Hardware validation
 
-The build can install the software, but it cannot prove a specific camera mode works on the Pi Zero W. On first boot, connect the Razer Kiyo through a powered USB OTG hub, then inspect:
-
-```bash
-v4l2-ctl --list-devices
-v4l2-ctl -d /dev/video0 --list-formats-ext
-systemctl status petcam-stream
-journalctl -u petcam-stream -b
-```
-
-The default profile is 1280x720 at 30 FPS and requests the camera's native MJPEG format. If the camera exposes a different V4L2 node, set `DEVICE=/dev/videoN` in `/etc/petcam/petcam.conf`. Change `RESOLUTION` and `FPS` there if the selected mode is not supported, then run `sudo systemctl restart petcam-stream`.
+Software discovery only establishes what a camera advertises; it cannot guarantee sustained performance on a specific Pi, USB hub, power supply, or wireless network. Test each intended mode for several minutes while observing petcam-status and the service journal. A powered USB OTG hub is recommended for cameras with substantial power draw.
 
 ## OBS
 
 Use the network stream URL:
 
-```
+~~~
 http://petcam.local:8080/stream
-```
+~~~
 
-If your OBS source cannot consume the MJPEG endpoint directly, add it through a VLC Video Source or use the µStreamer page at `http://petcam.local:8080/` in a Browser Source. If mDNS does not resolve, substitute the Pi's DHCP address.
+If OBS cannot consume the MJPEG endpoint directly, add it through a VLC Video Source or use the µStreamer page at http://petcam.local:8080/ in a Browser Source. If mDNS does not resolve, substitute the Pi's DHCP address.
 
 Do not expose port 8080 to the public internet.
