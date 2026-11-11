@@ -79,6 +79,8 @@ def parse_modes(output):
                 current_mode["fps_range"] = {
                     "min": round(1 / max_interval, 3),
                     "max": round(1 / min_interval, 3),
+                    "min_interval_seconds": min_interval,
+                    "max_interval_seconds": max_interval,
                     "interval_step_seconds": float(fps_range.group(3)) if fps_range.group(3) else None,
                 }
     for mode in modes:
@@ -108,7 +110,14 @@ def mode_supports_fps(mode, fps):
     if any(abs(value - fps) < 0.1 for value in mode["fps"]):
         return True
     limits = mode.get("fps_range")
-    return bool(limits and limits["min"] <= fps <= limits["max"])
+    if not limits or not limits["min"] <= fps <= limits["max"]:
+        return False
+    interval = 1 / fps
+    step = limits["interval_step_seconds"]
+    if step:
+        steps = (interval - limits["min_interval_seconds"]) / step
+        return abs(steps - round(steps)) < 0.001
+    return limits["min_interval_seconds"] <= interval <= limits["max_interval_seconds"]
 
 def model_tier(model):
     value = model.lower()
