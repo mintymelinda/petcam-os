@@ -25,6 +25,7 @@ class ImagerManifestTests(unittest.TestCase):
             self.assertEqual(entry["name"], "PetCam OS")
             self.assertEqual(entry["url"], str(image.resolve()))
             self.assertEqual(entry["init_format"], "cloudinit-rpi")
+            self.assertIn("pi0w", entry["devices"])
             self.assertEqual(entry["extract_size"], len(raw))
             self.assertEqual(entry["extract_sha256"], hashlib.sha256(raw).hexdigest())
             self.assertEqual(entry["image_download_size"], image.stat().st_size)
