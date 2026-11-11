@@ -107,7 +107,7 @@ systemctl status petcam-stream
 journalctl -u petcam-stream -b
 ~~~
 
-The status report includes cloudinit-rpi service state, a local HTTP endpoint health probe, USB and CSI discovery counts, active backend and camera details, capture resolution and format, latest capture FPS (µStreamer performance log for USB or the CSI frame counter for CSI), a one-second MJPEG bitrate sample measured by opening a temporary local stream client, aggregate network-interface transmit throughput, cumulative transmitted bytes, and SoC temperature. The local MJPEG sample is stream-specific; the network-interface rate includes other interface traffic.
+The status report includes systemd service state, a local HTTP endpoint health probe, USB and CSI discovery counts, active backend and camera details, capture resolution and format, latest capture FPS (µStreamer performance log for USB or the CSI frame counter for CSI), a one-second MJPEG bitrate sample measured by opening a temporary local stream client, aggregate network-interface transmit throughput, cumulative transmitted bytes, and SoC temperature. The local MJPEG sample is stream-specific; the network-interface rate includes other interface traffic.
 
 Dropped frames are reported as unavailable when the active capture backend does not expose a reliable cumulative counter. PetCam does not estimate or fabricate a dropped-frame count. Capture FPS and service/device errors remain available for diagnosing stream quality.
 
