@@ -39,6 +39,15 @@ class CameraDiscoveryTests(unittest.TestCase):
         self.assertEqual((mode["width"], mode["height"]), (1280, 720))
         self.assertEqual(device["device"], "/dev/video0")
 
+    def test_falls_back_to_supported_raw_format_and_ignores_unknown_fourcc(self):
+        raw_device = [{"device": "/dev/video1", "modes": [MODULE.parse_modes(SAMPLE)[2]]}]
+        device, mode, native = MODULE.select_mode(raw_device, "zero")
+        self.assertFalse(native)
+        self.assertEqual(mode["format"], "YUYV")
+        self.assertEqual(device["device"], "/dev/video1")
+        unsupported = [{"device": "/dev/video2", "modes": [{"format": "H264", "width": 1920, "height": 1080, "fps": [30]}]}]
+        self.assertIsNone(MODULE.select_mode(unsupported, "pi5"))
+
     def test_parses_stepwise_sizes_and_frame_intervals(self):
         output = """[0]: 'MJPG' (Motion-JPEG, compressed)
   Size: Stepwise 320x240 - 1920x1080 with step 16/8
