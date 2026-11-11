@@ -6,6 +6,20 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
+CSI_SAMPLE = """Available cameras
+-----------------
+0 : imx477 [4056x3040] (/base/soc/i2c0mux/i2c@1/imx477@1a)
+    Modes: 'SRGGB10_CSI2P' : 1332x990 [120.05 fps - (696, 528)/2664x1980 crop]
+           'SRGGB12_CSI2P' : 2028x1080 [50.03 fps - (0, 440)/4056x2160 crop]
+                             2028x1520 [40.01 fps - (0, 0)/4056x3040 crop]
+                             4056x3040 [10.00 fps - (0, 0)/4056x3040 crop]
+1 : imx708 [4608x2592] (/base/soc/i2c0mux/i2c@0/imx708@1a)
+    Modes: 'SRGGB10_CSI2P' : 1536x864 [120.13 fps - (768, 432)/3072x1728 crop]
+                             2304x1296 [56.03 fps - (0, 0)/4608x2592 crop]
+                             4608x2592 [14.35 fps - (0, 0)/4608x2592 crop]
+"""
+
+
 SAMPLE = """ioctl: VIDIOC_ENUM_FMT
  Type: Video Capture
  [0]: 'MJPG' (Motion-JPEG, compressed)
@@ -68,6 +82,25 @@ class CameraDiscoveryTests(unittest.TestCase):
         self.assertTrue(MODULE.mode_supports_fps(mode, 50))
         self.assertFalse(MODULE.mode_supports_fps(mode, 60))
         self.assertFalse(MODULE.mode_supports_fps(mode, 120))
+
+
+    def test_parses_csi_camera_sensor_modes(self):
+        cameras = MODULE.parse_csi_cameras(CSI_SAMPLE)
+        self.assertEqual(len(cameras), 2)
+        self.assertEqual(cameras[0]["sensor"], "imx477")
+        self.assertEqual((cameras[0]["sensor_width"], cameras[0]["sensor_height"]), (4056, 3040))
+        self.assertEqual(len(cameras[0]["modes"]), 4)
+        self.assertAlmostEqual(cameras[0]["modes"][0]["fps"], 120.05)
+
+    def test_selects_csi_mode_within_board_budget_and_validates_overrides(self):
+        cameras = MODULE.parse_csi_cameras(CSI_SAMPLE)
+        selected = MODULE.select_csi_mode(cameras, "zero")
+        self.assertLessEqual(selected["estimated_pixels_per_second"], selected["hardware_budget_pixels_per_second"])
+        explicit = MODULE.select_csi_mode(cameras, "pi5", requested_camera=1, resolution="2304x1296", fps="56.03")
+        self.assertEqual(explicit["sensor"], "imx708")
+        self.assertEqual(explicit["resolution"], "2304x1296")
+        with self.assertRaises(ValueError):
+            MODULE.select_csi_mode(cameras, "pi5", resolution="123x456")
 
     def test_model_tiers(self):
         self.assertEqual(MODULE.model_tier("Raspberry Pi Zero W Rev 1.1"), "zero")
