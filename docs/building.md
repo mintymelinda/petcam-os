@@ -26,9 +26,17 @@ sudo ./build-docker.sh
 
 The resulting image is written to pi-gen/deploy/.
 
-## First boot and Wi-Fi
+## Raspberry Pi Imager 2 customisation
 
-Wi-Fi country is deliberately not baked into the image. Select the regulatory country for the place where the camera will operate during Raspberry Pi Imager's OS Customisation before writing the card. Configure hostname petcam, Wi-Fi credentials, WLAN country, an administrator account, and optional SSH. Imager applies the country during first boot. To change it later, run sudo raspi-config → Localisation Options → WLAN Country.
+Imager 2 deliberately disables customisation for an arbitrary local image because it cannot infer the image's first-boot mechanism. The build artifact includes `create_imager_manifest.py`. After extracting the artifact, double-click `prepare-imager.bat` on Windows or run `./prepare-imager.sh` on Linux. The helper finds the image, generates the local manifest with verified checksums, and opens it in Raspberry Pi Imager 2.
+
+The helper creates `petcam-os.rpi-imager-manifest` beside the image. It calculates the compressed download size and SHA-256, decompresses the image as a stream to calculate the extracted size and SHA-256, and declares `init_format: cloudinit-rpi` for the Raspberry Pi OS cloud-init first-boot integration. It includes the supported Raspberry Pi device tags. No credentials or Wi-Fi details are written into the image or manifest.
+
+Double-click `petcam-os.rpi-imager-manifest` to open it in Imager 2. Alternatively, use App Options → Content Repository → Edit → Use custom file, select the manifest, and Apply & Restart. Choose PetCam OS from the OS list. The Customisation step should now be available.
+
+Configure hostname `petcam`, Wi-Fi credentials, WLAN country, an administrator account, and optional SSH there. Wi-Fi country is deliberately not baked into the image. To change it later, run sudo raspi-config → Localisation Options → WLAN Country.
+
+Keep the image and manifest in the same folder until flashing completes.
 
 The camera stream has no authentication and is intended only for a trusted LAN.
 
