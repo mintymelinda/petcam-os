@@ -34,7 +34,7 @@ The camera stream has no authentication and is intended only for a trusted LAN.
 
 ## Camera discovery and configuration
 
-At boot, PetCam enumerates V4L2 video nodes and parses each node's advertised formats, discrete frame sizes, and frame intervals. Automatic selection prefers native MJPEG, then chooses a starting mode within a conservative pixel-throughput budget associated with the detected Pi family. The budget only guides automatic selection; it is not a hard maximum.
+At boot, PetCam enumerates V4L2 video nodes and parses each node's advertised formats, discrete/stepwise/continuous frame sizes, and discrete or ranged frame intervals. Automatic selection prefers native MJPEG, then chooses a starting mode within a conservative pixel-throughput budget associated with the detected Pi family. The budget only guides automatic selection; it is not a hard maximum.
 
 Inspect all advertised modes:
 
@@ -72,7 +72,7 @@ systemctl status petcam-stream
 journalctl -u petcam-stream -b
 ~~~
 
-The status report includes service health, the latest captured_fps value from µStreamer's performance log, a one-second sample of aggregate network-interface transmit throughput, cumulative transmitted bytes, and SoC temperature. The throughput is interface-wide, not video-only.
+The status report includes systemd service state, a local HTTP endpoint health probe, the active capture resolution and format, the latest captured_fps value from µStreamer's performance log, a one-second sample of aggregate network-interface transmit throughput, cumulative transmitted bytes, and SoC temperature. The throughput is interface-wide, not video-only.
 
 Dropped frames are reported as unavailable when the active UVC driver/µStreamer build does not expose a reliable cumulative counter. PetCam does not estimate or fabricate a dropped-frame count. Capture FPS and service/device errors remain available for diagnosing stream quality.
 
