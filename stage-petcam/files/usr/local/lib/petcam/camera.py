@@ -13,6 +13,8 @@ from pathlib import Path
 MODE_RE = re.compile(r"Size: Discrete (\d+)x(\d+)")
 FORMAT_RE = re.compile(r"\[\d+\]: '([^']+)'")
 FPS_RE = re.compile(r"\(([\d.]+) fps\)")
+SIZE_RANGE_RE = re.compile(r"Size: (?:Stepwise|Continuous) (\d+)x(\d+) - (\d+)x(\d+)(?: with step (\d+)/(\d+))?)
+FPS_RANGE_RE = re.compile(r"Interval: (?:Stepwise|Continuous) ([\d.]+)s - ([\d.]+)s(?: with step ([\d.]+)s)?")
 PIXEL_BUDGETS = {
     "zero": 1280 * 720 * 30,
     "pi1": 640 * 480 * 30,
