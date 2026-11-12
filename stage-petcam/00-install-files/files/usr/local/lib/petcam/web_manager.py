@@ -25,7 +25,7 @@ from camera_profiles import (
 )
 from timelapse import load_config as load_timelapse_config, save_config as save_timelapse_config, state_snapshot as timelapse_snapshot
 from motion_detection import load_config as load_motion_config, save_config as save_motion_config, state_snapshot as motion_snapshot, FRAMES as MOTION_FRAMES
-from web_auth import SESSION_TTL, get_session, invalidate_session, new_session, save_password, verify_password
+from web_auth import SESSION_TTL, get_session, initialize_password, invalidate_session, is_configured, new_session, save_password, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
 DEFAULT_STREAM_URL = "http://127.0.0.1:8081"
@@ -45,7 +45,7 @@ PAGE = r"""<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PetCam</title>
 <style>
-:root{color-scheme:dark;font:16px system-ui,sans-serif;background:#17191d;color:#eee}
+:root{color-scheme:dark;font:16px system-ui,sans-serif;background:#17191d;color:#eee}body.setup-required>section:not(#first-run),body.setup-required>footer{display:none}#first-run[hidden]{display:none}
 body{max-width:760px;margin:2rem auto;padding:0 1rem}h1{font-size:1.5rem}section{background:#22262c;border:1px solid #383e47;border-radius:10px;padding:1rem;margin:1rem 0}
 button,select,input{font:inherit;padding:.55rem .7rem;border-radius:6px;border:1px solid #59616d;background:#303741;color:inherit}
 button{cursor:pointer}button:disabled{opacity:.5}label{display:block;margin:.7rem 0 .25rem}select{width:100%}
@@ -53,6 +53,7 @@ video,img{display:block;width:100%;max-height:55vh;object-fit:contain;background
 small,.muted{color:#aeb7c2}#message{min-height:1.5em;color:#b9d8ff}.row{display:flex;gap:.5rem;flex-wrap:wrap}
 </style>
 <body><h1>PetCam <small>Camera</small></h1>
+<section id="first-run" hidden><h2>Welcome to PetCam</h2><p>Create the administrator password for this camera. You can do this from your browser; SSH is not required.</p><form id="first-run-form"><label for="setup-password">Administrator password (12–1024 characters)</label><input id="setup-password" type="password" minlength="12" maxlength="1024" autocomplete="new-password" required><label for="setup-password-confirm">Confirm password</label><input id="setup-password-confirm" type="password" minlength="12" maxlength="1024" autocomplete="new-password" required><p id="setup-message" role="status" aria-live="polite"></p><button id="setup-submit" type="submit">Create administrator password</button></form></section>
 <section id="updates"><div class="row" style="justify-content:space-between;align-items:center"><h2>Software updates</h2><span id="update-state" class="muted">Not checked</span></div>
 <p id="update-message" role="status" class="muted">Check for signed PetCam application releases. Operating system and firmware updates are managed separately.</p>
 <div class="row"><button id="check-updates">Check for updates</button><button id="install-update" disabled>Install update</button></div>
@@ -107,9 +108,10 @@ small,.muted{color:#aeb7c2}#message{min-height:1.5em;color:#b9d8ff}.row{display:
 <script>
 const $=id=>document.getElementById(id);let inventory=[],streams=[];
 const browserSourceUrl="http://"+window.location.hostname+":8080/stream";
+$("first-run-form").onsubmit=async event=>{event.preventDefault();const password=$("setup-password").value,confirmation=$("setup-password-confirm").value,message=$("setup-message"),button=$("setup-submit");if(password!==confirmation){message.textContent="The passwords do not match.";return}button.disabled=true;message.textContent="Creating administrator account…";try{const response=await fetch("/api/setup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password,password_confirmation:confirmation})});const data=await response.json();if(!response.ok)throw Error(data.error||"Initial setup failed");message.textContent="Administrator account created. Opening PetCam…";location.reload()}catch(error){message.textContent=error.message;button.disabled=false}};
 $("browser-source-url").textContent=browserSourceUrl;
 $("copy-browser-source").onclick=async()=>{const message=$("copy-message");try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(browserSourceUrl)}else{const field=document.createElement("textarea");field.value=browserSourceUrl;field.setAttribute("readonly","");field.style.position="fixed";field.style.opacity="0";document.body.append(field);field.select();const copied=document.execCommand("copy");field.remove();if(!copied)throw Error("Clipboard access is unavailable")}message.textContent="Browser source URL copied."}catch(e){message.textContent="Could not copy automatically. Select and copy the URL above."}};
-let csrfToken=null;let loginPromise=null;async function login(){if(loginPromise)return loginPromise;loginPromise=(async()=>{const password=window.prompt("Enter your PetCam manager password");if(password===null)throw Error("Sign-in cancelled");const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password})});const d=await r.json();if(!r.ok)throw Error(d.error||"Sign-in failed");csrfToken=d.csrf_token;return d})();try{return await loginPromise}finally{loginPromise=null}}async function request(path,options={}){const headers=new Headers(options.headers||{});if(options.method&&options.method.toUpperCase()!=="GET"&&!csrfToken){let session=await fetch("/api/session");if(session.status===401){await login()}else{const state=await session.json();if(!session.ok)throw Error(state.error||session.statusText);csrfToken=state.csrf_token}}if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);let r=await fetch(path,{...options,headers});if(r.status===401){await login();if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);r=await fetch(path,{...options,headers})}const d=await r.json();if(!r.ok)throw Error(d.error||r.statusText);return d}
+let csrfToken=null;let loginPromise=null;async function login(){if(loginPromise)return loginPromise;loginPromise=(async()=>{const setupResponse=await fetch("/api/setup/status",{cache:"no-store"});const setupState=await setupResponse.json();if(!setupResponse.ok)throw Error(setupState.error||"Unable to check initial setup");if(!setupState.configured)throw Error("Create the administrator password in the welcome panel before signing in.");const password=window.prompt("Enter your PetCam manager password");if(password===null)throw Error("Sign-in cancelled");const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password})});const d=await r.json();if(!r.ok)throw Error(d.error||"Sign-in failed");csrfToken=d.csrf_token;return d})();try{return await loginPromise}finally{loginPromise=null}}async function request(path,options={}){const headers=new Headers(options.headers||{});if(options.method&&options.method.toUpperCase()!=="GET"&&!csrfToken){let session=await fetch("/api/session");if(session.status===401){await login()}else{const state=await session.json();if(!session.ok)throw Error(state.error||session.statusText);csrfToken=state.csrf_token}}if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);let r=await fetch(path,{...options,headers});if(r.status===401){await login();if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);r=await fetch(path,{...options,headers})}const d=await r.json();if(!r.ok)throw Error(d.error||r.statusText);return d}
 function modesFor(camera){return camera.kind==="usb"?camera.modes.filter(m=>["MJPG","MJPEG","JPEG","YUYV","YVYU","UYVY","YUV420","YVU420","RGB565","RGB24","GREY"].includes(m.format)):camera.modes}
 function fillModes(){const c=inventory[+$("camera").value];$("mode").replaceChildren();if(!c)return;for(const m of modesFor(c)){let fps=m.fps?.length?m.fps:[m.fps_range?.max||30];if(c.kind==="usb")fps=fps.filter(Number.isInteger);for(const f of fps){const o=document.createElement("option");o.value=JSON.stringify({format:m.format||"CSI",width:m.width,height:m.height,fps:f});o.textContent=`${m.width}×${m.height} · ${f} fps · ${m.format||"CSI"}`; $("mode").append(o)}}}
 async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{$("message").textContent=inventory.length+" camera(s) found. Select one to preview and configure.";fillModes()}await refreshStreams()}catch(e){$("message").textContent=e.message}}
@@ -149,6 +151,7 @@ async function checkUpdates(){const b=$("check-updates");b.disabled=true;$("upda
 $("check-updates").onclick=checkUpdates;
 $("install-update").onclick=async()=>{if(!updateAvailable||updateBusy)return;if(!confirm("Install the signed PetCam application update now? The camera stream and web interface will briefly restart."))return;$("install-update").disabled=true;$("check-updates").disabled=true;$("update-message").textContent="Starting verified update…";try{await request("/api/update/install",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});updateBusy=true;$("update-state").textContent="Installing…";$("update-message").textContent="The update is downloading and staging. This page may briefly disconnect while services restart.";const poll=async()=>{await updateStatus();if(updateBusy)setTimeout(poll,2000)};setTimeout(poll,1500)}catch(e){$("update-message").textContent=e.message;$("install-update").disabled=false}finally{$("check-updates").disabled=false}};
 if(autoCheck.checked)checkUpdates();updateStatus();
+(async()=>{try{const response=await fetch("/api/setup/status",{cache:"no-store"});const state=await response.json();if(!response.ok)throw Error(state.error||"Unable to check setup status");if(!state.configured){document.body.classList.add("setup-required");$("first-run").hidden=false}}catch(error){$("setup-message").textContent=error.message}})();
 </script></body></html>"""
 
 
@@ -359,6 +362,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/api/setup/status":
+            self.send_json(200, {"configured": is_configured()})
+            return
         if path == "/":
             body = PAGE.encode()
             self.send_response(200)
@@ -468,6 +474,26 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        if path == "/api/setup":
+            if not _origin_ok(self):
+                self.send_json(403, {"error": "Request origin is not allowed"})
+                return
+            try:
+                data = _body(self, 4096)
+                if data.get("password") != data.get("password_confirmation"):
+                    self.send_json(400, {"error": "The passwords do not match."})
+                    return
+                initialize_password(data.get("password", ""))
+                token, csrf = new_session()
+                self.send_json(201, {"ok": True, "csrf_token": csrf}, {
+                    "Set-Cookie": f"petcam_session={token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={SESSION_TTL}"
+                })
+            except ValueError as error:
+                status = 409 if is_configured() else 400
+                self.send_json(status, {"error": str(error)})
+            except Exception as error:
+                self.send_json(400, {"error": str(error)})
+            return
         if path == "/api/login":
             if not _origin_ok(self):
                 self.send_json(403, {"error": "Request origin is not allowed"})
