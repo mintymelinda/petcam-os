@@ -211,7 +211,7 @@ class MQTTClient:
         variable = _field("MQTT") + bytes([4, flags]) + struct.pack("!H", KEEPALIVE_SECONDS)
         raw.sendall(_packet(1, variable + payload))
         packet_type, response = _read_packet(raw)
-        if packet_type != 2 or len(response) != 2 or response[1] != 0:
+        if packet_type != 2 or len(response) != 2 or response[0] != 0 or response[1] != 0:
             raw.close()
             raise MQTTError("MQTT broker rejected the connection.")
         self.connection = raw
@@ -417,7 +417,7 @@ def remove_discovery(config: dict[str, object]) -> None:
             topic = f"{config['MQTT_DISCOVERY_PREFIX']}/{entity['component']}/{node_id}/{entity['object_id']}/config"
             client.publish(topic, "")
             client.publish(client._topic(f"state/{entity['object_id']}"), "")
-        client.publish(client._topic("health_availability"), "unhealthy")
+        client.publish(client._topic("health_availability"), "")
         client.publish_availability("offline")
     finally:
         client.close()
