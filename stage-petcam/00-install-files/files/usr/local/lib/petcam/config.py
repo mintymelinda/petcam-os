@@ -113,8 +113,6 @@ def validate_config(values: dict[str, Any], check_hardware: bool = False) -> dic
         raise ConfigError("PORT must be an integer from 1024 to 65535.")
     if int(config["PORT"]) in {8080, 8443}:
         raise ConfigError("PORT cannot use 8080 or 8443; those ports are reserved for the public stream and HTTPS manager.")
-    if 8082 <= int(config["PORT"]) <= 8099:
-        raise ConfigError("PORT cannot use 8082 through 8099; those ports are reserved for independent camera streams.")
 
     if check_hardware:
         if config["DEVICE"] and not Path(config["DEVICE"]).exists():
