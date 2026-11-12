@@ -100,7 +100,7 @@ jobs:
           IMAGE_NAME="petcam-os-${TAG}.img.xz"
           cp "${IMAGES[0]}" "$IMAGE_NAME"
           IMAGE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${IMAGE_NAME}"
-          python3 tools/create_imager_os_list.py "$IMAGE_NAME" --image-url "$IMAGE_URL" --version "$VERSION"
+          python3 tools/create_imager_os_list.py "$IMAGE_NAME" --image-url "$IMAGE_URL"
           python3 -m pip install --disable-pip-version-check jsonschema
           curl --fail --silent --show-error https://raw.githubusercontent.com/raspberrypi/rpi-imager/main/doc/json-schema/os-list-schema.json -o os-list-schema.json
           python3 - <<'PY'
