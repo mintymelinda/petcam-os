@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import fcntl
 import http.client
+from contextlib import contextmanager
 import json
 import os
 import re
@@ -264,6 +265,22 @@ def ensure_config_lock(path: Path | str = CONFIG_PATH) -> Path:
         except (ImportError, KeyError, PermissionError):
             pass
     return lock_path
+
+
+@contextmanager
+def config_transaction_guard(path: Path | str = CONFIG_PATH):
+    """Hold the configuration lock while another subsystem inspects stream health."""
+    lock_path = ensure_config_lock(path)
+    with lock_path.open("r+") as lock_file:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def configuration_change_in_progress(path: Path | str = CONFIG_PATH) -> bool:
