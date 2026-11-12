@@ -105,6 +105,8 @@ class ConfigValidationTests(unittest.TestCase):
         for updates in (
             {"SOURCE": "auto", "USB_PHYSICAL_PATH": "/sys/devices/platform/usb1"},
             {"SOURCE": "csi", "USB_PHYSICAL_PATH": "/sys/devices/platform/usb1"},
+            {"SOURCE": "usb", "USB_PHYSICAL_PATH": "/sys/devices/platform/usb1", "DEVICE": "/dev/video0"},
+            {"SOURCE": "csi", "CSI_DEVICE_PATH": "/base/soc/i2c@1", "CAMERA": "0"},
             {"SOURCE": "usb", "CSI_DEVICE_PATH": "/base/soc/i2c@1"},
             {"SOURCE": "usb", "USB_PHYSICAL_PATH": "/sys/devices/$(touch-pwned)"},
             {"SOURCE": "csi", "CSI_DEVICE_PATH": "/base/soc/$(touch-pwned)"},
