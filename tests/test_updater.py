@@ -163,6 +163,7 @@ class UpdateArchiveTests(unittest.TestCase):
             "lib/web_manager.py": b"# web",
             "lib/web_auth.py": b"# authentication",
             "lib/health_monitor.py": b"# health monitor",
+            "lib/config.py": b"# config",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"binary",
         }
