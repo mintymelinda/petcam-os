@@ -282,6 +282,11 @@ def discover_devices(sysfs_root=Path("/sys/class/video4linux"), dev_root=Path("/
                 break
     return devices
 
+def ustreamer_format(pixel_format):
+    """Translate V4L2 native JPEG fourcc values to µStreamer passthrough format."""
+    return "MJPEG" if pixel_format in NATIVE_JPEG_FORMATS else pixel_format
+
+
 def filter_devices_by_format(devices, requested_format):
     if requested_format == "auto":
         return devices
@@ -394,7 +399,7 @@ def main():
         warning = pixel_rate > PIXEL_BUDGETS[tier] or not native
         print(json.dumps({
             "device": device["device"], "resolution": width, "fps": fps,
-            "format": "MJPEG" if fmt in NATIVE_JPEG_FORMATS else fmt,
+            "format": ustreamer_format(fmt),
             "encoder": encoder, "native_mjpeg": native, "model": model,
             "tier": tier, "mode_fps": mode["fps"],
             "estimated_pixels_per_second": pixel_rate,
