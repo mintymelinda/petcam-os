@@ -114,7 +114,7 @@ def _persist(report: dict[str, Any]) -> dict[str, Any]:
 
 
 def _starting(snapshot: dict[str, Any]) -> bool:
-    return snapshot["state"] in ("activating", "reloading") or (
+    return snapshot["state"] in ("activating", "reloading", "deactivating") or (
         snapshot["state"] == "active"
         and snapshot["active_age"] is not None
         and snapshot["active_age"] < STARTUP_GRACE_SECONDS
@@ -170,6 +170,10 @@ def check_health(now: float | None = None) -> dict[str, Any]:
     report["public_stream_ready"] = False
     report["camera_connected"] = None
 
+    if backend["state"] == "unknown" or web["state"] == "unknown":
+        report["state"] = "service_state_unknown"
+        report["reason"] = "systemd service state could not be read; no restart was attempted."
+        return _persist(report)
     if _starting(backend) or _starting(web):
         report["state"] = "starting"
         report["reason"] = "A PetCam service is within its startup grace period."
