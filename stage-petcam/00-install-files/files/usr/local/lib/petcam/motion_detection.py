@@ -233,6 +233,15 @@ def _metrics(started, cpu_started):
     }
 
 
+def read_stream_frame(url=STREAM_URL):
+    request = urllib.request.Request(url, headers={"User-Agent": "PetCam-Motion/1"})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        frame = next(jpeg_frames(response), None)
+    if frame is None:
+        raise OSError("The live stream closed before a JPEG frame arrived.")
+    return frame
+
+
 def benchmark(duration_seconds=120, url=STREAM_URL, sample_interval=2):
     if not 10 <= duration_seconds <= 3600:
         raise ValueError("Benchmark duration must be between 10 and 3600 seconds.")
@@ -240,19 +249,13 @@ def benchmark(duration_seconds=120, url=STREAM_URL, sample_interval=2):
     detector = MotionDetector(config)
     started = time.monotonic()
     cpu_started = time.process_time()
-    next_sample = 0.0
     samples = 0
-    request = urllib.request.Request(url, headers={"User-Agent": "PetCam-Motion-Benchmark/1"})
-    with urllib.request.urlopen(request, timeout=10) as response:
-        for frame in jpeg_frames(response):
-            elapsed = time.monotonic() - started
-            if elapsed >= duration_seconds:
-                break
-            if elapsed < next_sample:
-                continue
-            next_sample = elapsed + sample_interval
-            detector.sample(frame)
-            samples += 1
+    while time.monotonic() - started < duration_seconds:
+        detector.sample(read_stream_frame(url))
+        samples += 1
+        remaining = duration_seconds - (time.monotonic() - started)
+        if remaining > 0:
+            time.sleep(min(sample_interval, remaining))
     elapsed = time.monotonic() - started
     metrics = _metrics(started, cpu_started)
     return {
@@ -261,7 +264,6 @@ def benchmark(duration_seconds=120, url=STREAM_URL, sample_interval=2):
         "sample_interval_seconds": sample_interval,
         **metrics,
     }
-
 
 def cooldown_elapsed(now, last_event, minimum_interval):
     return now - last_event >= minimum_interval
@@ -280,7 +282,13 @@ def run():
     global _running
     BASE.mkdir(parents=True, exist_ok=True)
     FRAMES.mkdir(parents=True, exist_ok=True)
+    detector = None
+    active_config = None
+    last_event = _last_event_epoch(load_events())
     last_state = None
+    metrics_started = time.monotonic()
+    cpu_started = time.process_time()
+    last_status_write = 0.0
     while _running:
         try:
             config = load_config()
@@ -288,6 +296,8 @@ def run():
                 if last_state != "disabled":
                     write_state({"state": "disabled", "last_error": None})
                     last_state = "disabled"
+                detector = None
+                active_config = None
                 time.sleep(2)
                 continue
             now = datetime.now().astimezone()
@@ -295,85 +305,68 @@ def run():
                 if last_state != "quiet_hours":
                     write_state({"state": "quiet_hours", "last_error": None})
                     last_state = "quiet_hours"
+                detector = None
+                active_config = None
                 time.sleep(5)
                 continue
+            if config != active_config or detector is None:
+                detector = MotionDetector(config)
+                active_config = config
             directory = FRAMES
             prune_events(config, directory)
             enough_space, free = free_space_ok(config, directory)
             if not enough_space:
-                write_state({"state": "storage_limit", "last_error": f"Free space below configured minimum ({free // 1048576} MiB available)."})
+                write_state({
+                    "state": "storage_limit",
+                    "last_error": f"Free space below configured minimum ({free // 1048576} MiB available).",
+                })
                 last_state = "storage_limit"
                 time.sleep(5)
                 continue
-            detector = MotionDetector(config)
-            last_event = _last_event_epoch(load_events())
-            request = urllib.request.Request(STREAM_URL, headers={"User-Agent": "PetCam-Motion/1"})
-            stream_ended = True
-            started = time.monotonic()
-            cpu_started = time.process_time()
-            next_sample = 0.0
-            next_config_check = 0.0
-            last_status_write = 0.0
-            with urllib.request.urlopen(request, timeout=10) as response:
-                for frame in jpeg_frames(response):
-                    if not _running:
-                        stream_ended = False
-                        break
-                    tick = time.monotonic()
-                    if tick >= next_config_check:
-                        refreshed = load_config()
-                        local_now = datetime.now().astimezone()
-                        quiet = refreshed["quiet_hours_enabled"] and in_quiet_hours(local_now, refreshed["quiet_hours_start"], refreshed["quiet_hours_end"])
-                        if not refreshed["enabled"] or quiet:
-                            stream_ended = False
-                            break
-                        if refreshed != config:
-                            config = refreshed
-                            detector = MotionDetector(config)
-                        next_config_check = tick + 2
-                    if tick < next_sample:
-                        continue
-                    next_sample = tick + config["sample_interval_seconds"]
-                    changed_percent, detected = detector.sample(frame)
-                    if detected:
-                        event_time = datetime.now(timezone.utc)
-                        epoch = event_time.timestamp()
-                        if cooldown_elapsed(epoch, last_event, config["min_event_interval_seconds"]):
-                            enough_space, free = free_space_ok(config, directory)
-                            if enough_space:
-                                try:
-                                    event = record_event(frame, changed_percent, config, directory, now=event_time)
-                                except OSError as error:
-                                    write_state({"state": "storage_limit", "last_error": str(error)})
-                                else:
-                                    last_event = epoch
-                                    write_state({
-                                        "state": "motion_detected", "last_event_at": event["timestamp"],
-                                        "last_file": event["file"], "last_motion_percent": event["changed_percent"],
-                                        "last_error": None, "event_count": len(load_events()),
-                                        **_metrics(started, cpu_started),
-                                    })
-                            else:
-                                write_state({"state": "storage_limit", "last_error": f"Free space below configured minimum ({free // 1048576} MiB available)."})
-                    if tick - last_status_write >= 30:
+
+            frame = read_stream_frame()
+            changed_percent, detected = detector.sample(frame)
+            tick = time.monotonic()
+            if detected:
+                event_time = datetime.now(timezone.utc)
+                epoch = event_time.timestamp()
+                if cooldown_elapsed(epoch, last_event, config["min_event_interval_seconds"]):
+                    try:
+                        event = record_event(frame, changed_percent, config, directory, now=event_time)
+                    except OSError as error:
+                        write_state({"state": "storage_limit", "last_error": str(error)})
+                        last_state = "storage_limit"
+                    else:
+                        last_event = epoch
                         write_state({
-                            "state": "monitoring", "last_motion_percent": round(changed_percent, 2),
+                            "state": "motion_detected", "last_event_at": event["timestamp"],
+                            "last_file": event["file"], "last_motion_percent": event["changed_percent"],
                             "last_error": None, "event_count": len(load_events()),
-                            **_metrics(started, cpu_started),
+                            **_metrics(metrics_started, cpu_started),
                         })
-                        last_status_write = tick
-                if stream_ended:
-                    write_state({"state": "camera_unavailable", "last_error": "The MJPEG stream ended before the worker was stopped."})
-                    last_state = "camera_unavailable"
-            if _running:
-                time.sleep(5)
+                        last_state = "motion_detected"
+            if tick - last_status_write >= 30 or last_state not in ("monitoring", "motion_detected", "storage_limit"):
+                write_state({
+                    "state": "monitoring", "last_motion_percent": round(changed_percent, 2),
+                    "last_error": None, "event_count": len(load_events()),
+                    **_metrics(metrics_started, cpu_started),
+                })
+                last_state = "monitoring"
+                last_status_write = tick
+                metrics_started = time.monotonic()
+                cpu_started = time.process_time()
+            time.sleep(config["sample_interval_seconds"])
         except (OSError, urllib.error.URLError, ValueError) as error:
             write_state({"state": "camera_unavailable", "last_error": str(error)})
             last_state = "camera_unavailable"
+            detector = None
+            active_config = None
             time.sleep(5)
         except Exception as error:
             write_state({"state": "error", "last_error": str(error)})
             last_state = "error"
+            detector = None
+            active_config = None
             time.sleep(5)
 
 
