@@ -26,6 +26,25 @@ class WebAuthenticationTests(unittest.TestCase):
         self.file_patch.stop()
         self.directory.cleanup()
 
+    def test_first_run_setup_creates_password_once(self):
+        self.assertFalse(MODULE.is_configured())
+        MODULE.initialize_password("first administrator password")
+        self.assertTrue(MODULE.is_configured())
+        self.assertTrue(MODULE.verify_password("first administrator password"))
+
+    def test_first_run_setup_cannot_replace_existing_password(self):
+        MODULE.initialize_password("first administrator password")
+        with self.assertRaisesRegex(ValueError, "already been completed"):
+            MODULE.initialize_password("replacement administrator password")
+        self.assertTrue(MODULE.verify_password("first administrator password"))
+        self.assertFalse(MODULE.verify_password("replacement administrator password"))
+
+    def test_first_run_setup_rejects_weak_password_without_creating_auth_file(self):
+        with self.assertRaisesRegex(ValueError, "at least 12"):
+            MODULE.initialize_password("too short")
+        self.assertFalse(MODULE.is_configured())
+        self.assertFalse(self.auth_file.exists())
+
     def test_password_hash_is_salted_and_not_plaintext(self):
         first = MODULE.hash_password("correct horse battery staple")
         second = MODULE.hash_password("correct horse battery staple")

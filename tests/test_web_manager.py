@@ -1,4 +1,6 @@
 import importlib.util
+import io
+import json
 import unittest
 from unittest import mock
 
@@ -35,6 +37,75 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("/api/diagnostics", MODULE.PAGE)
         self.assertIn("/api/support-bundle", MODULE.PAGE)
         self.assertIn("Download redacted support bundle", MODULE.PAGE)
+
+    def test_first_run_admin_setup_is_available_in_the_browser(self):
+        self.assertIn('id="first-run-form"', MODULE.PAGE)
+        self.assertIn('id="setup-password"', MODULE.PAGE)
+        self.assertIn("/api/setup/status", MODULE.PAGE)
+        self.assertIn("/api/setup", MODULE.PAGE)
+        self.assertIn("SSH is not required", MODULE.PAGE)
+        self.assertIn("initialize_password", MODULE.Handler.do_POST.__code__.co_names)
+        self.assertIn("is_configured", MODULE.Handler.do_GET.__code__.co_names)
+
+    def test_first_run_setup_endpoint_creates_session_and_cookie(self):
+        payload = json.dumps({
+            "password": "a sufficiently long password",
+            "password_confirmation": "a sufficiently long password",
+        }).encode()
+        class Request:
+            path = "/api/setup"
+            headers = {
+                "Origin": "https://petcam.local:8443",
+                "Host": "petcam.local:8443",
+                "Content-Length": str(len(payload)),
+            }
+            rfile = io.BytesIO(payload)
+            response = None
+
+            def send_json(self, status, body, headers=None):
+                self.response = (status, body, headers or {})
+
+        request = Request()
+        with mock.patch.object(MODULE, "is_configured", return_value=False), \
+                mock.patch.object(MODULE, "initialize_password") as initialize, \
+                mock.patch.object(MODULE, "new_session", return_value=("session-token", "csrf-token")):
+            MODULE.Handler.do_POST(request)
+        initialize.assert_called_once_with("a sufficiently long password")
+        self.assertEqual(request.response[0], 201)
+        self.assertEqual(request.response[1]["csrf_token"], "csrf-token")
+        self.assertIn("HttpOnly; Secure; SameSite=Strict", request.response[2]["Set-Cookie"])
+
+    def test_first_run_setup_endpoint_rejects_non_same_origin_request(self):
+        class Request:
+            path = "/api/setup"
+            headers = {"Origin": "http://attacker.example", "Host": "petcam.local:8443"}
+            response = None
+
+            def send_json(self, status, body, headers=None):
+                self.response = (status, body, headers or {})
+
+        request = Request()
+        with mock.patch.object(MODULE, "is_configured", return_value=False), \
+                mock.patch.object(MODULE, "initialize_password") as initialize:
+            MODULE.Handler.do_POST(request)
+        self.assertEqual(request.response[0], 403)
+        initialize.assert_not_called()
+
+    def test_first_run_setup_endpoint_cannot_reconfigure_existing_device(self):
+        class Request:
+            path = "/api/setup"
+            headers = {}
+            response = None
+
+            def send_json(self, status, body, headers=None):
+                self.response = (status, body, headers or {})
+
+        request = Request()
+        with mock.patch.object(MODULE, "is_configured", return_value=True), \
+                mock.patch.object(MODULE, "initialize_password") as initialize:
+            MODULE.Handler.do_POST(request)
+        self.assertEqual(request.response[0], 409)
+        initialize.assert_not_called()
 
     def test_update_check_uses_fixed_privileged_command(self):
         completed = mock.Mock(returncode=0, stdout='{"update_available": false}', stderr="")
