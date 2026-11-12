@@ -507,8 +507,17 @@ def main():
             break
         except (OSError, ValueError):
             pass
+    try:
+        health = json.loads(Path("/var/lib/petcam/health.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        health = {}
     report = {
         "model": model,
+        "health_state": health.get("state", "not_checked"),
+        "health_reason": health.get("reason", "The periodic health monitor has not reported yet."),
+        "health_recovery_count": health.get("recovery_count", 0),
+        "health_last_checked_at": health.get("last_checked_at"),
+        "health_last_recovery_at": health.get("last_recovery_at"),
         "service": status,
         "http_endpoint_reachable": http_status is not None,
         "http_status": http_status,
