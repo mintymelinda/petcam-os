@@ -387,11 +387,15 @@ class StreamHandler(BaseHTTPRequestHandler):
 
 def health_monitor_loop():
     from health_monitor import check_health
+    last_summary = None
     while True:
         started = time.monotonic()
         try:
             report = check_health()
-            print(f"PetCam health: {report['state']} - {report.get('reason', '')}", flush=True)
+            summary = (report["state"], report.get("reason", ""), report.get("recovery_count", 0))
+            if summary != last_summary:
+                print(f"PetCam health: {summary[0]} - {summary[1]}", flush=True)
+                last_summary = summary
         except Exception as error:
             print(f"PetCam health monitor failed: {error}", file=sys.stderr, flush=True)
         time.sleep(max(1, 30 - (time.monotonic() - started)))
