@@ -1,9 +1,10 @@
 #!/bin/bash -e
 # Runs inside the image root filesystem after packages and stage files are installed.
+groupadd --system --force petcam
 if ! id petcam >/dev/null 2>&1; then
-    useradd --system --home-dir /var/lib/petcam --create-home --shell /usr/sbin/nologin petcam
+    useradd --system --gid petcam --home-dir /var/lib/petcam --create-home --shell /usr/sbin/nologin petcam
 fi
-usermod -a -G video,i2c petcam
+usermod -g petcam -a -G video,i2c petcam
 
 APP_VERSION="$(cat /opt/petcam/releases/*/VERSION)"
 install -d -m 0755 /opt
@@ -23,9 +24,14 @@ cat > /usr/local/bin/petcam-status <<'SCRIPT'
 #!/bin/sh
 exec python3 /opt/petcam/current/lib/camera.py status
 SCRIPT
-chmod 0755 /usr/local/bin/petcam-camera /usr/local/bin/petcam-status
+cat > /usr/local/bin/petcam-admin <<'SCRIPT'
+#!/bin/sh
+exec python3 /opt/petcam/current/lib/web_manager.py --set-password
+SCRIPT
+chmod 0755 /usr/local/bin/petcam-camera /usr/local/bin/petcam-status /usr/local/bin/petcam-admin
 
 install -d -m 0755 "/opt/petcam/releases/$APP_VERSION/lib" /etc/petcam
+
 cat > "/opt/petcam/releases/$APP_VERSION/lib/start-stream.sh" <<'SCRIPT'
 #!/bin/bash
 set -euo pipefail
@@ -196,16 +202,48 @@ SUDO
 chmod 0440 /etc/sudoers.d/petcam-web
 visudo -cf /etc/sudoers.d/petcam-web
 
+cat > /usr/local/sbin/petcam-create-web-cert <<'SCRIPT'
+#!/bin/sh
+set -eu
+if [ -s /etc/petcam/web-manager.crt ] && [ -s /etc/petcam/web-manager.key ]; then
+    exit 0
+fi
+umask 077
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -sha256 -nodes -days 825 \
+    -keyout /etc/petcam/web-manager.key -out /etc/petcam/web-manager.crt \
+    -subj "/CN=petcam.local" -addext "subjectAltName=DNS:petcam.local,DNS:petcam"
+chown root:petcam /etc/petcam/web-manager.key /etc/petcam/web-manager.crt
+chmod 0640 /etc/petcam/web-manager.key
+chmod 0644 /etc/petcam/web-manager.crt
+SCRIPT
+chmod 0755 /usr/local/sbin/petcam-create-web-cert
+
+cat > /etc/systemd/system/petcam-web-cert.service <<'UNIT'
+[Unit]
+Description=Create a unique PetCam HTTPS certificate on first boot
+Before=petcam-web.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/petcam-create-web-cert
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
 cat > /etc/systemd/system/petcam-web.service <<'UNIT'
 [Unit]
 Description=PetCam lightweight camera management web interface
-After=network-online.target petcam-stream.service
+Requires=petcam-web-cert.service
+After=network-online.target petcam-stream.service petcam-web-cert.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=petcam
-Group=video
+Group=petcam
 SupplementaryGroups=video i2c
 ExecStart=/usr/bin/python3 /opt/petcam/current/lib/web_manager.py
 Restart=always
@@ -221,4 +259,5 @@ WantedBy=multi-user.target
 UNIT
 systemctl enable avahi-daemon.service
 systemctl enable petcam-stream.service
+systemctl enable petcam-web-cert.service
 systemctl enable petcam-web.service

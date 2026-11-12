@@ -17,6 +17,7 @@ REQUIRED_FILES = (
     "lib/camera.py",
     "lib/csi_stream.py",
     "lib/web_manager.py",
+    "lib/web_auth.py",
     "lib/start-stream.sh",
     "vendor/bin/ustreamer",
 )

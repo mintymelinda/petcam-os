@@ -161,6 +161,7 @@ class UpdateArchiveTests(unittest.TestCase):
             "lib/camera.py": b"# camera",
             "lib/csi_stream.py": b"# csi",
             "lib/web_manager.py": b"# web",
+            "lib/web_auth.py": b"# authentication",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"binary",
         }

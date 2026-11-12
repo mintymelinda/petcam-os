@@ -3,15 +3,27 @@
 import json
 import os
 import re
+import ssl
 import subprocess
+import threading
+import time
+import getpass
+import hmac
+import sys
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from web_auth import SESSION_TTL, get_session, invalidate_session, new_session, save_password, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
 STREAM_URL = "http://127.0.0.1:8081"
+TLS_CERT = Path("/etc/petcam/web-manager.crt")
+TLS_KEY = Path("/etc/petcam/web-manager.key")
+_login_attempts = {}
+_login_lock = threading.Lock()
 PAGE = r"""<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PetCam</title>
@@ -38,18 +50,20 @@ small,.muted{color:#aeb7c2}#message{min-height:1.5em;color:#b9d8ff}.row{display:
 <label for="mode">Capture mode</label><select id="mode"></select>
 <div class="row" style="margin-top:1rem"><button id="apply">Use selected camera and mode</button></div>
 <p class="muted">Only modes advertised by the camera are offered. Settings are saved across reboots. A camera change briefly restarts the stream.</p></section>
+<section><h2>Account security</h2><p class="muted">Change the password used to access this manager.</p><button id="change-password">Change password</button> <button id="logout">Sign out</button></section>
 <footer style="text-align:center;padding:1rem 0 2rem"><small>Enjoying PetCam? <a href="https://www.paypal.me/kimmynightmare" target="_blank" rel="noopener noreferrer" style="color:#b9d8ff">Support development with PayPal</a></small></footer>
 <script>
 const $=id=>document.getElementById(id);let inventory=[];
-const browserSourceUrl=window.location.origin+"/stream";
+const browserSourceUrl="http://"+window.location.hostname+":8080/stream";
 $("browser-source-url").textContent=browserSourceUrl;
 $("copy-browser-source").onclick=async()=>{const message=$("copy-message");try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(browserSourceUrl)}else{const field=document.createElement("textarea");field.value=browserSourceUrl;field.setAttribute("readonly","");field.style.position="fixed";field.style.opacity="0";document.body.append(field);field.select();const copied=document.execCommand("copy");field.remove();if(!copied)throw Error("Clipboard access is unavailable")}message.textContent="Browser source URL copied."}catch(e){message.textContent="Could not copy automatically. Select and copy the URL above."}};
-async function request(path,options){const r=await fetch(path,options);const d=await r.json();if(!r.ok)throw Error(d.error||r.statusText);return d}
+let csrfToken=null;let loginPromise=null;async function login(){if(loginPromise)return loginPromise;loginPromise=(async()=>{const password=window.prompt("Enter your PetCam manager password");if(password===null)throw Error("Sign-in cancelled");const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password})});const d=await r.json();if(!r.ok)throw Error(d.error||"Sign-in failed");csrfToken=d.csrf_token;return d})();try{return await loginPromise}finally{loginPromise=null}}async function request(path,options={}){const headers=new Headers(options.headers||{});if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);let r=await fetch(path,{...options,headers});if(r.status===401){await login();if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);r=await fetch(path,{...options,headers})}const d=await r.json();if(!r.ok)throw Error(d.error||r.statusText);return d}
 function modesFor(camera){return camera.kind==="usb"?camera.modes.filter(m=>["MJPG","MJPEG","JPEG","YUYV","YVYU","UYVY","YUV420","YVU420","RGB565","RGB24","GREY"].includes(m.format)):camera.modes}
 function fillModes(){const c=inventory[+$("camera").value];$("mode").replaceChildren();if(!c)return;for(const m of modesFor(c)){const fps=m.fps?.length?m.fps:[m.fps_range?.max||30];for(const f of fps){const o=document.createElement("option");o.value=JSON.stringify({format:m.format||"CSI",width:m.width,height:m.height,fps:f});o.textContent=`${m.width}×${m.height} · ${f} fps · ${m.format||"CSI"}`; $("mode").append(o)}}}
 async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{$("message").textContent=`${inventory.length} camera(s) found. Select one to preview and configure.`;fillModes()}}catch(e){$("message").textContent=e.message}}
 $("refresh").onclick=refresh;$("camera").onchange=fillModes;
 $("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,device:c.device,camera:c.camera,mode:JSON.parse(m)})});$("message").textContent="Camera settings saved. Stream restarted.";setTimeout(refresh,1200)}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
+$("logout").onclick=async()=>{try{await request("/api/logout",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});csrfToken=null;location.reload()}catch(e){alert(e.message)}};$("change-password").onclick=async()=>{const current=prompt("Current password");if(current===null)return;const next=prompt("New password (at least 12 characters)");if(next===null)return;try{const d=await request("/api/password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({current_password:current,new_password:next})});csrfToken=d.csrf_token;alert("Password changed. Other sessions were signed out.")}catch(e){alert(e.message)}};
 refresh();
 const autoCheck=$("auto-check");autoCheck.checked=localStorage.getItem("petcam-auto-update-check")==="true";
 autoCheck.onchange=()=>localStorage.setItem("petcam-auto-update-check",String(autoCheck.checked));
@@ -171,67 +185,164 @@ def start_update():
         raise RuntimeError(result.stderr.strip() or "Unable to start update service")
 
 
+def _origin_ok(handler):
+    origin = urlparse(handler.headers.get("Origin", ""))
+    return origin.scheme == "https" and origin.netloc.lower() == handler.headers.get("Host", "").lower()
+
+
+def _cookie(handler):
+    for part in handler.headers.get("Cookie", "").split(";"):
+        key, sep, value = part.strip().partition("=")
+        if sep and key == "petcam_session":
+            return value
+    return ""
+
+
+def _body(handler, maximum=8192):
+    try:
+        length = int(handler.headers.get("Content-Length", "0"))
+    except ValueError:
+        raise ValueError("Invalid request size")
+    if not 1 <= length <= maximum:
+        raise ValueError("Invalid request size")
+    return json.loads(handler.rfile.read(length))
+
+
 class Handler(BaseHTTPRequestHandler):
-    def send_json(self, status, payload):
+    def send_json(self, status, payload, headers=None):
         body = json.dumps(payload).encode()
-        self.send_response(status); self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body))); self.send_header("Cache-Control", "no-store")
-        self.end_headers(); self.wfile.write(body)
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _session(self):
+        return get_session(_cookie(self))
+
+    def _require_auth(self):
+        if self._session():
+            return True
+        self.send_json(401, {"error": "Authentication required"})
+        return False
+
+    def _require_csrf(self):
+        session = self._session()
+        supplied = self.headers.get("X-PetCam-CSRF", "")
+        if not session or not _origin_ok(self) or not hmac.compare_digest(session["csrf"], supplied):
+            self.send_json(403, {"error": "Request origin or CSRF token is not valid"})
+            return False
+        return True
 
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/":
             body = PAGE.encode()
-            self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body))); self.send_header("Cache-Control", "no-store")
-            self.end_headers(); self.wfile.write(body); return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if not self._require_auth():
+            return
         if path == "/api/update/check":
-            try: self.send_json(200, update_check())
-            except Exception as error: self.send_json(503, {"error": str(error)})
+            try:
+                self.send_json(200, update_check())
+            except Exception as error:
+                self.send_json(503, {"error": str(error)})
             return
         if path == "/api/update/status":
-            try: self.send_json(200, update_status())
-            except Exception as error: self.send_json(503, {"error": str(error)})
+            try:
+                self.send_json(200, update_status())
+            except Exception as error:
+                self.send_json(503, {"error": str(error)})
             return
         if path == "/api/cameras":
-            try: self.send_json(200, {"cameras": camera_inventory()})
-            except Exception as error: self.send_json(500, {"error": str(error)})
+            try:
+                self.send_json(200, {"cameras": camera_inventory()})
+            except Exception as error:
+                self.send_json(500, {"error": str(error)})
             return
         if path == "/stream":
             try:
                 with urllib.request.urlopen(STREAM_URL + "/stream", timeout=5) as upstream:
                     self.send_response(upstream.status)
                     self.send_header("Content-Type", upstream.headers.get("Content-Type", "multipart/x-mixed-replace"))
-                    self.send_header("Cache-Control", "no-store"); self.end_headers()
-                    while chunk := upstream.read(65536): self.wfile.write(chunk); self.wfile.flush()
-            except (OSError, urllib.error.URLError, BrokenPipeError, TimeoutError): pass
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    while chunk := upstream.read(65536):
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+            except (OSError, urllib.error.URLError, BrokenPipeError, TimeoutError):
+                pass
             return
         self.send_error(404)
 
     def do_POST(self):
-        if urlparse(self.path).path == "/api/update/install":
-            origin = self.headers.get("Origin", "")
-            if not origin or urlparse(origin).netloc != self.headers.get("Host"):
-                self.send_json(403, {"error": "Request origin is not allowed"}); return
+        path = urlparse(self.path).path
+        if path == "/api/login":
+            if not _origin_ok(self):
+                self.send_json(403, {"error": "Request origin is not allowed"})
+                return
             try:
-                length = int(self.headers.get("Content-Length", "0"))
-                if length > 1024: raise ValueError("Invalid request size")
+                data = _body(self, 4096)
+                peer = self.client_address[0]
+                now = time.time()
+                with _login_lock:
+                    attempts = [stamp for stamp in _login_attempts.get(peer, []) if stamp > now - 300]
+                    if len(attempts) >= 5:
+                        self.send_json(429, {"error": "Too many sign-in attempts. Wait five minutes and retry."})
+                        return
+                    attempts.append(now)
+                    _login_attempts[peer] = attempts
+                if not verify_password(data.get("password", "")):
+                    self.send_json(401, {"error": "Invalid password"})
+                    return
+                with _login_lock:
+                    _login_attempts.pop(peer, None)
+                token, csrf = new_session()
+                self.send_json(200, {"ok": True, "csrf_token": csrf}, {
+                    "Set-Cookie": f"petcam_session={token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={SESSION_TTL}"
+                })
+            except Exception as error:
+                self.send_json(400, {"error": str(error)})
+            return
+        if not self._require_auth():
+            return
+        if not self._require_csrf():
+            return
+        try:
+            data = _body(self)
+            if path == "/api/password":
+                if not verify_password(data.get("current_password", "")):
+                    self.send_json(403, {"error": "Current password is incorrect"})
+                    return
+                save_password(data.get("new_password", ""))
+                token, csrf = new_session()
+                self.send_json(200, {"ok": True, "csrf_token": csrf}, {
+                    "Set-Cookie": f"petcam_session={token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={SESSION_TTL}"
+                })
+                return
+            if path == "/api/logout":
+                invalidate_session(_cookie(self))
+                self.send_json(200, {"ok": True}, {
+                    "Set-Cookie": "petcam_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0"
+                })
+                return
+            if path == "/api/update/install":
                 start_update()
                 self.send_json(202, {"ok": True, "status": "started"})
-            except Exception as error: self.send_json(503, {"error": str(error)})
-            return
-        if urlparse(self.path).path != "/api/select":
-            self.send_error(404); return
-        origin = self.headers.get("Origin", "")
-        host = self.headers.get("Host", "").split(":")[0]
-        if not origin or urlparse(origin).netloc != self.headers.get("Host"):
-            self.send_json(403, {"error": "Request origin is not allowed"}); return
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-            if not 1 <= length <= 8192: raise ValueError("Invalid request size")
-            data = json.loads(self.rfile.read(length))
-            save_selection(data)
-            self.send_json(200, {"ok": True})
+                return
+            if path == "/api/select":
+                save_selection(data)
+                self.send_json(200, {"ok": True})
+                return
+            self.send_error(404)
         except Exception as error:
             self.send_json(400, {"error": str(error)})
 
@@ -239,8 +350,64 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+class StreamHandler(BaseHTTPRequestHandler):
+    """Unauthenticated HTTP endpoint reserved for OBS stream clients."""
+
+    def do_GET(self):
+        if urlparse(self.path).path != "/stream":
+            self.send_error(404)
+            return
+        try:
+            with urllib.request.urlopen(STREAM_URL + "/stream", timeout=5) as upstream:
+                self.send_response(upstream.status)
+                self.send_header("Content-Type", upstream.headers.get("Content-Type", "multipart/x-mixed-replace"))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                while chunk := upstream.read(65536):
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+        except (OSError, urllib.error.URLError, BrokenPipeError, TimeoutError):
+            pass
+
+    def log_message(self, fmt, *args):
+        pass
+
+
 def main():
-    ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+    if len(sys.argv) == 2 and sys.argv[1] == "--set-password":
+        if os.geteuid() != 0:
+            raise SystemExit("Run with sudo: petcam-admin")
+        first = getpass.getpass("New PetCam manager password: ")
+        second = getpass.getpass("Confirm password: ")
+        if first != second:
+            raise SystemExit("Passwords did not match.")
+        save_password(first)
+        print("PetCam manager password saved; existing sessions were invalidated.")
+        return
+    if not TLS_CERT.is_file() or not TLS_KEY.is_file():
+        raise SystemExit("PetCam HTTPS certificate is missing.")
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_cert_chain(TLS_CERT, TLS_KEY)
+    manager = ThreadingHTTPServer(("0.0.0.0", 8443), Handler)
+    manager.socket = context.wrap_socket(manager.socket, server_side=True)
+    stream = ThreadingHTTPServer(("0.0.0.0", 8080), StreamHandler)
+    threads = [
+        threading.Thread(target=manager.serve_forever, daemon=True),
+        threading.Thread(target=stream.serve_forever, daemon=True),
+    ]
+    for thread in threads:
+        thread.start()
+    try:
+        while any(thread.is_alive() for thread in threads):
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        manager.shutdown()
+        stream.shutdown()
+        manager.server_close()
+        stream.server_close()
 
 
 if __name__ == "__main__":

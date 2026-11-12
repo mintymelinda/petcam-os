@@ -40,7 +40,7 @@ Raspberry Pi must approve the catalogue submission before PetCam appears in Imag
 
 Once PetCam is listed, users select it from Imager's normal OS list and configure hostname `petcam`, Wi-Fi, WLAN country, an administrator account, and optional SSH in the standard Customisation step. WLAN country is not baked into the image.
 
-The camera stream has no authentication and is intended only for a trusted LAN.
+The management UI is served over HTTPS on port 8443 and requires a password configured from SSH or a local terminal using `sudo petcam-admin`. Each device generates its own self-signed certificate. Port 8080 is a separate unauthenticated stream-only endpoint for OBS; it exposes only `/stream`, not management or update controls. Keep both ports on a trusted LAN and do not port-forward them to the internet.
 
 ## Camera discovery and configuration
 
@@ -84,7 +84,7 @@ sudo nano /etc/petcam/petcam.conf
 sudo systemctl restart petcam-stream
 ~~~
 
-The camera backend listens on loopback port 8081. The PetCam web manager proxies it through the public LAN endpoint on port 8080.
+The camera backend listens on loopback port 8081. The HTTPS manager on port 8443 proxies the preview after authentication; a separate HTTP endpoint on port 8080 exposes only the MJPEG stream for OBS.
 
 Supported settings:
 
@@ -95,7 +95,7 @@ Supported settings:
 - RESOLUTION: `auto` or an advertised mode for the selected backend
 - FPS: `auto` or an advertised frame rate for the selected backend
 - CSI_QUALITY: CSI MJPEG quality from 1 to 100, default 70
-- PORT: internal camera-backend HTTP port, default 8081 (loopback only); the web manager remains on public LAN port 8080
+- PORT: internal camera-backend HTTP port, default 8081 (loopback only); manager HTTPS is on 8443 and OBS stream-only HTTP is on 8080
 
 For USB, automatic FPS uses µStreamer's no-application-cap request (`--desired-fps=0`). For CSI, automatic selection chooses an advertised sensor mode within the model's starting pixel-rate budget, or the least demanding advertised mode with a warning if none fit. Unsupported explicit modes fail clearly rather than silently falling back. If a USB camera has no native MJPEG mode, PetCam may select a supported raw V4L2 mode and use CPU JPEG encoding, with a performance warning. CSI is encoded to MJPEG by `rpicam-vid`; this encoder workload can be significant on older Pi boards, so verify sustained capture on the target hardware and reduce resolution, FPS, or `CSI_QUALITY` if needed.
 
@@ -123,6 +123,6 @@ Use the network stream URL:
 http://petcam.local:8080/stream
 ~~~
 
-If OBS cannot consume the MJPEG endpoint directly, add it through a VLC Video Source or use the µStreamer page at http://petcam.local:8080/ in a Browser Source. If mDNS does not resolve, substitute the Pi's DHCP address.
+If OBS cannot consume the MJPEG endpoint directly, add it through a VLC Video Source. The authenticated management UI is separate from the OBS stream endpoint. If mDNS does not resolve, substitute the Pi's DHCP address.
 
 Do not expose port 8080 to the public internet.
