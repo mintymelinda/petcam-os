@@ -437,6 +437,14 @@ def main():
             http_status = response.status
     except Exception:
         http_status = None
+    stream_state = None
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/state", timeout=2) as response:
+            payload = json.loads(response.read().decode())
+            if payload.get("ok") and isinstance(payload.get("result"), dict):
+                stream_state = payload["result"]
+    except Exception:
+        pass
     csi_status = None
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/status", timeout=2) as response:
@@ -504,9 +512,9 @@ def main():
         "csi_cameras_detected": len(discover_csi_cameras()),
         "active_backend": backend_values[-1] if backend_values else ("csi" if csi_start else ("usb" if start_config else None)),
         "active_camera_device": devices_in_log[-1] if devices_in_log else (start_config[-1][0] if start_config else (f"CSI camera {csi_start[-1][0]}" if csi_start else None)),
-        "latest_captured_fps": int(fps_values[-1]) if fps_values else (csi_status.get("captured_fps_average") if csi_status else None),
-        "active_resolution": resolutions[-1] if resolutions else (start_config[-1][1] if start_config else (csi_start[-1][1] if csi_start else None)),
-        "active_capture_format": formats[-1] if formats else ("MJPEG" if csi_start else (start_config[-1][2] if start_config else None)),
+        "latest_captured_fps": (stream_state.get("source", {}).get("captured_fps") if stream_state else (int(fps_values[-1]) if fps_values else (csi_status.get("captured_fps_average") if csi_status else None))),
+        "active_resolution": (str(stream_state["source"]["resolution"]["width"]) + "x" + str(stream_state["source"]["resolution"]["height"]) if stream_state and stream_state.get("source", {}).get("resolution") else (resolutions[-1] if resolutions else (start_config[-1][1] if start_config else (csi_start[-1][1] if csi_start else None)))),
+        "active_capture_format": ("MJPEG" if stream_state and stream_state.get("encoder", {}).get("type") == "HW" else (formats[-1] if formats else ("MJPEG" if csi_start else (start_config[-1][2] if start_config else None)))),
         "csi_capture": csi_status,
         "network_transmitted_bytes_since_boot": tx_after,
         "network_interface_tx_mbps_sampled": round(max(0, tx_after - tx_before) * 8 / 1_000_000, 3),
