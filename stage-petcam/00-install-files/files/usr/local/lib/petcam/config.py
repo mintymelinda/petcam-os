@@ -23,6 +23,8 @@ LAST_GOOD_PATH = Path(os.environ.get("PETCAM_LAST_GOOD_PATH", str(CONFIG_PATH.wi
 DEFAULTS = {
     "SOURCE": "auto",
     "DEVICE": "",
+    "USB_PHYSICAL_PATH": "",
+    "CSI_DEVICE_PATH": "",
     "CAMERA": "auto",
     "FORMAT": "auto",
     "RESOLUTION": "auto",
@@ -35,6 +37,8 @@ FORMATS = {
     "YUV420", "YVU420", "RGB565", "RGB24", "GREY",
 }
 DEVICE_PATTERN = re.compile(r"^/dev/(?:video[0-9]+|v4l/by-id/[A-Za-z0-9._:+-]+)$")
+USB_PHYSICAL_PATH_PATTERN = re.compile(r"^/sys/devices/[A-Za-z0-9._:@/+\-]+$")
+CSI_DEVICE_PATH_PATTERN = re.compile(r"^/base/[A-Za-z0-9._:@/+\-]+$")
 RESOLUTION_PATTERN = re.compile(r"^([0-9]+)x([0-9]+)$")
 NUMBER_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+)?$")
 
@@ -59,12 +63,20 @@ def validate_config(values: dict[str, Any], check_hardware: bool = False) -> dic
         raise ConfigError("SOURCE must be auto, usb, or csi.")
     if config["DEVICE"] and not DEVICE_PATTERN.fullmatch(config["DEVICE"]):
         raise ConfigError("DEVICE must be empty, /dev/videoN, or a /dev/v4l/by-id path.")
+    if config["USB_PHYSICAL_PATH"] and not USB_PHYSICAL_PATH_PATTERN.fullmatch(config["USB_PHYSICAL_PATH"]):
+        raise ConfigError("USB_PHYSICAL_PATH must be empty or a /sys/devices physical USB path.")
+    if config["CSI_DEVICE_PATH"] and not CSI_DEVICE_PATH_PATTERN.fullmatch(config["CSI_DEVICE_PATH"]):
+        raise ConfigError("CSI_DEVICE_PATH must be empty or a /base device-tree path.")
     if config["CAMERA"] != "auto" and not config["CAMERA"].isdigit():
         raise ConfigError("CAMERA must be auto or a non-negative CSI camera index.")
     if config["SOURCE"] == "usb" and config["CAMERA"] != "auto":
         raise ConfigError("CAMERA must be auto when SOURCE=usb.")
-    if config["SOURCE"] == "csi" and config["DEVICE"]:
-        raise ConfigError("DEVICE must be empty when SOURCE=csi.")
+    if config["SOURCE"] == "csi" and (config["DEVICE"] or config["USB_PHYSICAL_PATH"]):
+        raise ConfigError("USB device settings must be empty when SOURCE=csi.")
+    if config["SOURCE"] == "usb" and config["CSI_DEVICE_PATH"]:
+        raise ConfigError("CSI_DEVICE_PATH must be empty when SOURCE=usb.")
+    if config["SOURCE"] == "auto" and (config["USB_PHYSICAL_PATH"] or config["CSI_DEVICE_PATH"]):
+        raise ConfigError("A physical camera path requires SOURCE=usb or SOURCE=csi.")
 
     config["FORMAT"] = "auto" if config["FORMAT"].lower() == "auto" else config["FORMAT"].upper()
     if config["FORMAT"] != "auto" and config["FORMAT"] not in FORMATS:
@@ -101,7 +113,22 @@ def validate_config(values: dict[str, Any], check_hardware: bool = False) -> dic
     if check_hardware:
         if config["DEVICE"] and not Path(config["DEVICE"]).exists():
             raise ConfigError(f"Configured camera device is unavailable: {config['DEVICE']}")
-        if config["SOURCE"] in {"auto", "csi"} and config["CAMERA"] != "auto":
+        if config["USB_PHYSICAL_PATH"]:
+            try:
+                result = subprocess.run(
+                    ["/usr/local/bin/petcam-camera", "discover"],
+                    capture_output=True, text=True, timeout=20, check=False,
+                )
+                if result.returncode:
+                    raise ConfigError(result.stderr.strip() or "Unable to discover USB cameras.")
+                devices = json.loads(result.stdout).get("usb_devices", [])
+                if not any(device.get("physical_path") == config["USB_PHYSICAL_PATH"] for device in devices):
+                    raise ConfigError("Configured USB physical camera path is not available.")
+            except (OSError, subprocess.TimeoutExpired, ValueError, TypeError, AttributeError) as error:
+                if isinstance(error, ConfigError):
+                    raise
+                raise ConfigError(f"Unable to verify configured USB camera: {error}") from error
+        if config["SOURCE"] == "csi" and (config["CSI_DEVICE_PATH"] or config["CAMERA"] != "auto"):
             try:
                 result = subprocess.run(
                     ["/usr/local/bin/petcam-camera", "discover-csi"],
@@ -110,7 +137,11 @@ def validate_config(values: dict[str, Any], check_hardware: bool = False) -> dic
                 if result.returncode:
                     raise ConfigError(result.stderr.strip() or "Unable to discover CSI cameras.")
                 cameras = json.loads(result.stdout).get("csi_cameras", [])
-                if not any(str(camera.get("index")) == config["CAMERA"] for camera in cameras):
+                if config["CSI_DEVICE_PATH"]:
+                    available = any(camera.get("device_path") == config["CSI_DEVICE_PATH"] for camera in cameras)
+                    if not available:
+                        raise ConfigError("Configured CSI physical device path is not available.")
+                elif not any(str(camera.get("index")) == config["CAMERA"] for camera in cameras):
                     raise ConfigError(f"Configured CSI camera index {config['CAMERA']} is not available.")
             except (OSError, subprocess.TimeoutExpired, ValueError, TypeError, AttributeError) as error:
                 if isinstance(error, ConfigError):
