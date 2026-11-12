@@ -151,6 +151,12 @@ class TransactionalApplyTests(unittest.TestCase):
                 MODULE.fcntl.flock(lock_file.fileno(), MODULE.fcntl.LOCK_UN)
         self.assertFalse(MODULE.configuration_change_in_progress(self.config))
 
+    def test_config_transaction_guard_holds_exclusive_lock_for_scope(self):
+        with MODULE.config_transaction_guard(self.config) as acquired:
+            self.assertTrue(acquired)
+            self.assertTrue(MODULE.configuration_change_in_progress(self.config))
+        self.assertFalse(MODULE.configuration_change_in_progress(self.config))
+
     def test_successful_apply_commits_and_updates_last_known_good(self):
         restart = mock.Mock()
         ready = mock.Mock(return_value=True)
