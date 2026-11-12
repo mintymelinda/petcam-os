@@ -14,7 +14,7 @@ class WebManagerTests(unittest.TestCase):
     def test_management_page_is_dependency_free_and_has_camera_controls(self):
         self.assertIn("Refresh cameras", MODULE.PAGE)
         self.assertIn("Live preview", MODULE.PAGE)
-        self.assertIn("Use selected camera and mode", MODULE.PAGE)
+        self.assertIn("Apply selected camera and mode", MODULE.PAGE)
         self.assertIn("https://www.paypal.me/kimmynightmare", MODULE.PAGE)
         self.assertIn('rel="noopener noreferrer"', MODULE.PAGE)
         self.assertIn("/api/cameras", MODULE.PAGE)
