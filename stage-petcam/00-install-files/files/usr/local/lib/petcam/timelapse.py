@@ -110,7 +110,9 @@ def in_schedule(now, start, end):
 def jpeg_frames(response, chunk_size=4096):
     buffer = bytearray()
     while True:
-        reader = getattr(response, "read1", response.read)
+        reader = getattr(response, "read1", None)
+        if reader is None:
+            reader = response.read
         chunk = reader(chunk_size)
         if not chunk:
             return
