@@ -28,11 +28,11 @@ The resulting image is written to pi-gen/deploy/. PetCam's application is instal
 
 ## Raspberry Pi Imager 2 customisation
 
-Imager 2 deliberately disables customisation for an arbitrary local image because it cannot infer the image's first-boot mechanism. The build artifact includes `create_imager_manifest.py`. After extracting the artifact, double-click `prepare-imager.bat` on Windows or run `./prepare-imager.sh` on Linux. The helper finds the image, generates the local manifest with verified checksums, and opens it in Raspberry Pi Imager 2.
+Imager 2 deliberately disables customisation for an arbitrary local image because it cannot infer the image's first-boot mechanism. The build artifact includes `create_imager_manifest.py`. After extracting the artifact, double-click `prepare-imager.bat` on Windows or run `./prepare-imager.sh` on Linux. These packaged launchers find the image, generate the manifest with verified checksums and a proper local `file://` image URL, then start Raspberry Pi Imager 2 using `--repo` so the PetCam OS entry is loaded automatically.
 
 The helper creates `petcam-os.rpi-imager-manifest` beside the image. It calculates the compressed download size and SHA-256, decompresses the image as a stream to calculate the extracted size and SHA-256, and declares `init_format: cloudinit-rpi` for the Raspberry Pi OS cloud-init first-boot integration. It includes the supported Raspberry Pi device tags. No credentials or Wi-Fi details are written into the image or manifest.
 
-Double-click `petcam-os.rpi-imager-manifest` to open it in Imager 2. Alternatively, use App Options → Content Repository → Edit → Use custom file, select the manifest, and Apply & Restart. Choose PetCam OS from the OS list. The Customisation step should now be available.
+If the launcher cannot find Imager, install Imager 2 and run the launcher again. As a manual fallback, use App Options → Content Repository → Edit → Use custom file, select `petcam-os.rpi-imager-manifest`, and Apply & Restart. Choose PetCam OS from the OS list. The Customisation step should then be available.
 
 Configure hostname `petcam`, Wi-Fi credentials, WLAN country, an administrator account, and optional SSH there. Wi-Fi country is deliberately not baked into the image. To change it later, run sudo raspi-config → Localisation Options → WLAN Country.
 
