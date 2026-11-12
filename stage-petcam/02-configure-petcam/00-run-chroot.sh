@@ -28,7 +28,11 @@ cat > /usr/local/bin/petcam-admin <<'SCRIPT'
 #!/bin/sh
 exec python3 /opt/petcam/current/lib/web_manager.py --set-password
 SCRIPT
-chmod 0755 /usr/local/bin/petcam-camera /usr/local/bin/petcam-status /usr/local/bin/petcam-admin
+cat > /usr/local/bin/petcam-health <<'SCRIPT'
+#!/bin/sh
+exec python3 /opt/petcam/current/lib/health_monitor.py "$@"
+SCRIPT
+chmod 0755 /usr/local/bin/petcam-camera /usr/local/bin/petcam-status /usr/local/bin/petcam-admin /usr/local/bin/petcam-health
 
 install -d -m 0755 "/opt/petcam/releases/$APP_VERSION/lib" /etc/petcam
 
@@ -260,4 +264,39 @@ UNIT
 systemctl enable avahi-daemon.service
 systemctl enable petcam-stream.service
 systemctl enable petcam-web-cert.service
+
+cat > /etc/systemd/system/petcam-health.service <<'UNIT'
+[Unit]
+Description=Check PetCam capture and public stream health
+After=network-online.target petcam-stream.service petcam-web.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/petcam-health
+TimeoutStartSec=90
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/petcam
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UNIT
+
+cat > /etc/systemd/system/petcam-health.timer <<'UNIT'
+[Unit]
+Description=Periodically check PetCam stream health
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=30s
+AccuracySec=5s
+Persistent=true
+Unit=petcam-health.service
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+systemctl enable petcam-health.timer
 systemctl enable petcam-web.service
