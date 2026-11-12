@@ -258,6 +258,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/health":
             try:
                 health = json.loads(HEALTH_FILE.read_text(encoding="utf-8"))
+                if not isinstance(health, dict):
+                    raise ValueError("Invalid health status document")
                 self.send_json(200, health)
             except (OSError, ValueError):
                 self.send_json(200, {"state": "not_checked", "reason": "The periodic health monitor has not reported yet.", "recovery_count": 0})
