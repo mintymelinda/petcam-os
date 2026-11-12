@@ -16,7 +16,11 @@ SPEC.loader.exec_module(MODULE)
 
 class TimelapseTests(unittest.TestCase):
     def test_defaults_are_disabled_and_valid(self):
-        self.assertFalse(MODULE.validate_config({})["enabled"])
+        config = MODULE.validate_config({})
+        self.assertFalse(config["enabled"])
+        self.assertEqual(config["jpeg_quality"], 0)
+        frame = b"\xff\xd8source\xff\xd9"
+        self.assertEqual(MODULE.process_frame(frame, config), frame)
 
     def test_rejects_invalid_intervals_and_schedule(self):
         with self.assertRaises(ValueError):

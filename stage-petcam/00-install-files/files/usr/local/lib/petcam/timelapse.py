@@ -26,7 +26,7 @@ DEFAULTS = {
     "min_free_mb": 256,
     "storage_path": "/var/lib/petcam/timelapse/frames",
     "max_width": 0,
-    "jpeg_quality": 85,
+    "jpeg_quality": 0,
 }
 STREAM_URL = "http://127.0.0.1:8080/stream"
 _running = True
@@ -180,8 +180,14 @@ def capture_frame(frame, directory=None, now=None):
 def write_state(state, path=STATE):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        previous = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        previous = {}
+    preserved = {key: previous.get(key) for key in ("last_capture_at", "last_file")}
+    preserved.update(state)
     temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    temporary.write_text(json.dumps(preserved, indent=2) + "\n", encoding="utf-8")
     os.replace(temporary, path)
 
 
@@ -239,7 +245,7 @@ def run():
         try:
             config = load_config()
             if not config["enabled"]:
-                write_state({"state": "disabled", "last_capture_at": None, "last_error": None})
+                write_state({"state": "disabled", "last_error": None})
                 time.sleep(2)
                 continue
             now = datetime.now().astimezone()
@@ -264,7 +270,7 @@ def run():
                 prune_frames(config, directory)
                 last_error = None
                 write_state({
-                    "state": "capturing", "last_capture_at": datetime.now(timezone.utc).isoformat(),
+                    "state": "running", "last_capture_at": datetime.now(timezone.utc).isoformat(),
                     "last_file": path.name, "last_error": None, **storage_status(),
                 })
             except (OSError, urllib.error.URLError, StopIteration, ValueError) as error:
