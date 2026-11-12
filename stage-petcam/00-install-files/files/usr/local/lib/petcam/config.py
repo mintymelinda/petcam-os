@@ -204,22 +204,26 @@ def apply_config(
 ) -> dict[str, str]:
     path = Path(path)
     last_good_path = Path(last_good_path)
-    previous_raw = path.read_bytes() if path.exists() else None
-    previous = parse_config(path)
+    active_raw = path.read_bytes() if path.exists() else None
+    try:
+        previous = parse_config(path)
+        previous_content = active_raw if active_raw is not None else serialize_config(previous)
+    except ConfigError:
+        try:
+            previous = parse_config(last_good_path)
+            previous_content = last_good_path.read_bytes()
+        except ConfigError:
+            previous = validate_config(DEFAULTS)
+            previous_content = serialize_config(previous)
     candidate = validate_config({**previous, **updates}, check_hardware=True)
-    previous_content = previous_raw if previous_raw is not None else serialize_config(previous)
 
-    _atomic_write(last_good_path, previous_content)
     _atomic_write(path, serialize_config(candidate))
     try:
         restart()
         if not ready(int(candidate["PORT"])):
             raise ConfigApplyError("The new camera settings did not produce an MJPEG frame before the startup timeout.")
     except Exception as apply_error:
-        if previous_raw is None:
-            path.unlink(missing_ok=True)
-        else:
-            _atomic_write(path, previous_raw)
+        _atomic_write(path, previous_content)
         try:
             restart()
             restored = ready(int(previous["PORT"]))
