@@ -36,6 +36,7 @@ cat > "/opt/petcam/releases/$APP_VERSION/lib/start-stream.sh" <<'SCRIPT'
 #!/bin/bash
 set -euo pipefail
 CONFIG=/etc/petcam/petcam.conf
+python3 /opt/petcam/current/lib/config.py validate --check-hardware
 if [[ -r "$CONFIG" ]]; then
     # shellcheck disable=SC1090
     source "$CONFIG"
