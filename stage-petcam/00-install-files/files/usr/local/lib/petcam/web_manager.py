@@ -116,6 +116,8 @@ def save_selection(data):
     if not (1 <= width <= 10000 and 1 <= height <= 10000 and isinstance(fps, (int, float)) and 0 < fps <= 240):
         raise ValueError("Invalid capture mode")
     if kind == "usb":
+        if not float(fps).is_integer():
+            raise ValueError("USB camera FPS must be a whole number")
         device = data.get("device", "")
         if not re.fullmatch(r"/dev/(video[0-9]+|v4l/by-id/[A-Za-z0-9._:+-]+)", device):
             raise ValueError("Invalid USB device path")
