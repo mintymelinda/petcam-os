@@ -27,6 +27,8 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn('"$RELEASE_DIR/manifest.json"', script)
         self.assertIn('"$RELEASE_DIR/lib/camera_profiles.py"', script)
         self.assertIn('"$RELEASE_DIR/lib/home_assistant.py"', script)
+        self.assertIn('"$RELEASE_DIR/systemd/petcam-home-assistant.service"', script)
+        self.assertIn('"$RELEASE_DIR/etc/petcam/home-assistant.conf"', script)
         self.assertIn('"architecture":"armhf"', script)
 
     def test_runtime_uses_stable_wrappers_and_active_release(self):
@@ -72,12 +74,15 @@ class ImageLayoutTests(unittest.TestCase):
 
     def test_home_assistant_mqtt_is_optional_and_disabled_by_default(self):
         script = CONFIGURE.read_text()
-        self.assertIn("MQTT_ENABLED=false", script)
+        install_script = INSTALL.read_text()
+        service = (STAGE / "00-install-files/files/etc/systemd/system/petcam-home-assistant.service").read_text()
+        config = (STAGE / "00-install-files/files/etc/petcam/home-assistant.conf").read_text()
+        self.assertIn("MQTT_ENABLED=false", config)
         self.assertIn("chmod 0640 /etc/petcam/home-assistant.conf", script)
-        self.assertIn("petcam-home-assistant.service", script)
-        self.assertIn("/opt/petcam/current/lib/home_assistant.py", script)
+        self.assertIn("petcam-home-assistant.service", install_script)
+        self.assertIn("/opt/petcam/current/lib/home_assistant.py", service)
         self.assertNotIn("systemctl enable petcam-home-assistant.service", script)
-        self.assertIn("RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", script)
+        self.assertIn("RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", service)
 
     def test_release_manifest_schema_is_versioned(self):
         script = INSTALL.read_text()
