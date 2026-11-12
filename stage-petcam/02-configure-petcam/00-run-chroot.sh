@@ -177,6 +177,9 @@ chmod 1770 /etc/petcam
 chown petcam:petcam /etc/petcam/petcam.conf
 chmod 0640 /etc/petcam/petcam.conf
 
+chown root:petcam /etc/petcam/home-assistant.conf
+chmod 0640 /etc/petcam/home-assistant.conf
+
 cat > /etc/petcam/update.conf <<'UPDATE'
 # Stable GitHub Releases endpoint; independent of the Raspberry Pi Imager catalogue.
 MANIFEST_URL=https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json

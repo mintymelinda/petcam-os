@@ -18,6 +18,8 @@ from updater import (
     parse_manifest,
     safe_extract,
     validate_release,
+    install_runtime_integration_files,
+    restart_services,
     verify_signature,
     version_tuple,
 )
@@ -154,6 +156,55 @@ class UpdateArchiveTests(unittest.TestCase):
             with self.assertRaises(UpdateError):
                 safe_extract(stream.getvalue(), Path(temp))
 
+    def test_installs_signed_home_assistant_unit_and_preserves_existing_settings(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            release = root / "release"
+            etc_root = root / "etc"
+            (release / "systemd").mkdir(parents=True)
+            (release / "etc/petcam").mkdir(parents=True)
+            (release / "systemd/petcam-home-assistant.service").write_text("[Service]\nExecStart=petcam\n")
+            (release / "etc/petcam/home-assistant.conf").write_text("MQTT_ENABLED=false\n")
+            config_path = etc_root / "petcam/home-assistant.conf"
+            config_path.parent.mkdir(parents=True)
+            config_path.write_text("MQTT_ENABLED=true\nMQTT_PASSWORD=preserve-me\n")
+            with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=1000)), \
+                    mock.patch("updater.os.geteuid", return_value=1000):
+                install_runtime_integration_files(release, etc_root)
+            self.assertEqual(
+                (etc_root / "systemd/system/petcam-home-assistant.service").read_text(),
+                "[Service]\nExecStart=petcam\n",
+            )
+            self.assertEqual(config_path.read_text(), "MQTT_ENABLED=true\nMQTT_PASSWORD=preserve-me\n")
+            self.assertEqual(config_path.stat().st_mode & 0o777, 0o640)
+
+    def test_installs_default_home_assistant_config_when_missing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            release = root / "release"
+            (release / "systemd").mkdir(parents=True)
+            (release / "etc/petcam").mkdir(parents=True)
+            (release / "systemd/petcam-home-assistant.service").write_text("[Service]\n")
+            (release / "etc/petcam/home-assistant.conf").write_text("MQTT_ENABLED=false\n")
+            with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=1000)), \
+                    mock.patch("updater.os.geteuid", return_value=1000):
+                install_runtime_integration_files(release, root / "etc")
+            config = root / "etc/petcam/home-assistant.conf"
+            self.assertEqual(config.read_text(), "MQTT_ENABLED=false\n")
+            self.assertEqual(config.stat().st_mode & 0o777, 0o640)
+
+    def test_restart_services_restarts_optional_mqtt_only_when_active(self):
+        results = [
+            mock.Mock(returncode=0, stderr=""),
+            mock.Mock(returncode=0, stderr=""),
+            mock.Mock(returncode=0),
+            mock.Mock(returncode=0, stderr=""),
+        ]
+        with mock.patch("updater.subprocess.run", side_effect=results) as run:
+            self.assertEqual(restart_services(), "")
+        self.assertEqual(run.call_count, 4)
+        self.assertEqual(run.call_args_list[-1].args[0], ["systemctl", "restart", "petcam-home-assistant.service"])
+
     def test_validates_required_release_files_and_embedded_version(self):
         files = {
             "VERSION": b"1.2.3\n",
@@ -166,6 +217,9 @@ class UpdateArchiveTests(unittest.TestCase):
             "lib/config.py": b"# config",
             "lib/network_diagnostics.py": b"# network diagnostics",
             "lib/camera_profiles.py": b"# camera profiles",
+            "lib/home_assistant.py": b"# Home Assistant MQTT",
+            "systemd/petcam-home-assistant.service": b"[Service]\nExecStart=/usr/bin/python3 /opt/petcam/current/lib/home_assistant.py\n",
+            "etc/petcam/home-assistant.conf": b"MQTT_ENABLED=false\n",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"binary",
         }

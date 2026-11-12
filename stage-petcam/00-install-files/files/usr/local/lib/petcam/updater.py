@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import grp
 import hashlib
 import json
 import os
@@ -42,6 +43,9 @@ REQUIRED_FILES = (
     "lib/config.py",
     "lib/network_diagnostics.py",
     "lib/camera_profiles.py",
+    "lib/home_assistant.py",
+    "systemd/petcam-home-assistant.service",
+    "etc/petcam/home-assistant.conf",
     "lib/start-stream.sh",
     "vendor/bin/ustreamer",
 )
@@ -284,6 +288,37 @@ def validate_release(directory: Path, version: str) -> None:
     (directory / "vendor/bin/ustreamer").chmod(0o755)
 
 
+def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc")) -> None:
+    """Install signed optional integration assets without overwriting user settings."""
+    service_source = release / "systemd/petcam-home-assistant.service"
+    config_source = release / "etc/petcam/home-assistant.conf"
+    service_destination = etc_root / "systemd/system/petcam-home-assistant.service"
+    config_destination = etc_root / "petcam/home-assistant.conf"
+    service_destination.parent.mkdir(parents=True, exist_ok=True)
+    config_destination.parent.mkdir(parents=True, exist_ok=True)
+
+    service_temporary = service_destination.with_name(service_destination.name + ".new")
+    shutil.copyfile(service_source, service_temporary)
+    os.chmod(service_temporary, 0o644)
+    os.replace(service_temporary, service_destination)
+    config_destination_is_new = not config_destination.exists()
+    if config_destination_is_new:
+        config_temporary = config_destination.with_name(config_destination.name + ".new")
+        shutil.copyfile(config_source, config_temporary)
+        os.chmod(config_temporary, 0o640)
+        os.replace(config_temporary, config_destination)
+    elif config_destination.is_symlink() or not config_destination.is_file():
+        raise UpdateError("Refusing to use a non-regular Home Assistant configuration file.")
+    os.chmod(config_destination, 0o640)
+    try:
+        group_id = grp.getgrnam("petcam").gr_gid
+        if os.geteuid() == 0:
+            os.chown(service_destination, 0, 0)
+            os.chown(config_destination, 0, group_id)
+    except KeyError as error:
+        raise UpdateError("The PetCam system group is missing; cannot secure Home Assistant configuration.") from error
+
+
 def atomic_activate(release: Path) -> str | None:
     previous = current_version()
     temporary = ROOT / ".current.new"
@@ -309,7 +344,19 @@ def restart_services() -> str:
     )
     if stream.returncode:
         return "Camera stream did not start; check camera connection and petcam-stream.service logs"
-    return ""
+    warnings = []
+    integration_active = subprocess.run(
+        ["systemctl", "is-active", "--quiet", "petcam-home-assistant.service"],
+        check=False,
+    )
+    if integration_active.returncode == 0:
+        integration = subprocess.run(
+            ["systemctl", "restart", "petcam-home-assistant.service"],
+            capture_output=True, text=True, check=False,
+        )
+        if integration.returncode:
+            warnings.append("Home Assistant MQTT publisher did not restart; check petcam-home-assistant.service logs")
+    return "; ".join(warnings)
 
 
 def healthy() -> bool:
@@ -358,6 +405,7 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
     try:
         atomic_activate(final)
         switched = True
+        install_runtime_integration_files(final)
         subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
         stream_warning = restart_services()
         deadline = time.monotonic() + 45

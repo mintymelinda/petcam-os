@@ -27,6 +27,9 @@ class SignedReleasePublisherTests(unittest.TestCase):
             "lib/config.py": b"# config\n",
             "lib/network_diagnostics.py": b"# network diagnostics\n",
             "lib/camera_profiles.py": b"# camera profiles\n",
+            "lib/home_assistant.py": b"# Home Assistant MQTT\n",
+            "systemd/petcam-home-assistant.service": b"[Service]\nExecStart=petcam\n",
+            "etc/petcam/home-assistant.conf": b"MQTT_ENABLED=false\n",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"fake armhf binary",
         }
