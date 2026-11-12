@@ -21,13 +21,18 @@ class SignedReleasePublisherTests(unittest.TestCase):
         source_dir = repo / "stage-petcam/00-install-files/files/usr/local/lib/petcam"
         script = stage_script.read_text(encoding="utf-8")
         from create_update_release import REQUIRED_FILES
+        systemd_source_dir = repo / "stage-petcam/00-install-files/files/etc/systemd/system"
         for relative in REQUIRED_FILES:
-            if not relative.startswith("lib/") or not relative.endswith(".py"):
+            if relative.startswith("lib/") and relative.endswith(".py"):
+                source = source_dir / Path(relative).name
+                install_line = f'install -m 0644 files/usr/local/lib/petcam/{source.name} "$RELEASE_DIR/{relative}"'
+            elif relative.startswith("systemd/") and relative.endswith(".service"):
+                source = systemd_source_dir / Path(relative).name
+                install_line = f'install -m 0644 files/etc/systemd/system/{source.name} "$RELEASE_DIR/{relative}"'
+            else:
                 continue
-            source = source_dir / Path(relative).name
             self.assertTrue(source.is_file(), f"Missing staged source for {relative}")
-            install_line = f'install -m 0644 files/usr/local/lib/petcam/{source.name} "$RELEASE_DIR/{relative}"'
-            self.assertIn(install_line, script, f"Image stage does not install required release module {relative}")
+            self.assertIn(install_line, script, f"Image stage does not install required release asset {relative}")
 
     def make_release_tree(self, root):
         files = {
@@ -43,7 +48,11 @@ class SignedReleasePublisherTests(unittest.TestCase):
             "lib/factory_reset.py": b"# factory reset\n",
             "lib/camera_profiles.py": b"# camera profiles\n",
             "lib/home_assistant.py": b"# Home Assistant MQTT\n",
+            "lib/timelapse.py": b"# timelapse\n",
+            "lib/motion_detection.py": b"# motion detection\n",
             "systemd/petcam-home-assistant.service": b"[Service]\nExecStart=petcam\n",
+            "systemd/petcam-timelapse.service": b"[Service]\nExecStart=timelapse\n",
+            "systemd/petcam-motion.service": b"[Service]\nExecStart=motion\n",
             "etc/petcam/home-assistant.conf": b"MQTT_ENABLED=false\n",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"fake armhf binary",

@@ -46,7 +46,7 @@ Example:
 }
 ```
 
-The archive is generated from the exact `/opt/petcam/releases/<version>` directory in the just-built image by `tools/create_update_release.py`. It contains the complete versioned application release, including the bundled µStreamer binary. The manifest authenticates the application identity, version, architecture, archive URL, exact byte size, and SHA-256 digest.
+The archive is generated from the exact `/opt/petcam/releases/<version>` directory in the just-built image by `tools/create_update_release.py`. It contains the required application modules and service units, including the optional Home Assistant MQTT publisher, timelapse capture, and motion detection features, plus the bundled µStreamer binary. These optional-feature files are explicit required entries rather than incidental extras, so a missing staged file fails release packaging. The manifest authenticates the application identity, version, architecture, archive URL, exact byte size, and SHA-256 digest.
 
 The updater enforces compressed and expanded size limits and a maximum entry count. It accepts only regular files and directories, rejects links and special files, and does not preserve unsafe archive ownership or permission bits. The release workflow uploads the archive, manifest, and detached signature alongside the flashable image to the same GitHub Release.
 
