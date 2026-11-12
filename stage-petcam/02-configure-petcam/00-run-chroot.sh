@@ -218,7 +218,7 @@ Wants=network-online.target
 Type=simple
 User=petcam
 Group=video
-SupplementaryGroups=video i2c
+SupplementaryGroups=petcam video i2c
 ExecStart=/opt/petcam/current/lib/start-stream.sh
 Restart=always
 RestartSec=5
@@ -283,7 +283,7 @@ Wants=network-online.target
 Type=simple
 User=petcam
 Group=video
-SupplementaryGroups=video i2c
+SupplementaryGroups=petcam video i2c
 Environment=PETCAM_CONFIG_PATH=/etc/petcam/cameras.d/%i.conf
 Environment=PETCAM_PROFILE_ID=%i
 ExecStart=/opt/petcam/current/lib/start-stream.sh
@@ -312,7 +312,7 @@ Wants=network-online.target
 Type=simple
 User=petcam
 Group=petcam
-SupplementaryGroups=video i2c
+SupplementaryGroups=petcam video i2c
 ExecStart=/usr/bin/python3 /opt/petcam/current/lib/web_manager.py
 Restart=always
 RestartSec=3
