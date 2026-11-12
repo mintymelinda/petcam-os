@@ -2,6 +2,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+from unittest import mock
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -49,6 +50,16 @@ class TimelapseTests(unittest.TestCase):
             self.assertEqual(path.name, "20261112T123015.123000Z.jpg")
             self.assertEqual(path.read_bytes(), frame)
             self.assertFalse(path.with_suffix(".jpg.tmp").exists())
+
+    def test_resize_and_quality_transform_uses_requested_width(self):
+        from io import BytesIO
+        from PIL import Image
+        source = BytesIO()
+        Image.new("RGB", (640, 480), "red").save(source, format="JPEG")
+        config = MODULE.validate_config({"max_width": 320, "jpeg_quality": 70})
+        result = MODULE.process_frame(source.getvalue(), config)
+        with Image.open(BytesIO(result)) as image:
+            self.assertEqual(image.size, (320, 240))
 
     def test_rejects_incomplete_jpeg(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -107,7 +118,7 @@ class TimelapseTests(unittest.TestCase):
     def test_camera_disconnect_is_reported_without_creating_a_frame(self):
         with tempfile.TemporaryDirectory() as directory:
             config = MODULE.validate_config({"jpeg_quality": 0})
-            with unittest.mock.patch.object(MODULE.urllib.request, "urlopen", side_effect=OSError("camera disconnected")):
+            with mock.patch.object(MODULE.urllib.request, "urlopen", side_effect=OSError("camera disconnected")):
                 with self.assertRaisesRegex(OSError, "camera disconnected"):
                     MODULE.capture_from_stream(config, directory)
             self.assertEqual(MODULE.storage_status(directory)["frames"], 0)
