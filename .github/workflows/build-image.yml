@@ -44,7 +44,7 @@ jobs:
 
       - name: Validate PetCam scripts
         run: |
-          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_auth.py stage-petcam/00-install-files/files/usr/local/lib/petcam/health_monitor.py stage-petcam/00-install-files/files/usr/local/lib/petcam/config.py tools/create_imager_os_list.py stage-petcam/00-install-files/files/usr/local/lib/petcam/updater.py tools/create_update_release.py
+          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_auth.py stage-petcam/00-install-files/files/usr/local/lib/petcam/health_monitor.py stage-petcam/00-install-files/files/usr/local/lib/petcam/config.py stage-petcam/00-install-files/files/usr/local/lib/petcam/network_diagnostics.py tools/create_imager_os_list.py stage-petcam/00-install-files/files/usr/local/lib/petcam/updater.py tools/create_update_release.py
           bash -n stage-petcam/00-install-files/00-run.sh stage-petcam/02-configure-petcam/00-run-chroot.sh
 
       - name: Test camera, updater, and Imager catalogue generation
