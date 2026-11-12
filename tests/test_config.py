@@ -1,4 +1,6 @@
+import contextlib
 import importlib.util
+import io
 import json
 import tempfile
 import unittest
@@ -36,6 +38,16 @@ class ConfigValidationTests(unittest.TestCase):
                 "FORMAT=auto\nRESOLUTION=auto\nFPS=auto\nCSI_QUALITY=70\nPORT=8081\n"
             )
             self.assertEqual(MODULE.parse_config(path)["PORT"], "8081")
+
+    def test_cli_apply_uses_transactional_apply(self):
+        with tempfile.TemporaryDirectory() as directory:
+            candidate_path = Path(directory) / "candidate.conf"
+            candidate_path.write_text("SOURCE=csi\nCAMERA=auto\nFORMAT=auto\nFPS=30.0\n")
+            with mock.patch.object(MODULE.sys, "argv", ["petcam-config", "apply", str(candidate_path)]), \
+                    mock.patch.object(MODULE, "apply_config", return_value={"SOURCE": "csi"}) as apply, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(MODULE.main(), 0)
+            apply.assert_called_once_with(MODULE.parse_config(candidate_path, check_hardware=True))
 
     def test_parser_rejects_missing_candidate_file(self):
         with tempfile.TemporaryDirectory() as directory:
