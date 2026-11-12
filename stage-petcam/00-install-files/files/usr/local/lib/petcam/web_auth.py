@@ -59,7 +59,7 @@ def initialize_password(password):
     """Create the first administrator password without replacing an existing one."""
     data = hash_password(password)
     AUTH_FILE.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(data) + "\\n"
+    payload = json.dumps(data) + "\n"
     with _lock:
         try:
             descriptor = os.open(AUTH_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o640)
