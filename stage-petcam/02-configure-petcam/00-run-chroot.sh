@@ -209,7 +209,7 @@ if [ -s /etc/petcam/web-manager.crt ] && [ -s /etc/petcam/web-manager.key ]; the
     exit 0
 fi
 umask 077
-openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 825 \
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -sha256 -nodes -days 825 \
     -keyout /etc/petcam/web-manager.key -out /etc/petcam/web-manager.crt \
     -subj "/CN=petcam.local" -addext "subjectAltName=DNS:petcam.local,DNS:petcam"
 chown root:petcam /etc/petcam/web-manager.key /etc/petcam/web-manager.crt
