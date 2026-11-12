@@ -22,7 +22,10 @@ class ImagerOSListTests(unittest.TestCase):
             self.assertTrue(entry["url"].startswith("https://"))
             self.assertEqual(entry["init_format"], "cloudinit-rpi")
             self.assertEqual(entry["architecture"], "armhf")
-            self.assertEqual(entry["devices"], ["pizero-32bit"])
+            self.assertEqual(
+                entry["devices"],
+                ["pi5-32bit", "pi4-32bit", "pi3-32bit", "pi2-32bit", "pi1-32bit"],
+            )
             self.assertEqual(entry["extract_size"], len(raw))
             self.assertEqual(entry["extract_sha256"], hashlib.sha256(raw).hexdigest())
             self.assertEqual(entry["image_download_size"], image.stat().st_size)
