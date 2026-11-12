@@ -1,16 +1,20 @@
 # Building PetCam OS
 
-## GitHub Actions (recommended)
+## What the GitHub Actions workflow does
 
-Open Actions → Build PetCam OS → Run workflow. The build uses the official Raspberry Pi pi-gen project on an Ubuntu GitHub-hosted runner, adds the PetCam stage (including `rpicam-apps-lite` for CSI modules), runs USB and CSI camera-discovery unit tests, and uploads the generated image from pi-gen/deploy as a workflow artifact.
+The workflow is named **Build PetCam OS image**.
 
-The first build can take a while. The output is a compressed Raspberry Pi OS image suitable for Raspberry Pi Imager.
+- Pull requests, pushes to `main`, and manual workflow dispatches run validation: Python byte-compilation, shell syntax checks, and the unit test suite.
+- A full Raspberry Pi OS image build and GitHub Release publication runs only when a version tag matching `vMAJOR.MINOR.PATCH` is pushed.
+- The tagged release job checks out the official Raspberry Pi [pi-gen](https://github.com/RPi-Distro/pi-gen) project, adds the PetCam stage, builds the image, generates and validates the Raspberry Pi Imager OS sublist, packages the exact application release from the built image, signs the update manifest, and uploads the resulting assets to the GitHub Release.
 
-## Local build
+Running **Actions → Build PetCam OS image → Run workflow** does not build or upload a flashable image; it runs the validation job. Use a version tag to invoke the release build.
 
-Use a Linux x86-64 host with Docker, Git, and enough free disk space (allow at least 30 GB).
+## Local image build
 
-~~~bash
+Use a Linux x86-64 host with Docker, Git, and sufficient free disk space (allow at least 30 GB).
+
+```bash
 git clone https://github.com/RPi-Distro/pi-gen.git
 git clone https://github.com/mintymelinda/petcam-os.git
 cp petcam-os/config pi-gen/config
@@ -18,35 +22,54 @@ cp -a petcam-os/stage-petcam pi-gen/stage-petcam
 touch pi-gen/stage2/SKIP_IMAGES
 chmod 0755 pi-gen/stage-petcam/prerun.sh
 chmod 0755 pi-gen/stage-petcam/00-install-files/00-run.sh
+
 cd petcam-os
 python3 -m unittest discover -s tests -v
+
 cd ../pi-gen
 sudo ./build-docker.sh
-~~~
+```
 
-The resulting image is written to pi-gen/deploy/. PetCam's application is installed under `/opt/petcam/releases/<version>/`, and `/opt/petcam/current` selects the active release. `/etc/petcam/petcam.conf` and `/var/lib/petcam/` remain outside the versioned application tree so future application updates can preserve device configuration and state.
+The resulting image is written to `pi-gen/deploy/`. The PetCam application is installed under `/opt/petcam/releases/<version>/`, and `/opt/petcam/current` selects the active release. Device configuration under `/etc/petcam/` and runtime data under `/var/lib/petcam/` are outside the versioned application tree.
 
-## Raspberry Pi Imager catalogue
+The release workflow pins the pi-gen checkout to its configured upstream branch at build time. For fully repeatable local builds, use the same pi-gen revision as the workflow run rather than assuming that the upstream branch remains unchanged.
 
-Tagged releases build the image, rename it to a stable versioned asset, generate a Raspberry Pi Imager OS sublist, validate that JSON against Raspberry Pi's published schema, and attach both files to a GitHub Release. The generated entry includes the public HTTPS image URL, compressed and extracted SHA-256 hashes and sizes, supported device tags, `architecture: armhf`, and `init_format: cloudinit-rpi`.
+## Tagged release assets
 
-The stable sublist URL intended for the official catalogue submission is:
+A successful version-tag build publishes:
+
+- `petcam-os-vMAJOR.MINOR.PATCH.img.xz`: compressed flashable image.
+- `petcam-os-os-list.json`: generated Raspberry Pi Imager OS sublist.
+- `petcam-MAJOR.MINOR.PATCH-armhf.tar.gz`: versioned PetCam application archive.
+- `petcam-update-manifest.json` and `petcam-update-manifest.json.sig`: signed update metadata and detached Ed25519 signature.
+
+The Imager sublist includes the HTTPS image URL, compressed and extracted SHA-256 hashes and sizes, supported 32-bit device tags for Pi 1 through Pi 5 families, `architecture: armhf`, and `init_format: cloudinit-rpi`. The workflow validates the generated JSON against Raspberry Pi's published schema before publishing it.
+
+The stable sublist URL intended for catalogue submission is:
 
 ```
 https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-os-os-list.json
 ```
 
-Raspberry Pi must approve the catalogue submission before PetCam appears in Imager's default OS list. Until then, the sublist can be loaded manually through App Options → Content Repository → Edit → Use custom URL, but that is a maintainer/testing route, not the intended end-user installation experience.
+Generating and publishing the sublist does not itself add PetCam to Raspberry Pi Imager's default catalogue; that requires Raspberry Pi's review and approval. Until then, the sublist can be loaded manually through Imager's custom content repository settings for testing.
 
-Once PetCam is listed, users select it from Imager's normal OS list and configure hostname `petcam`, Wi-Fi, WLAN country, an administrator account, and optional SSH in the standard Customisation step. WLAN country is not baked into the image.
+## Runtime installation and camera layout
 
-The management UI is served over HTTPS on port 8443 and requires a password configured from SSH or a local terminal using `sudo petcam-admin`. Each device generates its own self-signed certificate. Port 8080 is a separate unauthenticated stream-only endpoint for OBS; it exposes only `/stream`, not management or update controls. Keep both ports on a trusted LAN and do not port-forward them to the internet.
+The image installs the application in a versioned release directory and selects it through `/opt/petcam/current`. Configuration and mutable state are kept separately:
+
+- `/etc/petcam/petcam.conf`: primary camera configuration.
+- `/etc/petcam/cameras.d/`: additional independent camera profiles.
+- `/etc/petcam/home-assistant.conf`: optional MQTT publisher configuration.
+- `/etc/petcam/web-auth.json`: manager password hash.
+- `/var/lib/petcam/`: timelapse frames, motion events, and runtime state.
+
+The camera capture process runs as the unprivileged `petcam` account. USB uses the bundled, version-pinned µStreamer binary; CSI uses the Raspberry Pi `rpicam` tools. The capture backend binds to loopback (default port 8081). The manager serves HTTPS on port 8443 and a separate stream-only HTTP proxy on port 8080.
 
 ## Camera discovery and configuration
 
-At boot, PetCam detects both camera interfaces. USB UVC devices are enumerated through V4L2, parsing advertised formats, discrete/stepwise/continuous frame sizes, and discrete or ranged frame intervals. CSI modules are enumerated with `rpicam-hello --list-cameras`, and the camera stack's advertised sensor modes and frame rates are parsed. The same image supports both interfaces; both expose the same MJPEG HTTP stream endpoint. USB automatic selection prefers native MJPEG. CSI uses `rpicam-vid` to capture and encode MJPEG.
+At runtime, USB UVC devices are enumerated through V4L2, including advertised formats, frame sizes, and frame intervals. CSI modules are enumerated with `rpicam-hello --list-cameras`, and sensor modes and frame rates are read from the camera stack. Both backends expose an MJPEG stream.
 
-The current starting budgets are pixel-rate heuristics, not benchmark guarantees:
+Automatic mode selection uses conservative model-specific pixel-throughput heuristics. These are starting budgets, not hardware performance guarantees:
 
 | Board family | Automatic selection budget |
 | --- | ---: |
@@ -56,84 +79,101 @@ The current starting budgets are pixel-rate heuristics, not benchmark guarantees
 | Pi 4 / Pi 400 | 124.4 megapixels/second |
 | Pi 5 | 248.8 megapixels/second |
 
-For USB, if every native-MJPEG mode exceeds the detected board's budget, PetCam starts with the least demanding advertised MJPEG mode and logs a warning. For CSI, the same budget guides sensor-mode selection. If no CSI mode fits, the least demanding advertised mode is selected with a warning. Explicit supported modes are never blocked.
+USB automatic selection prefers native MJPEG. If no native-MJPEG mode fits the starting budget, PetCam may select a less demanding mode and emit a warning; raw USB formats may require CPU JPEG encoding. CSI selection uses advertised sensor modes and warns when it must choose a mode above the starting budget. Explicit camera-supported modes are not rejected merely because they exceed the automatic budget.
 
-Inspect USB and CSI camera discovery:
+Discover cameras and modes:
 
-~~~bash
+```bash
 sudo petcam-camera discover
 sudo petcam-camera discover-csi
-~~~
+```
 
 Preview a supported USB mode:
 
-~~~bash
+```bash
 sudo petcam-camera select --format MJPG --resolution 1920x1080 --fps 30
-~~~
+```
 
-Preview a supported CSI mode (camera index is shown by `discover-csi`):
+Preview a supported CSI mode (use the camera index reported by discovery):
 
-~~~bash
+```bash
 sudo petcam-camera select-csi --camera 0 --resolution 1920x1080 --fps 30
-~~~
+```
 
-The same shared parser is used by the CLI, web manager, camera status command, and stream startup script. Validate the active configuration with:
+The shared parser is used by the CLI, web manager, status command, and stream startup. Validate the current configuration:
 
-~~~bash
+```bash
 sudo petcam-config validate --check-hardware
-~~~
+```
 
-For manual changes, create a separate candidate file and apply it transactionally:
+For manual changes, edit a candidate file and apply it transactionally:
 
-~~~bash
+```bash
 sudo cp /etc/petcam/petcam.conf /tmp/petcam.conf.new
 sudo nano /tmp/petcam.conf.new
 sudo petcam-config apply /tmp/petcam.conf.new
-~~~
+```
 
-The web manager uses the same transaction. It validates the requested mode, stages the configuration, restarts capture, and waits for a real MJPEG frame before committing. If restart or frame readiness fails, it restores the previous file and restarts the previous configuration. The last successful configuration is retained at \`/etc/petcam/petcam.conf.last-good\`. Stream startup validates the file before sourcing it, so malformed lines, unknown keys, and shell expressions are rejected before they can disrupt or execute in the service.
+The apply operation validates the candidate, stages it, restarts capture, and waits for an actual MJPEG frame. On failure it restores the previous configuration and restarts the previous stream. The last known-good configuration is retained at `/etc/petcam/petcam.conf.last-good`. Stream startup validates the file before sourcing it; malformed lines, unknown keys, and shell expressions are rejected.
 
-The camera backend listens on loopback port 8081. The HTTPS manager on port 8443 proxies the preview after authentication; a separate HTTP endpoint on port 8080 exposes only the MJPEG stream for OBS.
+Supported primary camera settings:
 
-Supported settings:
+- `SOURCE`: `auto` (USB first, then CSI), `usb`, or `csi`.
+- `DEVICE`: optional USB V4L2 device path; a persistent `/dev/v4l/by-id/` path is preferred.
+- `USB_PHYSICAL_PATH`: stable USB topology path managed by the UI.
+- `CAMERA`: CSI camera index or `auto`.
+- `CSI_DEVICE_PATH`: stable CSI device-tree path managed by the UI.
+- `FORMAT`: USB format; `auto` or a supported V4L2 format such as MJPG, YUYV, or UYVY.
+- `RESOLUTION`: `auto` or an advertised width-by-height mode.
+- `FPS`: `auto` or an advertised frame rate (up to 240).
+- `CSI_QUALITY`: CSI MJPEG quality, 1–100; default 70.
+- `PORT`: internal loopback backend port; default 8081. Ports 8080 and 8443 are reserved.
 
-- SOURCE: `auto` (prefer USB, fall back to CSI), `usb`, or `csi`
-- DEVICE: optional USB V4L2 node; prefer a stable path under /dev/v4l/by-id/ when available
-- CAMERA: CSI camera index from `petcam-camera discover-csi`, or `auto`
-- FORMAT: USB only; `auto` or a µStreamer-supported V4L2 fourcc such as MJPG, YUYV, or UYVY
-- RESOLUTION: `auto` or an advertised mode for the selected backend
-- FPS: `auto` or an advertised frame rate for the selected backend
-- CSI_QUALITY: CSI MJPEG quality from 1 to 100, default 70
-- PORT: internal camera-backend HTTP port, default 8081 (loopback only); manager HTTPS is on 8443 and OBS stream-only HTTP is on 8080
+For USB, `FPS=auto` asks µStreamer not to impose an application-side frame-rate cap. For CSI, automatic selection chooses an advertised sensor frame rate. Unsupported explicit modes fail clearly rather than silently falling back.
 
-For USB, automatic FPS uses µStreamer's no-application-cap request (`--desired-fps=0`). For CSI, automatic selection chooses an advertised sensor mode within the model's starting pixel-rate budget, or the least demanding advertised mode with a warning if none fit. Unsupported explicit modes fail clearly rather than silently falling back. If a USB camera has no native MJPEG mode, PetCam may select a supported raw V4L2 mode and use CPU JPEG encoding, with a performance warning. CSI is encoded to MJPEG by `rpicam-vid`; this encoder workload can be significant on older Pi boards, so verify sustained capture on the target hardware and reduce resolution, FPS, or `CSI_QUALITY` if needed.
+## Multiple independent cameras
+
+The web manager can add cameras as independent streams. Each additional camera receives a profile in `/etc/petcam/cameras.d/`, a systemd instance named `petcam-stream@<profile-id>.service`, and a public stream path `/stream/<profile-id>` on port 8080. Profiles can be previewed, reconfigured, and removed independently of the primary stream.
+
+Camera identities prefer persistent USB by-id paths or physical USB topology and CSI device-tree paths. Before a stream is started or reconfigured, PetCam checks aggregate capture pixel rate, estimated raw USB bandwidth, and frame-buffer memory against conservative model limits. This is a protective admission check, not a guarantee of stable operation.
 
 ## Runtime diagnostics
 
-~~~bash
+```bash
 sudo petcam-status
 systemctl status petcam-stream
 journalctl -u petcam-stream -b
-~~~
+sudo petcam-diagnostics
+```
 
-The status report includes systemd service state, a local HTTP endpoint health probe, USB and CSI discovery counts, active backend and camera details, capture resolution and format, latest capture FPS (µStreamer performance log for USB or the CSI frame counter for CSI), a one-second MJPEG bitrate sample measured by opening a temporary local stream client, aggregate network-interface transmit throughput, cumulative transmitted bytes, and SoC temperature. It also includes the periodic stream monitor's state, reason, and recovery count. The web manager runs a lightweight background monitor that checks the backend and public OBS stream every 30 seconds; it waits for a real MJPEG body byte rather than trusting an open socket, distinguishes a missing camera from a stalled capture process, restarts only the affected service, and applies exponential backoff capped at five minutes. The local MJPEG sample is stream-specific; the network-interface rate includes other interface traffic.
+The status report includes service state, endpoint health, USB/CSI discovery counts, active backend and camera mode, latest capture FPS where available, a one-second local MJPEG bitrate sample, aggregate interface transmit throughput, cumulative transmitted bytes, SoC temperature, and periodic stream-monitor state/recovery count.
 
-For network and OBS troubleshooting, run `sudo petcam-diagnostics`. It checks the loopback capture backend, HTTPS manager, OBS stream-only proxy, listening ports and bind addresses, mDNS resolution, interface link state, local IP addresses, and the default route. It prints the OBS browser-source URL using the device's mDNS name and available LAN addresses. The same concise checks appear in the manager UI, which can download a redacted support bundle. From SSH, create a bundle with `sudo petcam-diagnostics --bundle` (optionally `--output PATH`). The archive includes sanitized diagnostics, status output, the redacted camera configuration, and available PetCam service journal entries. Secret-keyed values, bearer credentials, cookies, and query-string tokens are redacted; authentication files and private keys are excluded. All probes originate on the Pi and cannot prove that a remote client can reach it; test mDNS, firewall rules, Wi-Fi client isolation, and VLAN segmentation from the OBS computer as well.
+The health monitor runs every 30 seconds after a startup grace period. It waits for an actual backend frame, checks the OBS proxy separately, distinguishes a missing camera from a stalled process, and applies bounded restart backoff. The local bitrate sample opens a temporary stream client; interface throughput includes all traffic on that interface.
 
-Dropped frames are reported as unavailable when the active capture backend does not expose a reliable cumulative counter. PetCam does not estimate or fabricate a dropped-frame count. Capture FPS and service/device errors remain available for diagnosing stream quality.
+`sudo petcam-diagnostics` checks the backend, HTTPS manager, OBS proxy, listeners and bind addresses, mDNS resolution, interface link state, local addresses, and default routes. It prints browser-source URLs based on the device hostname and LAN addresses. The manager provides the same checks and can download a redacted support bundle. From SSH:
+
+```bash
+sudo petcam-diagnostics --bundle
+# Optional explicit destination:
+sudo petcam-diagnostics --bundle --output /tmp/petcam-support.tar.gz
+```
+
+The bundle contains diagnostics, status output, redacted camera configuration, and available service journal entries. Secret-keyed values and tokens are redacted; authentication files and private keys are excluded. These are local checks and cannot prove remote client reachability. Test mDNS, firewall rules, Wi-Fi client isolation, and VLAN segmentation from the OBS computer.
+
+A cumulative dropped-frame counter is unavailable when the active USB/CSI driver does not expose a reliable value. PetCam reports it as unavailable rather than estimating it.
 
 ## Hardware validation
 
-Software discovery only establishes what a camera advertises; it cannot guarantee sustained performance on a specific Pi, USB hub, power supply, or wireless network. Test each intended mode for several minutes while observing petcam-status and the service journal. A powered USB OTG hub is recommended for USB cameras with substantial power draw. CSI modules require a compatible ribbon cable and camera connector; ensure the cable's contacts face the correct direction for the specific board.
+Camera discovery reports advertised modes; it does not prove that a particular Pi, camera, USB hub, power supply, or network can sustain them. Test the intended configuration on the actual hardware while monitoring capture FPS, stream health, and service logs. A powered USB OTG hub is recommended for webcams with substantial power draw. CSI modules require a compatible ribbon cable and camera connector.
 
 ## OBS
 
 Use the network stream URL:
 
-~~~
+```
 http://petcam.local:8080/stream
-~~~
+```
 
-If OBS cannot consume the MJPEG endpoint directly, add it through a VLC Video Source. The authenticated management UI is separate from the OBS stream endpoint. If mDNS does not resolve, substitute the Pi's DHCP address.
+Additional camera profiles use `http://petcam.local:8080/stream/<profile-id>`. If mDNS does not resolve, use the Pi's DHCP address. If OBS cannot consume the MJPEG endpoint directly, add it through a VLC Video Source.
 
-Do not expose port 8080 to the public internet.
+The authenticated manager is separate from the unauthenticated OBS stream endpoint. Do not expose port 8080 to the public internet.
