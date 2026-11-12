@@ -26,7 +26,7 @@ exec python3 /opt/petcam/current/lib/camera.py status
 SCRIPT
 cat > /usr/local/bin/petcam-admin <<'SCRIPT'
 #!/bin/sh
-exec python3 /opt/petcam/current/lib/web_manager.py --set-password
+exec python3 /opt/petcam/current/lib/factory_reset.py "$@"
 SCRIPT
 cat > /usr/local/bin/petcam-config <<'SCRIPT'
 #!/bin/sh
