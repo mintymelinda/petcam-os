@@ -50,15 +50,18 @@ def service_snapshot(service: str) -> dict[str, Any]:
         result = subprocess.run(
             [
                 "/usr/bin/systemctl", "show", service,
-                "--property=ActiveState", "--property=ActiveEnterTimestampMonotonic", "--value",
+                "--property=ActiveState", "--property=ActiveEnterTimestampMonotonic",
             ],
             capture_output=True, text=True, timeout=5, check=False,
         )
         if result.returncode:
             return {"state": "unknown", "active_age": None}
-        values = result.stdout.splitlines()
-        active_state = values[0].strip() if values else "unknown"
-        entered = int(values[1].strip()) if len(values) > 1 and values[1].strip().isdigit() else 0
+        properties = dict(
+            line.split("=", 1) for line in result.stdout.splitlines() if "=" in line
+        )
+        active_state = properties.get("ActiveState", "unknown").strip()
+        raw_entered = properties.get("ActiveEnterTimestampMonotonic", "0").strip()
+        entered = int(raw_entered) if raw_entered.isdigit() else 0
         age = max(0.0, time.monotonic() - entered / 1_000_000) if entered else None
         return {"state": active_state, "active_age": age}
     except (OSError, subprocess.TimeoutExpired, ValueError):
