@@ -18,8 +18,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-CONFIG_PATH = Path("/etc/petcam/petcam.conf")
-LAST_GOOD_PATH = Path("/etc/petcam/petcam.conf.last-good")
+CONFIG_PATH = Path(os.environ.get("PETCAM_CONFIG_PATH", "/etc/petcam/petcam.conf"))
+LAST_GOOD_PATH = Path(os.environ.get("PETCAM_LAST_GOOD_PATH", str(CONFIG_PATH.with_name(CONFIG_PATH.name + ".last-good"))))
 DEFAULTS = {
     "SOURCE": "auto",
     "DEVICE": "",
