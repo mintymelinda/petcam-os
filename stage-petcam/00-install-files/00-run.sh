@@ -17,6 +17,7 @@ install -m 0644 files/etc/systemd/system/petcam-motion.service "$RELEASE_DIR/sys
 install -D -m 0644 files/etc/systemd/system/petcam-motion.service "${ROOTFS_DIR}/etc/systemd/system/petcam-motion.service"
 install -m 0644 files/usr/local/lib/petcam/web_manager.py "$RELEASE_DIR/lib/web_manager.py"
 install -m 0644 files/usr/local/lib/petcam/web_auth.py "$RELEASE_DIR/lib/web_auth.py"
+install -m 0644 files/usr/local/lib/petcam/factory_reset.py "$RELEASE_DIR/lib/factory_reset.py"
 install -m 0644 files/usr/local/lib/petcam/health_monitor.py "$RELEASE_DIR/lib/health_monitor.py"
 install -m 0644 files/usr/local/lib/petcam/config.py "$RELEASE_DIR/lib/config.py"
 install -m 0644 files/usr/local/lib/petcam/camera_profiles.py "$RELEASE_DIR/lib/camera_profiles.py"

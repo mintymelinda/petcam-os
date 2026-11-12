@@ -7,7 +7,6 @@ import ssl
 import subprocess
 import threading
 import time
-import getpass
 import hmac
 import sys
 import urllib.error
@@ -25,7 +24,7 @@ from camera_profiles import (
 )
 from timelapse import load_config as load_timelapse_config, save_config as save_timelapse_config, state_snapshot as timelapse_snapshot
 from motion_detection import load_config as load_motion_config, save_config as save_motion_config, state_snapshot as motion_snapshot, FRAMES as MOTION_FRAMES
-from web_auth import SESSION_TTL, get_session, initialize_password, invalidate_session, is_configured, new_session, save_password, verify_password
+from web_auth import SESSION_TTL, get_session, initialize_password, invalidate_session, is_configured, new_session, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
 DEFAULT_STREAM_URL = "http://127.0.0.1:8081"
@@ -103,7 +102,7 @@ small,.muted{color:#aeb7c2}#message{min-height:1.5em;color:#b9d8ff}.row{display:
 <p class="muted">Motion samples reuse the active camera MJPEG stream. Frames are reduced to 160×120 grayscale for comparison; no second camera process or continuous video recording is used. The worker runs with a strict CPU and memory limit. Disabled by default.</p>
 <div class="row"><button id="save-motion">Save motion settings</button></div>
 <h3>Recent motion events</h3><div id="motion-events" class="muted">No motion events recorded.</div></section>
-<section><h2>Account security</h2><p class="muted">Change the password used to access this manager.</p><button id="change-password">Change password</button> <button id="logout">Sign out</button></section>
+<section><h2>Account security</h2><p class="muted">Sign out of this manager.</p><button id="logout">Sign out</button></section>
 <footer style="text-align:center;padding:1rem 0 2rem"><small>Enjoying PetCam? <a href="https://www.paypal.me/kimmynightmare" target="_blank" rel="noopener noreferrer" style="color:#b9d8ff">Support development with PayPal</a></small></footer>
 <script>
 const $=id=>document.getElementById(id);let inventory=[],streams=[];
@@ -119,7 +118,7 @@ $("refresh").onclick=refresh;$("camera").onchange=fillModes;
 $("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value,target=$("stream-target").value;if(!c||!m)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{if(target==="default"){await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,camera_id:c.id,device:c.device,physical_path:c.physical_path,device_path:c.device_path,camera:c.camera,mode:JSON.parse(m)})})}else{await request("/api/streams/configure",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile_id:target,camera_id:c.id,mode:JSON.parse(m)})})}$("message").textContent="Camera settings saved. Only the selected stream was restarted.";await refreshStreams()}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
 $("add-stream").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;const b=$("add-stream");b.disabled=true;$("message").textContent="Starting independent camera stream…";try{const d=await request("/api/streams",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({camera_id:c.id,mode:JSON.parse(m)})});$("message").textContent="Independent stream started: "+d.profile.stream_path;await refreshStreams()}catch(e){$("message").textContent=e.message}finally{b.disabled=false}};
 $("refresh-streams").onclick=refreshStreams;
-$("logout").onclick=async()=>{try{await request("/api/logout",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});csrfToken=null;location.reload()}catch(e){alert(e.message)}};$("change-password").onclick=async()=>{const current=prompt("Current password");if(current===null)return;const next=prompt("New password (at least 12 characters)");if(next===null)return;try{const d=await request("/api/password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({current_password:current,new_password:next})});csrfToken=d.csrf_token;alert("Password changed. Other sessions were signed out.")}catch(e){alert(e.message)}};
+$("logout").onclick=async()=>{try{await request("/api/logout",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});csrfToken=null;location.reload()}catch(e){alert(e.message)}};
 function fillStreamTargets(){const selected=$("stream-target").value;$("stream-target").replaceChildren();const primary=document.createElement("option");primary.value="default";primary.textContent="Primary stream (/stream)";$("stream-target").append(primary);for(const p of streams){if(p.id==="default")continue;const o=document.createElement("option");o.value=p.id;o.textContent=p.label+" · "+p.state;$("stream-target").append(o)}if([...$("stream-target").options].some(o=>o.value===selected))$("stream-target").value=selected}
 function renderStreams(){const root=$("stream-profiles");root.replaceChildren();for(const p of streams){const card=document.createElement("section"),title=document.createElement("h3"),state=document.createElement("p"),preview=document.createElement("img"),url=document.createElement("code"),row=document.createElement("div");title.textContent=p.label;state.textContent="Service: "+p.state+" · "+(p.ready?"frames available":"no frame detected")+(p.stable_identity===false?" · identity may change if USB enumeration changes":"");preview.src=p.stream_path;preview.alt=p.label+" preview";preview.style.maxHeight="220px";url.textContent="OBS: http://"+window.location.hostname+":8080"+p.stream_path;row.className="row";row.append(url);card.append(title,state,preview,row);if(p.managed_independently){const remove=document.createElement("button");remove.textContent="Remove stream";remove.onclick=async()=>{remove.disabled=true;try{await request("/api/streams/remove",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile_id:p.id})});await refreshStreams()}catch(e){state.textContent=e.message;remove.disabled=false}};card.append(remove)}root.append(card)}}
 async function refreshStreams(){try{const d=await request("/api/streams");streams=d.streams||[];fillStreamTargets();renderStreams()}catch(e){$("stream-profiles").textContent="Unable to load streams: "+e.message}}
@@ -540,16 +539,6 @@ class Handler(BaseHTTPRequestHandler):
                 updated = save_motion_config({**current, **data})
                 self.send_json(200, {"ok": True, "config": updated})
                 return
-            if path == "/api/password":
-                if not verify_password(data.get("current_password", "")):
-                    self.send_json(403, {"error": "Current password is incorrect"})
-                    return
-                save_password(data.get("new_password", ""))
-                token, csrf = new_session()
-                self.send_json(200, {"ok": True, "csrf_token": csrf}, {
-                    "Set-Cookie": f"petcam_session={token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={SESSION_TTL}"
-                })
-                return
             if path == "/api/logout":
                 invalidate_session(_cookie(self))
                 self.send_json(200, {"ok": True}, {
@@ -628,16 +617,6 @@ def health_monitor_loop():
 
 
 def main():
-    if len(sys.argv) == 2 and sys.argv[1] == "--set-password":
-        if os.geteuid() != 0:
-            raise SystemExit("Run with sudo: petcam-admin")
-        first = getpass.getpass("New PetCam manager password: ")
-        second = getpass.getpass("Confirm password: ")
-        if first != second:
-            raise SystemExit("Passwords did not match.")
-        save_password(first)
-        print("PetCam manager password saved; existing sessions were invalidated.")
-        return
     if not TLS_CERT.is_file() or not TLS_KEY.is_file():
         raise SystemExit("PetCam HTTPS certificate is missing.")
     ensure_config_lock()
