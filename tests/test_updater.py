@@ -172,7 +172,7 @@ class UpdateArchiveTests(unittest.TestCase):
                     mock.patch("updater.os.geteuid", return_value=1000):
                 install_runtime_integration_files(release, etc_root)
             self.assertEqual(
-                (etc_root / "systemd/petcam-home-assistant.service").read_text(),
+                (etc_root / "systemd/system/petcam-home-assistant.service").read_text(),
                 "[Service]\nExecStart=petcam\n",
             )
             self.assertEqual(config_path.read_text(), "MQTT_ENABLED=true\nMQTT_PASSWORD=preserve-me\n")
