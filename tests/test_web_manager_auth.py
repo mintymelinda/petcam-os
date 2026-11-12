@@ -237,6 +237,16 @@ class WebManagerRouteAuthenticationTests(unittest.TestCase):
             self.assertEqual(status, 200)
             save.assert_called_once()
 
+    def test_password_only_recovery_endpoint_is_not_exposed(self):
+        cookie, csrf = self.login()
+        status, _, _ = self.request(
+            "POST", "/api/password",
+            {"current_password": "correct horse battery staple", "new_password": "replacement password"},
+            cookie=cookie, csrf=csrf,
+        )
+        self.assertEqual(status, 404)
+        self.assertTrue(web_auth.verify_password("correct horse battery staple"))
+
     def test_logout_and_expiry_invalidate_sessions(self):
         cookie, csrf = self.login()
         status, _, _ = self.request("POST", "/api/logout", {}, cookie=cookie, csrf=csrf)
