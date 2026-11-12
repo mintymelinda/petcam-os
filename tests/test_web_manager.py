@@ -37,6 +37,8 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("/api/diagnostics", MODULE.PAGE)
         self.assertIn("/api/support-bundle", MODULE.PAGE)
         self.assertIn("Download redacted support bundle", MODULE.PAGE)
+        self.assertNotIn("change-password", MODULE.PAGE)
+        self.assertNotIn("/api/password", MODULE.PAGE)
 
     def test_first_run_admin_setup_is_available_in_the_browser(self):
         self.assertIn('id="first-run-form"', MODULE.PAGE)
