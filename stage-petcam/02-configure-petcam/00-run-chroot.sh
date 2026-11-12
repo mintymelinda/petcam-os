@@ -160,10 +160,8 @@ FPS=auto
 CSI_QUALITY=70
 PORT=8081
 CONF
-# The sticky directory permits atomic replacement of petcam-owned config files
-# without allowing the service account to replace root-owned trust or TLS files.
-chown root:petcam /etc/petcam
-chmod 1770 /etc/petcam
+chown petcam:petcam /etc/petcam
+chmod 0750 /etc/petcam
 chown petcam:petcam /etc/petcam/petcam.conf
 chmod 0640 /etc/petcam/petcam.conf
 
