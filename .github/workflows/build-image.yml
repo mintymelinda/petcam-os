@@ -15,8 +15,10 @@ on:
       - ".github/workflows/build-image.yml"
   push:
     branches: [main]
+    tags: ["v*"]
     paths:
       - "config"
+      - "VERSION"
       - "stage-petcam/**"
       - "tests/**"
       - "tools/**"
@@ -42,10 +44,10 @@ jobs:
 
       - name: Validate PetCam scripts
         run: |
-          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py tools/create_imager_manifest.py stage-petcam/00-install-files/files/usr/local/lib/petcam/updater.py
+          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py tools/create_imager_manifest.py tools/create_imager_os_list.py stage-petcam/00-install-files/files/usr/local/lib/petcam/updater.py
           bash -n stage-petcam/00-install-files/00-run.sh stage-petcam/02-configure-petcam/00-run-chroot.sh
 
-      - name: Test camera and Imager manifest support
+      - name: Test camera and Imager catalogue generation
         run: python3 -m unittest discover -s tests -v
 
       - name: Check out pi-gen
@@ -69,17 +71,51 @@ jobs:
           cd pi-gen
           sudo ./build-docker.sh
 
-      - name: Package Imager 2 local-manifest helper
-        run: |
-          sudo chown -R "$(id -u):$(id -g)" pi-gen/deploy
-          cp tools/create_imager_manifest.py pi-gen/deploy/
-          cp tools/prepare-imager.bat tools/prepare-imager.sh pi-gen/deploy/
-          cp assets/petcam-icon.svg pi-gen/deploy/
-
       - name: Upload image artifacts
+        if: github.ref_type == 'branch'
         uses: actions/upload-artifact@v7
         with:
           name: petcam-os-image
-          path: pi-gen/deploy/*
+          path: pi-gen/deploy/*.img.xz
           if-no-files-found: error
           retention-days: 14
+
+      - name: Prepare and publish release assets
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          EXPECTED_VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$VERSION" != "$EXPECTED_VERSION" ]]; then
+            echo "Tag $TAG does not match VERSION ($EXPECTED_VERSION)." >&2
+            exit 1
+          fi
+          mapfile -t IMAGES < <(find pi-gen/deploy -maxdepth 1 -type f -name '*.img.xz' -print)
+          if [[ "${#IMAGES[@]}" -ne 1 ]]; then
+            echo "Expected exactly one .img.xz image; found ${#IMAGES[@]}." >&2
+            exit 1
+          fi
+          IMAGE_NAME="petcam-os-${TAG}.img.xz"
+          cp "${IMAGES[0]}" "$IMAGE_NAME"
+          IMAGE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${IMAGE_NAME}"
+          python3 tools/create_imager_os_list.py "$IMAGE_NAME" --image-url "$IMAGE_URL" --version "$VERSION"
+          python3 -m pip install --disable-pip-version-check jsonschema
+          curl --fail --silent --show-error https://raw.githubusercontent.com/raspberrypi/rpi-imager/main/doc/json-schema/os-list-schema.json -o os-list-schema.json
+          python3 - <<'PY'
+          import json
+          from jsonschema import validate
+          with open("os-list-schema.json", encoding="utf-8") as stream:
+              schema = json.load(stream)
+          with open("petcam-os-os-list.json", encoding="utf-8") as stream:
+              catalogue = json.load(stream)
+          validate(catalogue, schema)
+          entry = catalogue["os_list"][0]
+          assert entry["init_format"] == "cloudinit-rpi"
+          assert entry["url"].startswith("https://")
+          print("PetCam Imager OS sublist passed Raspberry Pi's published JSON schema.")
+          PY
+          gh release create "$TAG" "$IMAGE_NAME" petcam-os-os-list.json --title "PetCam OS $VERSION" --generate-notes
+    permissions:
+      contents: write
