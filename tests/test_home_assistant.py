@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import socket
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,6 +10,7 @@ from unittest import mock
 MODULE_PATH = Path(
     "stage-petcam/00-install-files/files/usr/local/lib/petcam/home_assistant.py"
 )
+sys.path.insert(0, str(MODULE_PATH.parent))
 SPEC = importlib.util.spec_from_file_location("petcam_home_assistant", MODULE_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
@@ -52,6 +54,9 @@ class FakePublisher:
 
     def publish_discovery(self, node_id, hostname, model, entities):
         self.discovery = (node_id, hostname, model, entities)
+
+    def publish_availability(self, state):
+        self.publish(self._topic("broker"), state)
 
     def publish_state(self, snapshot):
         for key, value in snapshot.items():
@@ -203,7 +208,8 @@ class HomeAssistantMQTTTests(unittest.TestCase):
         }
         with mock.patch.object(MODULE, "parse_config", return_value={"SOURCE": "usb"}), \
                 mock.patch.object(MODULE.socket, "gethostname", return_value="petcam"), \
-                mock.patch.object(MODULE.Path, "read_text", side_effect=OSError):
+                mock.patch.object(MODULE.Path, "read_text", side_effect=OSError), \
+                mock.patch.object(MODULE.subprocess, "run", return_value=mock.Mock(returncode=1, stdout="")):
             MODULE.publish_once(fake, config)
         self.assertNotIn("stream_url", [item["object_id"] for item in fake.discovery[3]])
         self.assertNotIn("stream_url", [topic.rsplit("/", 1)[-1] for topic, _, _ in fake.messages if "/state/" in topic])
@@ -222,6 +228,9 @@ class HomeAssistantMQTTTests(unittest.TestCase):
                 attempts["connect"] += 1
                 if attempts["connect"] == 1:
                     raise OSError("broker unavailable")
+
+            def publish_availability(self, state):
+                pass
 
             def ping(self):
                 attempts["ping"] += 1
