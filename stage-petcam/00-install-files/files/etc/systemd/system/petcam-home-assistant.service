@@ -1,0 +1,26 @@
+[Unit]
+Description=Optional PetCam Home Assistant MQTT discovery publisher
+After=network-online.target petcam-stream.service petcam-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=petcam
+Group=petcam
+SupplementaryGroups=petcam
+ExecStart=/usr/bin/python3 /opt/petcam/current/lib/home_assistant.py
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
