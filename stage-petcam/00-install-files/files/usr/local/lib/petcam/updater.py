@@ -296,6 +296,8 @@ def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc
     config_source = release / "etc/petcam/home-assistant.conf"
     service_destination = etc_root / "systemd/system/petcam-home-assistant.service"
     config_destination = etc_root / "petcam/home-assistant.conf"
+    timelapse_source = release / "systemd/petcam-timelapse.service"
+    timelapse_destination = etc_root / "systemd/system/petcam-timelapse.service"
     service_destination.parent.mkdir(parents=True, exist_ok=True)
     config_destination.parent.mkdir(parents=True, exist_ok=True)
     timelapse_destination.parent.mkdir(parents=True, exist_ok=True)
