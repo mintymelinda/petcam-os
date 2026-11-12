@@ -65,6 +65,20 @@ The image installs the application in a versioned release directory and selects 
 
 The camera capture process runs as the unprivileged `petcam` account. USB uses the bundled, version-pinned µStreamer binary; CSI uses the Raspberry Pi `rpicam` tools. The capture backend binds to loopback (default port 8081). The manager serves HTTPS on port 8443 and a separate stream-only HTTP proxy on port 8080.
 
+## First boot and administrator setup
+
+The PetCam manager is configured from a browser; an SSH session is not required for normal setup.
+
+1. Flash the image and complete Raspberry Pi Imager customisation. Configure Wi-Fi and the WLAN country, and create the Linux administrator account. SSH is optional.
+2. Power on the Pi and allow the first boot to finish.
+3. From another device on the same network, open `https://petcam.local:8443/`. If mDNS is unavailable, use the Pi's DHCP address.
+4. On a new image, the manager displays a one-time administrator setup form. Create and confirm a password of at least 12 characters. The browser is signed in automatically after setup.
+5. Continue with camera discovery and configuration in the manager.
+
+The PetCam manager password is separate from the Linux account created in Imager. The first-run endpoint refuses to replace an existing password, so it cannot be used to reset an established device. `sudo petcam-admin` is retained as a local/SSH recovery command, not a normal installation step.
+
+The manager uses a per-device self-signed HTTPS certificate. The browser will warn that the certificate is not trusted until you explicitly trust it; verify that you are connecting to your own device before proceeding.
+
 ## Camera discovery and configuration
 
 At runtime, USB UVC devices are enumerated through V4L2, including advertised formats, frame sizes, and frame intervals. CSI modules are enumerated with `rpicam-hello --list-cameras`, and sensor modes and frame rates are read from the camera stack. Both backends expose an MJPEG stream.
