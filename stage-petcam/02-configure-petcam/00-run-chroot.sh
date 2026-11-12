@@ -336,3 +336,10 @@ systemctl enable avahi-daemon.service
 systemctl enable petcam-stream.service
 systemctl enable petcam-web-cert.service
 systemctl enable petcam-web.service
+install -d -o petcam -g petcam -m 0750 /var/lib/petcam/timelapse /var/lib/petcam/timelapse/frames
+cat > /var/lib/petcam/timelapse/config.json <<'JSON'
+{"enabled":false,"interval_seconds":300,"schedule_start":"00:00","schedule_end":"23:59","retention_days":30,"max_storage_mb":2048,"min_free_mb":256}
+JSON
+chown petcam:petcam /var/lib/petcam/timelapse/config.json
+chmod 0640 /var/lib/petcam/timelapse/config.json
+systemctl enable petcam-timelapse.service
