@@ -402,10 +402,33 @@ def _stop_handler(_signum, _frame):
     _STOP = True
 
 
+def remove_discovery(config: dict[str, object]) -> None:
+    if not config["MQTT_HOST"]:
+        raise MQTTError("MQTT_HOST must be configured before removing Home Assistant discovery entities.")
+    client = MQTTClient(config)
+    client.connect()
+    try:
+        node_id = _client_identifier(config).replace("-", "_")
+        for entity in ENTITIES:
+            topic = f"{config['MQTT_DISCOVERY_PREFIX']}/{entity['component']}/{node_id}/{entity['object_id']}/config"
+            client.publish(topic, "")
+            client.publish(client._topic(f"state/{entity['object_id']}"), "")
+        client.publish(client._topic("health_availability"), "unhealthy")
+        client.publish_availability("offline")
+    finally:
+        client.close()
+
+
 def main() -> int:
     signal.signal(signal.SIGTERM, _stop_handler)
     signal.signal(signal.SIGINT, _stop_handler)
     try:
+        if sys.argv[1:] == ["--remove"]:
+            remove_discovery(load_config())
+            return 0
+        if sys.argv[1:]:
+            print("Usage: home_assistant.py [--remove]", file=sys.stderr)
+            return 2
         return run()
     except MQTTError as error:
         print(str(error), file=sys.stderr)
