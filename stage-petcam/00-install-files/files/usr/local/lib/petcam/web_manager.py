@@ -23,6 +23,7 @@ from camera_profiles import (
     USTREAMER_FORMATS, apply_primary_config, camera_identity, configure_profile, create_profile, list_profiles,
     remove_profile, stream_port,
 )
+from timelapse import load_config as load_timelapse_config, save_config as save_timelapse_config, state_snapshot as timelapse_snapshot
 from web_auth import SESSION_TTL, get_session, invalidate_session, new_session, save_password, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
@@ -45,7 +46,7 @@ PAGE = r"""<!doctype html>
 <style>
 :root{color-scheme:dark;font:16px system-ui,sans-serif;background:#17191d;color:#eee}
 body{max-width:760px;margin:2rem auto;padding:0 1rem}h1{font-size:1.5rem}section{background:#22262c;border:1px solid #383e47;border-radius:10px;padding:1rem;margin:1rem 0}
-button,select{font:inherit;padding:.55rem .7rem;border-radius:6px;border:1px solid #59616d;background:#303741;color:inherit}
+button,select,input{font:inherit;padding:.55rem .7rem;border-radius:6px;border:1px solid #59616d;background:#303741;color:inherit}
 button{cursor:pointer}button:disabled{opacity:.5}label{display:block;margin:.7rem 0 .25rem}select{width:100%}
 video,img{display:block;width:100%;max-height:55vh;object-fit:contain;background:#090a0b;border-radius:6px}
 small,.muted{color:#aeb7c2}#message{min-height:1.5em;color:#b9d8ff}.row{display:flex;gap:.5rem;flex-wrap:wrap}
@@ -69,6 +70,20 @@ small,.muted{color:#aeb7c2}#message{min-height:1.5em;color:#b9d8ff}.row{display:
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera streams</h2><button id="refresh-streams">Refresh streams</button></div><div id="stream-profiles" class="muted">Loading streams…</div></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Network and OBS diagnostics</h2><button id="refresh-diagnostics">Run checks</button></div><p id="diagnostic-summary" role="status">Diagnostics have not been run yet.</p><p id="diagnostic-details" class="muted"></p><div class="row"><button id="download-support-bundle">Download redacted support bundle</button></div></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Stream health</h2><button id="refresh-health">Refresh</button></div><p id="health-state" role="status">Checking stream health…</p><p id="health-reason" class="muted"></p><small id="health-details" class="muted"></small></section>
+<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Timelapse</h2><button id="refresh-timelapse">Refresh status</button></div>
+<p id="timelapse-status" role="status">Loading timelapse status…</p>
+<label style="display:flex;gap:.5rem;align-items:center"><input id="timelapse-enabled" type="checkbox"> Enable periodic captures</label>
+<label for="timelapse-interval">Capture interval (seconds)</label><input id="timelapse-interval" type="number" min="60" max="86400" value="300">
+<label for="timelapse-start">Daily schedule start (local time)</label><input id="timelapse-start" type="time" value="00:00">
+<label for="timelapse-end">Daily schedule end (local time)</label><input id="timelapse-end" type="time" value="23:59">
+<label for="timelapse-retention">Retention (days)</label><input id="timelapse-retention" type="number" min="1" max="3650" value="30">
+<label for="timelapse-storage">Maximum storage (MiB)</label><input id="timelapse-storage" type="number" min="64" max="102400" value="2048">
+<label for="timelapse-free">Minimum free disk space (MiB)</label><input id="timelapse-free" type="number" min="64" max="102400" value="256">
+<label for="timelapse-width">Maximum image width (0 = live resolution)</label><input id="timelapse-width" type="number" min="0" max="4096" value="0">
+<label for="timelapse-quality">JPEG quality (0 = preserve source unless resizing; 1–95 = re-encode)</label><input id="timelapse-quality" type="number" min="0" max="95" value="85">
+<label for="timelapse-path">Storage directory (inside /var/lib/petcam)</label><input id="timelapse-path" type="text" value="/var/lib/petcam/timelapse/frames">
+<p class="muted">Frames reuse the active MJPEG stream, so timelapse does not open another camera process. Optional resizing/re-encoding is performed only after a frame is received.</p>
+<div class="row"><button id="save-timelapse">Save timelapse settings</button></div></section>
 <section><h2>Account security</h2><p class="muted">Change the password used to access this manager.</p><button id="change-password">Change password</button> <button id="logout">Sign out</button></section>
 <footer style="text-align:center;padding:1rem 0 2rem"><small>Enjoying PetCam? <a href="https://www.paypal.me/kimmynightmare" target="_blank" rel="noopener noreferrer" style="color:#b9d8ff">Support development with PayPal</a></small></footer>
 <script>
@@ -88,6 +103,10 @@ $("logout").onclick=async()=>{try{await request("/api/logout",{method:"POST",hea
 function fillStreamTargets(){const selected=$("stream-target").value;$("stream-target").replaceChildren();const primary=document.createElement("option");primary.value="default";primary.textContent="Primary stream (/stream)";$("stream-target").append(primary);for(const p of streams){if(p.id==="default")continue;const o=document.createElement("option");o.value=p.id;o.textContent=p.label+" · "+p.state;$("stream-target").append(o)}if([...$("stream-target").options].some(o=>o.value===selected))$("stream-target").value=selected}
 function renderStreams(){const root=$("stream-profiles");root.replaceChildren();for(const p of streams){const card=document.createElement("section"),title=document.createElement("h3"),state=document.createElement("p"),preview=document.createElement("img"),url=document.createElement("code"),row=document.createElement("div");title.textContent=p.label;state.textContent="Service: "+p.state+" · "+(p.ready?"frames available":"no frame detected")+(p.stable_identity===false?" · identity may change if USB enumeration changes":"");preview.src=p.stream_path;preview.alt=p.label+" preview";preview.style.maxHeight="220px";url.textContent="OBS: http://"+window.location.hostname+":8080"+p.stream_path;row.className="row";row.append(url);card.append(title,state,preview,row);if(p.managed_independently){const remove=document.createElement("button");remove.textContent="Remove stream";remove.onclick=async()=>{remove.disabled=true;try{await request("/api/streams/remove",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile_id:p.id})});await refreshStreams()}catch(e){state.textContent=e.message;remove.disabled=false}};card.append(remove)}root.append(card)}}
 async function refreshStreams(){try{const d=await request("/api/streams");streams=d.streams||[];fillStreamTargets();renderStreams()}catch(e){$("stream-profiles").textContent="Unable to load streams: "+e.message}}
+async function refreshTimelapse(){try{const d=await request("/api/timelapse");const c=d.config,s=d.status;$("timelapse-enabled").checked=c.enabled;$("timelapse-interval").value=c.interval_seconds;$("timelapse-start").value=c.schedule_start;$("timelapse-end").value=c.schedule_end;$("timelapse-retention").value=c.retention_days;$("timelapse-storage").value=c.max_storage_mb;$("timelapse-free").value=c.min_free_mb;$("timelapse-width").value=c.max_width;$("timelapse-quality").value=c.jpeg_quality;$("timelapse-path").value=c.storage_path;$("timelapse-status").textContent="Status: "+s.state+" · "+s.frames+" frames · "+Math.round(s.storage_bytes/1048576)+" MiB"+(s.last_capture_at?" · Last capture: "+s.last_capture_at:"")+(s.last_error?" · "+s.last_error:"")}catch(e){$("timelapse-status").textContent="Timelapse status unavailable: "+e.message}}
+$("refresh-timelapse").onclick=refreshTimelapse;
+$("save-timelapse").onclick=async()=>{const b=$("save-timelapse");b.disabled=true;try{await request("/api/timelapse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:$("timelapse-enabled").checked,interval_seconds:Number($("timelapse-interval").value),schedule_start:$("timelapse-start").value,schedule_end:$("timelapse-end").value,retention_days:Number($("timelapse-retention").value),max_storage_mb:Number($("timelapse-storage").value),min_free_mb:Number($("timelapse-free").value),max_width:Number($("timelapse-width").value),jpeg_quality:Number($("timelapse-quality").value),storage_path:$("timelapse-path").value})});await refreshTimelapse()}catch(e){$("timelapse-status").textContent=e.message}finally{b.disabled=false}};
+refreshTimelapse();
 async function refreshDiagnostics(){try{const d=await request("/api/diagnostics");const layers=d.layers||{};const failed=Object.entries(layers).filter(([k,v])=>v&&(v.healthy===false||v.reachable===false||v.resolved===false||v.available===false));$("diagnostic-summary").textContent=failed.length?failed.map(([k])=>k.replaceAll("_"," ")+": attention needed").join(" · "):"Local camera, listener, and network checks look healthy.";const urls=(d.obs_browser_source_urls||[]).join("\n");$("diagnostic-details").textContent="OBS URL(s): "+urls+"\n"+(d.problems||[]).join("\n")+"\n"+d.remote_client_note}catch(e){$("diagnostic-summary").textContent="Diagnostics unavailable: "+e.message}}$("refresh-diagnostics").onclick=refreshDiagnostics;refreshDiagnostics();
 $("download-support-bundle").onclick=async()=>{const b=$("download-support-bundle");b.disabled=true;try{let r=await fetch("/api/support-bundle");if(r.status===401){await login();r=await fetch("/api/support-bundle")}if(!r.ok)throw Error("Support bundle request failed ("+r.status+")");const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="petcam-support.tar.gz";document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url)}catch(e){$("diagnostic-summary").textContent="Support bundle failed: "+e.message}finally{b.disabled=false}};
 async function refreshHealth(){try{const h=await request("/api/health");$("health-state").textContent="Status: "+h.state.replaceAll("_"," ");$("health-reason").textContent=h.reason||"No active issue reported."; $("health-details").textContent="Recoveries: "+(h.recovery_count||0)+" · Last checked: "+(h.last_checked_at||"not yet")+(h.last_recovery_at?" · Last recovery: "+h.last_recovery_at:"")}catch(e){$("health-state").textContent="Health status unavailable";$("health-reason").textContent=e.message}}$("refresh-health").onclick=refreshHealth;refresh();refreshHealth();setInterval(refreshHealth,30000);
@@ -323,6 +342,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/session":
             self.send_json(200, {"csrf_token": self._session()["csrf"]})
             return
+        if path == "/api/timelapse":
+            try:
+                config = load_timelapse_config()
+                self.send_json(200, {"config": config, "status": timelapse_snapshot(config)})
+            except Exception as error:
+                self.send_json(503, {"error": str(error)})
+            return
         if path == "/api/diagnostics":
             try:
                 self.send_json(200, collect_diagnostics())
@@ -419,6 +445,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             data = _body(self)
+            if path == "/api/timelapse":
+                current = load_timelapse_config()
+                updated = save_timelapse_config({**current, **data})
+                self.send_json(200, {"ok": True, "config": updated})
+                return
             if path == "/api/password":
                 if not verify_password(data.get("current_password", "")):
                     self.send_json(403, {"error": "Current password is incorrect"})

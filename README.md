@@ -2,6 +2,10 @@
 
 A minimal, reproducible Raspberry Pi OS image for Raspberry Pi boards, USB UVC webcams, and Raspberry Pi CSI camera modules. It serves camera video over the local network for OBS through one consistent MJPEG endpoint.
 
+## Timelapse
+
+See [timelapse capture documentation](docs/timelapse.md) for scheduled JPEG capture, storage limits, and video assembly.
+
 ## Supported hardware
 
 - Raspberry Pi Zero W (initial low-resource target); automatic hardware profiles also recognize Zero 2 W, Pi 1/2/3, Pi 4/400, and Pi 5.

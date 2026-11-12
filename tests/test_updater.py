@@ -164,6 +164,7 @@ class UpdateArchiveTests(unittest.TestCase):
             (release / "systemd").mkdir(parents=True)
             (release / "etc/petcam").mkdir(parents=True)
             (release / "systemd/petcam-home-assistant.service").write_text("[Service]\nExecStart=petcam\n")
+            (release / "systemd/petcam-timelapse.service").write_text("[Service]\nExecStart=timelapse\n")
             (release / "etc/petcam/home-assistant.conf").write_text("MQTT_ENABLED=false\n")
             config_path = etc_root / "petcam/home-assistant.conf"
             config_path.parent.mkdir(parents=True)
@@ -176,6 +177,7 @@ class UpdateArchiveTests(unittest.TestCase):
                 "[Service]\nExecStart=petcam\n",
             )
             self.assertEqual(config_path.read_text(), "MQTT_ENABLED=true\nMQTT_PASSWORD=preserve-me\n")
+            self.assertEqual((etc_root / "systemd/system/petcam-timelapse.service").read_text(), "[Service]\nExecStart=timelapse\n")
             self.assertEqual(config_path.stat().st_mode & 0o777, 0o640)
 
     def test_installs_default_home_assistant_config_when_missing(self):
@@ -185,6 +187,7 @@ class UpdateArchiveTests(unittest.TestCase):
             (release / "systemd").mkdir(parents=True)
             (release / "etc/petcam").mkdir(parents=True)
             (release / "systemd/petcam-home-assistant.service").write_text("[Service]\n")
+            (release / "systemd/petcam-timelapse.service").write_text("[Service]\n")
             (release / "etc/petcam/home-assistant.conf").write_text("MQTT_ENABLED=false\n")
             with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=1000)), \
                     mock.patch("updater.os.geteuid", return_value=1000):
@@ -199,11 +202,13 @@ class UpdateArchiveTests(unittest.TestCase):
             mock.Mock(returncode=0, stderr=""),
             mock.Mock(returncode=0),
             mock.Mock(returncode=0, stderr=""),
+            mock.Mock(returncode=0),
+            mock.Mock(returncode=0, stderr=""),
         ]
         with mock.patch("updater.subprocess.run", side_effect=results) as run:
             self.assertEqual(restart_services(), "")
-        self.assertEqual(run.call_count, 4)
-        self.assertEqual(run.call_args_list[-1].args[0], ["systemctl", "restart", "petcam-home-assistant.service"])
+        self.assertEqual(run.call_count, 6)
+        self.assertEqual(run.call_args_list[-1].args[0], ["systemctl", "restart", "petcam-timelapse.service"])
 
     def test_validates_required_release_files_and_embedded_version(self):
         files = {
@@ -218,7 +223,9 @@ class UpdateArchiveTests(unittest.TestCase):
             "lib/network_diagnostics.py": b"# network diagnostics",
             "lib/camera_profiles.py": b"# camera profiles",
             "lib/home_assistant.py": b"# Home Assistant MQTT",
+            "lib/timelapse.py": b"# Timelapse",
             "systemd/petcam-home-assistant.service": b"[Service]\nExecStart=/usr/bin/python3 /opt/petcam/current/lib/home_assistant.py\n",
+            "systemd/petcam-timelapse.service": b"[Service]\nExecStart=/usr/bin/python3 /opt/petcam/current/lib/timelapse.py\n",
             "etc/petcam/home-assistant.conf": b"MQTT_ENABLED=false\n",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"binary",
