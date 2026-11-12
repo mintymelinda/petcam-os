@@ -36,6 +36,15 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("/api/support-bundle", MODULE.PAGE)
         self.assertIn("Download redacted support bundle", MODULE.PAGE)
 
+    def test_first_run_admin_setup_is_available_in_the_browser(self):
+        self.assertIn('id="first-run-form"', MODULE.PAGE)
+        self.assertIn('id="setup-password"', MODULE.PAGE)
+        self.assertIn("/api/setup/status", MODULE.PAGE)
+        self.assertIn("/api/setup", MODULE.PAGE)
+        self.assertIn("SSH is not required", MODULE.PAGE)
+        self.assertIn("initialize_password", MODULE.Handler.do_POST.__code__.co_names)
+        self.assertIn("is_configured", MODULE.Handler.do_GET.__code__.co_names)
+
     def test_update_check_uses_fixed_privileged_command(self):
         completed = mock.Mock(returncode=0, stdout='{"update_available": false}', stderr="")
         with mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run:
