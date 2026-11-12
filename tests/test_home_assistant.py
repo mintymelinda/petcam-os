@@ -55,9 +55,6 @@ class FakePublisher:
     def publish_discovery(self, node_id, hostname, model, entities):
         self.discovery = (node_id, hostname, model, entities)
 
-    def publish_availability(self, state):
-        self.publish(self._topic("broker"), state)
-
     def publish_state(self, snapshot):
         for key, value in snapshot.items():
             self.publish(self._topic(f"state/{key}"), value)
@@ -115,6 +112,10 @@ class HomeAssistantMQTTTests(unittest.TestCase):
         self.assertEqual(MODULE._remaining_length(321), b"\xc1\x02")
         with self.assertRaises(MODULE.MQTTError):
             MODULE._remaining_length(268435456)
+
+    def test_node_identifier_is_safe_for_mqtt_topics(self):
+        config = {**MODULE.DEFAULTS, "MQTT_CLIENT_ID": "petcam camera/one"}
+        self.assertEqual(MODULE._node_identifier(config), "petcam_camera_one")
 
     def test_connect_uses_retained_last_will_and_optional_credentials(self):
         fake = FakeSocket()
