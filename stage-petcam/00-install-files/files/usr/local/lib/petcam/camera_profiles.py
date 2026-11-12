@@ -137,10 +137,23 @@ def _load_profiles() -> list[dict[str, Any]]:
         raise ProfileError(f"Unable to read camera profile index: {error}") from error
     if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
         raise ProfileError("Camera profile index is malformed.")
+    seen_ids = set()
+    seen_ports = set()
     for profile in value:
-        profile_id = profile.get("id", "")
-        if not re.fullmatch(r"[a-z0-9-]{1,64}", profile_id):
+        profile_id = profile.get("id")
+        if not isinstance(profile_id, str) or not re.fullmatch(r"[a-z0-9-]{1,64}", profile_id):
             raise ProfileError("Camera profile index contains an invalid identity.")
+        if profile_id in seen_ids:
+            raise ProfileError("Camera profile index contains a duplicate identity.")
+        seen_ids.add(profile_id)
+        port = profile.get("port")
+        if isinstance(port, bool) or not isinstance(port, int) or not MIN_PROFILE_PORT <= port <= MAX_PROFILE_PORT:
+            raise ProfileError(f"Camera profile {profile_id} has an invalid stream port.")
+        if port in seen_ports:
+            raise ProfileError(f"Camera profile index contains a duplicate stream port: {port}.")
+        seen_ports.add(port)
+        if profile.get("service") != f"petcam-stream@{profile_id}.service":
+            raise ProfileError(f"Camera profile {profile_id} has an invalid systemd service name.")
     return value
 
 
