@@ -110,6 +110,12 @@ class WebManagerRouteAuthenticationTests(unittest.TestCase):
         self.assertIn("HttpOnly", cookie)
         self.assertIn("SameSite=Strict", cookie)
 
+    def test_existing_session_can_restore_csrf_token_after_page_reload(self):
+        cookie, csrf = self.login()
+        status, _, payload = self.request("GET", "/api/session", cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload)["csrf_token"], csrf)
+
     def test_state_changes_require_csrf_and_valid_session(self):
         cookie, csrf = self.login()
         with mock.patch.object(MANAGER, "save_selection") as save:
