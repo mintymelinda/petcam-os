@@ -23,7 +23,7 @@ class ImagerManifestTests(unittest.TestCase):
             self.assertEqual(len(data["os_list"]), 1)
             entry = data["os_list"][0]
             self.assertEqual(entry["name"], "PetCam OS")
-            self.assertEqual(entry["url"], str(image.resolve()))
+            self.assertEqual(entry["url"], image.resolve().as_uri())
             self.assertEqual(entry["init_format"], "cloudinit-rpi")
             self.assertIn("pi0w", entry["devices"])
             self.assertEqual(entry["extract_size"], len(raw))
