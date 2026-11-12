@@ -131,7 +131,7 @@ On first boot, open the manager from another device on the same network:
 - The first-run setup is one-time and signs the browser in automatically. SSH is not required.
 - Complete first-run setup while the Pi is on a trusted private network; do not expose the manager to the public internet.
 
-This manager password is separate from the Linux administrator account configured in Raspberry Pi Imager. The `sudo petcam-admin` command remains available as a local/SSH recovery path; it is not part of normal first-run setup.
+This manager password is separate from the Linux administrator account configured in Raspberry Pi Imager. If the manager password is lost, run `sudo petcam-admin` locally or over SSH to perform a confirmed PetCam factory reset. This clears PetCam settings, camera profiles, administrator credentials, timelapse frames, motion snapshots, and integration settings, then restores the browser first-run setup. It preserves Raspberry Pi OS, Wi-Fi/network configuration, hostname, SSH, the device TLS certificate, updater trust configuration, and installed software. It is deliberately not available as an unauthenticated network endpoint.
 
 Password hashes use PBKDF2-HMAC-SHA256 and are stored in `/etc/petcam/web-auth.json`. Each device generates its own self-signed HTTPS certificate, so the browser will show a certificate warning until the certificate is explicitly trusted. Sessions are HTTP-only, Secure, SameSite=Strict, expire after eight hours, and are invalidated when the password changes or the manager service restarts.
 
