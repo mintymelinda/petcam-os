@@ -248,7 +248,6 @@ SupplementaryGroups=video i2c
 ExecStart=/usr/bin/python3 /opt/petcam/current/lib/web_manager.py
 Restart=always
 RestartSec=3
-NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
