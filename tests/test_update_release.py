@@ -24,6 +24,7 @@ class SignedReleasePublisherTests(unittest.TestCase):
             "lib/web_manager.py": b"# web\n",
             "lib/web_auth.py": b"# authentication\n",
             "lib/health_monitor.py": b"# health monitor\n",
+            "lib/config.py": b"# config\n",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"fake armhf binary",
         }
