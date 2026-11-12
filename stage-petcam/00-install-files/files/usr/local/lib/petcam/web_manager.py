@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import ensure_config_lock, parse_config
+from camera import mode_supports_fps
 from network_diagnostics import collect_diagnostics, create_support_bundle
 from camera_profiles import (
     USTREAMER_FORMATS, apply_primary_config, camera_identity, configure_profile, create_profile, list_profiles,
@@ -80,7 +81,7 @@ function modesFor(camera){return camera.kind==="usb"?camera.modes.filter(m=>["MJ
 function fillModes(){const c=inventory[+$("camera").value];$("mode").replaceChildren();if(!c)return;for(const m of modesFor(c)){let fps=m.fps?.length?m.fps:[m.fps_range?.max||30];if(c.kind==="usb")fps=fps.filter(Number.isInteger);for(const f of fps){const o=document.createElement("option");o.value=JSON.stringify({format:m.format||"CSI",width:m.width,height:m.height,fps:f});o.textContent=`${m.width}×${m.height} · ${f} fps · ${m.format||"CSI"}`; $("mode").append(o)}}}
 async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{$("message").textContent=inventory.length+" camera(s) found. Select one to preview and configure.";fillModes()}await refreshStreams()}catch(e){$("message").textContent=e.message}}
 $("refresh").onclick=refresh;$("camera").onchange=fillModes;
-$("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value,target=$("stream-target").value;if(!c||!m)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{if(target==="default"){await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,device:c.device,camera:c.camera,mode:JSON.parse(m)})})}else{await request("/api/streams/configure",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile_id:target,camera_id:c.id,mode:JSON.parse(m)})})}$("message").textContent="Camera settings saved. Only the selected stream was restarted.";await refreshStreams()}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
+$("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value,target=$("stream-target").value;if(!c||!m)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{if(target==="default"){await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,camera_id:c.id,device:c.device,physical_path:c.physical_path,device_path:c.device_path,camera:c.camera,mode:JSON.parse(m)})})}else{await request("/api/streams/configure",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile_id:target,camera_id:c.id,mode:JSON.parse(m)})})}$("message").textContent="Camera settings saved. Only the selected stream was restarted.";await refreshStreams()}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
 $("add-stream").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;const b=$("add-stream");b.disabled=true;$("message").textContent="Starting independent camera stream…";try{const d=await request("/api/streams",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({camera_id:c.id,mode:JSON.parse(m)})});$("message").textContent="Independent stream started: "+d.profile.stream_path;await refreshStreams()}catch(e){$("message").textContent=e.message}finally{b.disabled=false}};
 $("refresh-streams").onclick=refreshStreams;
 $("logout").onclick=async()=>{try{await request("/api/logout",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});csrfToken=null;location.reload()}catch(e){alert(e.message)}};$("change-password").onclick=async()=>{const current=prompt("Current password");if(current===null)return;const next=prompt("New password (at least 12 characters)");if(next===null)return;try{const d=await request("/api/password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({current_password:current,new_password:next})});csrfToken=d.csrf_token;alert("Password changed. Other sessions were signed out.")}catch(e){alert(e.message)}};
@@ -135,29 +136,71 @@ def save_selection(data):
         raise ValueError("Invalid camera selection")
     if not (1 <= width <= 10000 and 1 <= height <= 10000 and isinstance(fps, (int, float)) and 0 < fps <= 240):
         raise ValueError("Invalid capture mode")
+
+    discovered = camera_inventory()
+    camera_id = data.get("camera_id")
+    if camera_id:
+        match = next((item for item in discovered if item["kind"] == kind and item["id"] == camera_id), None)
+    elif kind == "usb":
+        physical_path = data.get("physical_path", "")
+        device = data.get("device", "")
+        match = next((
+            item for item in discovered
+            if item["kind"] == "usb" and (
+                item.get("physical_path") == physical_path if physical_path else item["device"] == device
+            )
+        ), None)
+    else:
+        device_path = data.get("device_path", "")
+        camera = data.get("camera")
+        match = next((
+            item for item in discovered
+            if item["kind"] == "csi" and (
+                item.get("device_path") == device_path if device_path else item["camera"] == camera
+            )
+        ), None)
+    if not match:
+        raise ValueError("Selected camera is no longer available.")
+
     if kind == "usb":
         if not float(fps).is_integer():
             raise ValueError("USB camera FPS must be a whole number")
-        device = data.get("device", "")
-        if not re.fullmatch(r"/dev/(video[0-9]+|v4l/by-id/[A-Za-z0-9._:+-]+)", device):
-            raise ValueError("Invalid USB device path")
-        discovered = camera_inventory()
-        match = next((c for c in discovered if c["kind"] == "usb" and c["device"] == device), None)
-        if not match or not any(m["width"] == width and m["height"] == height and
-                                (m["format"] == mode.get("format")) and
-                                (not m["fps"] or any(abs(v-fps) < .1 for v in m["fps"]))
-                                for m in match["modes"]):
+        if not any(
+            item["width"] == width and item["height"] == height
+            and item["format"] == mode.get("format")
+            and mode_supports_fps(item, float(fps))
+            for item in match["modes"]
+        ):
             raise ValueError("That USB mode is no longer advertised by the camera")
-        values = {"SOURCE": "usb", "DEVICE": device, "CAMERA": "auto",
-                  "FORMAT": mode["format"], "RESOLUTION": f"{width}x{height}", "FPS": str(int(fps))}
+        device = match["device"]
+        physical_path = match.get("physical_path", "")
+        values = {
+            "SOURCE": "usb",
+            "DEVICE": device if device.startswith("/dev/v4l/by-id/") or not physical_path else "",
+            "USB_PHYSICAL_PATH": physical_path,
+            "CSI_DEVICE_PATH": "",
+            "CAMERA": "auto",
+            "FORMAT": mode["format"],
+            "RESOLUTION": f"{width}x{height}",
+            "FPS": str(int(fps)),
+        }
     else:
-        camera = data.get("camera")
-        discovered = camera_inventory()
-        match = next((c for c in discovered if c["kind"] == "csi" and c["camera"] == camera), None)
-        if not match or not any(m["width"] == width and m["height"] == height and abs(m["fps"]-fps) < .1 for m in match["modes"]):
+        if not any(
+            item["width"] == width and item["height"] == height and abs(item["fps"] - fps) < 0.1
+            for item in match["modes"]
+        ):
             raise ValueError("That CSI mode is no longer advertised by the camera")
-        values = {"SOURCE": "csi", "DEVICE": "", "CAMERA": str(camera),
-                  "FORMAT": "auto", "RESOLUTION": f"{width}x{height}", "FPS": str(fps)}
+        device_path = match.get("device_path", "")
+        values = {
+            "SOURCE": "csi",
+            "DEVICE": "",
+            "USB_PHYSICAL_PATH": "",
+            "CSI_DEVICE_PATH": device_path,
+            "CAMERA": "auto" if device_path else str(match["camera"]),
+            "FORMAT": "auto",
+            "RESOLUTION": f"{width}x{height}",
+            "FPS": str(fps),
+        }
     return apply_primary_config(values, match)
 
 
