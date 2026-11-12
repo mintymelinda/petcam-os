@@ -125,7 +125,7 @@ def mode_supports_fps(mode, fps):
         return abs(steps - round(steps)) < 0.001
     return limits["min_interval_seconds"] <= interval <= limits["max_interval_seconds"]
 
-CSI_CAMERA_RE = re.compile(r"^\s*(\d+)\s*:\s*(\S+)\s*\[(\d+)x(\d+)\]")
+CSI_CAMERA_RE = re.compile(r"^\s*(\d+)\s*:\s*(\S+)\s*\[(\d+)x(\d+)\](?:\s+\(([^)]+)\))?")
 CSI_MODE_RE = re.compile(r"(\d+)x(\d+)\s+\[([\d.]+)\s+fps")
 
 
@@ -140,6 +140,7 @@ def parse_csi_cameras(output):
                 "sensor": camera_match.group(2),
                 "sensor_width": int(camera_match.group(3)),
                 "sensor_height": int(camera_match.group(4)),
+                "device_path": camera_match.group(5) or "",
                 "modes": [],
             }
             cameras.append(current)
@@ -166,7 +167,9 @@ def discover_csi_cameras():
     return parse_csi_cameras(result.stdout + "\n" + result.stderr)
 
 
-def select_csi_mode(cameras, tier, requested_camera=None, resolution="auto", fps="auto"):
+def select_csi_mode(cameras, tier, requested_camera=None, resolution="auto", fps="auto", requested_device_path=None):
+    if requested_device_path:
+        cameras = [camera for camera in cameras if camera.get("device_path") == requested_device_path]
     if requested_camera is not None:
         cameras = [camera for camera in cameras if camera["index"] == requested_camera]
     candidates = []
@@ -206,6 +209,7 @@ def select_csi_mode(cameras, tier, requested_camera=None, resolution="auto", fps
     return {
         "camera": camera["index"],
         "sensor": camera["sensor"],
+        "device_path": camera.get("device_path", ""),
         "resolution": f'{mode["width"]}x{mode["height"]}',
         "fps": int(mode["fps"]) if mode["fps"].is_integer() else mode["fps"],
         "mode_fps": [item["fps"] for item in camera["modes"] if item["width"] == mode["width"] and item["height"] == mode["height"]],
@@ -271,7 +275,7 @@ def discover_devices(sysfs_root=Path("/sys/class/video4linux"), dev_root=Path("/
         except OSError:
             continue
     devices = []
-    for nodes in groups.values():
+    for physical_path, nodes in groups.items():
         # A camera may expose multiple video nodes; publish only one interface.
         candidates = sorted(nodes, key=lambda node: (str(node) not in aliases, str(node)))
         for node in candidates:
@@ -282,7 +286,7 @@ def discover_devices(sysfs_root=Path("/sys/class/video4linux"), dev_root=Path("/
                 continue
             modes = parse_modes(result.stdout)
             if modes:
-                devices.append({"device": device, "modes": modes})
+                devices.append({"device": device, "physical_path": physical_path, "modes": modes})
                 break
     return devices
 
@@ -331,6 +335,7 @@ def main():
     parser.add_argument("command", choices=("discover", "select", "discover-csi", "select-csi", "status"))
     parser.add_argument("--device")
     parser.add_argument("--camera", type=int)
+    parser.add_argument("--device-path")
     parser.add_argument("--format", default="auto")
     parser.add_argument("--resolution", default="auto")
     parser.add_argument("--fps", default="auto")
@@ -355,7 +360,7 @@ def main():
     if args.command == "select-csi":
         try:
             selected_csi = select_csi_mode(
-                discover_csi_cameras(), tier, args.camera, args.resolution, args.fps
+                discover_csi_cameras(), tier, args.camera, args.resolution, args.fps, args.device_path
             )
         except ValueError as error:
             print(str(error), file=sys.stderr)
