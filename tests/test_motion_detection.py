@@ -4,10 +4,13 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
 from unittest import mock
 from io import BytesIO
 
 from PIL import Image
+
+sys.path.insert(0, str(Path("stage-petcam/00-install-files/files/usr/local/lib/petcam").resolve()))
 
 SPEC = importlib.util.spec_from_file_location(
     "petcam_motion",
@@ -170,6 +173,11 @@ class MotionDetectionTests(unittest.TestCase):
         metrics = MODULE._metrics(__import__("time").monotonic(), __import__("time").process_time())
         self.assertGreaterEqual(metrics["cpu_percent"], 0)
         self.assertGreater(metrics["peak_rss_kib"], 0)
+
+    def test_benchmark_reports_camera_disconnect_as_an_error(self):
+        with mock.patch.object(MODULE.urllib.request, "urlopen", side_effect=OSError("camera disconnected")):
+            with self.assertRaisesRegex(OSError, "camera disconnected"):
+                MODULE.benchmark(10)
 
     def test_benchmark_rejects_invalid_duration(self):
         with self.assertRaises(ValueError):
