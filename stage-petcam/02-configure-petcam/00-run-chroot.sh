@@ -26,6 +26,10 @@ SCRIPT
 chmod 0755 /usr/local/bin/petcam-camera /usr/local/bin/petcam-status
 
 install -d -m 0755 "/opt/petcam/releases/$APP_VERSION/lib" /etc/petcam
+openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 825 -keyout /etc/petcam/web-manager.key -out /etc/petcam/web-manager.crt -subj "/CN=petcam.local" -addext "subjectAltName=DNS:petcam.local,DNS:petcam"
+chown root:petcam /etc/petcam/web-manager.key /etc/petcam/web-manager.crt
+chmod 0640 /etc/petcam/web-manager.key
+chmod 0644 /etc/petcam/web-manager.crt
 cat > "/opt/petcam/releases/$APP_VERSION/lib/start-stream.sh" <<'SCRIPT'
 #!/bin/bash
 set -euo pipefail
