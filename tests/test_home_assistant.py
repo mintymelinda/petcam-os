@@ -248,7 +248,7 @@ class HomeAssistantMQTTTests(unittest.TestCase):
 
         def sleep(seconds):
             delays.append(seconds)
-            if len(delays) == 4:
+            if len(delays) == 8:
                 stopped["value"] = True
 
         with mock.patch.object(MODULE, "MQTTClient", Client):
@@ -257,7 +257,7 @@ class HomeAssistantMQTTTests(unittest.TestCase):
                 stop=lambda: stopped["value"],
                 sleep=sleep,
             )
-        self.assertEqual(delays, [5, 10, 20, 40])
+        self.assertEqual(delays, [5, 10, 20, 40, 80, 160, 300, 300])
 
     def test_reconnects_after_broker_loss_with_bounded_backoff(self):
         attempts = {"connect": 0, "ping": 0, "sleep": 0}
