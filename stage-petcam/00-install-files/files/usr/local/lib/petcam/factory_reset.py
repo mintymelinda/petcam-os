@@ -77,7 +77,7 @@ def reset():
         profile_id = profile.stem
         if profile_id and all(c in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in profile_id):
             subprocess.run(
-                ["/usr/bin/systemctl", "stop", f"petcam-stream@{profile_id}.service"],
+                ["/usr/bin/systemctl", "disable", "--now", f"petcam-stream@{profile_id}.service"],
                 check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
     for service in SERVICES:
