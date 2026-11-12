@@ -6,6 +6,7 @@ if [[ ! "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 RELEASE_DIR="${ROOTFS_DIR}/opt/petcam/releases/${APP_VERSION}"
+install -D -o root -g root -m 0644 files/etc/petcam/update-signing.pub "${ROOTFS_DIR}/etc/petcam/update-signing.pub"
 install -d -m 0755 "$RELEASE_DIR/lib"
 install -m 0644 files/usr/local/lib/petcam/VERSION "$RELEASE_DIR/VERSION"
 install -m 0644 files/usr/local/lib/petcam/camera.py "$RELEASE_DIR/lib/camera.py"
