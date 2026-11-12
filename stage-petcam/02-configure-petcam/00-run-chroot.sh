@@ -350,3 +350,25 @@ JSON
 chown petcam:petcam /var/lib/petcam/motion/config.json
 chmod 0640 /var/lib/petcam/motion/config.json
 systemctl enable petcam-motion.service
+
+
+# Remove image-build-only dependencies after compiling the bundled streamer.
+# Preserve every shared library actually used by the installed binary before
+# purging development packages and allowing apt to remove unused dependencies.
+USTREAMER_BIN="/opt/petcam/releases/$APP_VERSION/vendor/bin/ustreamer"
+while IFS= read -r library; do
+    package="$(dpkg-query -S "$library" 2>/dev/null | sed -n '1s/: .*//p')"
+    if [[ -n "$package" ]]; then
+        apt-mark manual "$package" >/dev/null
+    fi
+done < <(ldd "$USTREAMER_BIN" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^\//) print $i }' | sort -u)
+
+apt-get purge -y --auto-remove \
+    build-essential pkg-config git \
+    libevent-dev libjpeg-dev libbsd-dev libv4l-dev
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+find /usr/share/doc -mindepth 1 -maxdepth 1 ! -name copyright -exec rm -rf {} +
+rm -rf /usr/share/man/* /usr/share/info/*
+find /var/log -type f -exec truncate -s 0 {} +
+rm -rf /tmp/* /var/tmp/*

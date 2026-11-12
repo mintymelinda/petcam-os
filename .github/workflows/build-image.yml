@@ -45,7 +45,7 @@ jobs:
       - name: Validate PetCam scripts
         run: |
           python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_auth.py stage-petcam/00-install-files/files/usr/local/lib/petcam/health_monitor.py stage-petcam/00-install-files/files/usr/local/lib/petcam/config.py stage-petcam/00-install-files/files/usr/local/lib/petcam/network_diagnostics.py stage-petcam/00-install-files/files/usr/local/lib/petcam/factory_reset.py stage-petcam/00-install-files/files/usr/local/lib/petcam/camera_profiles.py stage-petcam/00-install-files/files/usr/local/lib/petcam/home_assistant.py stage-petcam/00-install-files/files/usr/local/lib/petcam/timelapse.py stage-petcam/00-install-files/files/usr/local/lib/petcam/motion_detection.py tools/create_imager_os_list.py stage-petcam/00-install-files/files/usr/local/lib/petcam/updater.py tools/create_update_release.py
-          bash -n stage-petcam/00-install-files/00-run.sh stage-petcam/02-configure-petcam/00-run-chroot.sh
+          bash -n stage-petcam/00-install-files/00-run.sh stage-petcam/02-configure-petcam/00-run-chroot.sh tools/shrink_image.sh
 
       - name: Install test-only image processing dependency
         run: sudo apt-get update && sudo apt-get install -y python3-pil
@@ -91,6 +91,17 @@ jobs:
         run: |
           cd pi-gen
           sudo ./build-docker.sh
+
+      - name: Shrink and recompress the release image
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends parted e2fsprogs xz-utils
+          mapfile -t IMAGES < <(find pi-gen/deploy -maxdepth 1 -type f -name '*.img.xz' -print)
+          if [[ "${#IMAGES[@]}" -ne 1 ]]; then
+            echo "Expected exactly one .img.xz image before shrinking; found ${#IMAGES[@]}." >&2
+            exit 1
+          fi
+          bash tools/shrink_image.sh "${IMAGES[0]}"
 
       - name: Prepare and publish signed application update
         env:

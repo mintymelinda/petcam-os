@@ -38,7 +38,7 @@ The release workflow pins the pi-gen checkout to its configured upstream branch 
 
 A successful version-tag build publishes:
 
-- `petcam-os-vMAJOR.MINOR.PATCH.img.xz`: compressed flashable image.
+- `petcam-os-vMAJOR.MINOR.PATCH.img.xz`: filesystem- and partition-shrunk, compressed flashable image. The first-boot root-filesystem expansion remains enabled so the installed system grows to use the target card.
 - `petcam-os-os-list.json`: generated Raspberry Pi Imager OS sublist.
 - `petcam-MAJOR.MINOR.PATCH-armhf.tar.gz`: versioned PetCam application archive.
 - `petcam-update-manifest.json` and `petcam-update-manifest.json.sig`: signed update metadata and detached Ed25519 signature.
