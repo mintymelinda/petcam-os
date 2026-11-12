@@ -28,11 +28,7 @@ cat > /usr/local/bin/petcam-admin <<'SCRIPT'
 #!/bin/sh
 exec python3 /opt/petcam/current/lib/web_manager.py --set-password
 SCRIPT
-cat > /usr/local/bin/petcam-health <<'SCRIPT'
-#!/bin/sh
-exec python3 /opt/petcam/current/lib/health_monitor.py "$@"
-SCRIPT
-chmod 0755 /usr/local/bin/petcam-camera /usr/local/bin/petcam-status /usr/local/bin/petcam-admin /usr/local/bin/petcam-health
+chmod 0755 /usr/local/bin/petcam-camera /usr/local/bin/petcam-status /usr/local/bin/petcam-admin
 
 install -d -m 0755 "/opt/petcam/releases/$APP_VERSION/lib" /etc/petcam
 
@@ -265,6 +261,49 @@ systemctl enable avahi-daemon.service
 systemctl enable petcam-stream.service
 systemctl enable petcam-web-cert.service
 
+cat > /etc/systemd/system/petcam-web-cert.service <<'UNIT'
+[Unit]
+Description=Create a unique PetCam HTTPS certificate on first boot
+Before=petcam-web.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/petcam-create-web-cert
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+cat > /etc/systemd/system/petcam-web.service <<'UNIT'
+[Unit]
+Description=PetCam lightweight camera management web interface
+Requires=petcam-web-cert.service
+After=network-online.target petcam-stream.service petcam-web-cert.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=petcam
+Group=petcam
+SupplementaryGroups=video i2c
+ExecStart=/usr/bin/python3 /opt/petcam/current/lib/web_manager.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/etc/petcam /var/lib/petcam
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl enable avahi-daemon.service
+systemctl enable petcam-stream.service
+systemctl enable petcam-web-cert.service
+
 cat > /etc/systemd/system/petcam-health.service <<'UNIT'
 [Unit]
 Description=Check PetCam capture and public stream health
@@ -298,5 +337,4 @@ Unit=petcam-health.service
 WantedBy=timers.target
 UNIT
 
-systemctl enable petcam-health.timer
 systemctl enable petcam-web.service
