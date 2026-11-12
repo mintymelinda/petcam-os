@@ -19,6 +19,7 @@ class PiGenPackageAuditTests(unittest.TestCase):
             "pkg-config",
             "v4l-utils",
             "rpicam-apps-lite",
+            "python3-minimal",
         }
         self.assertFalse(packages & upstream_duplicates)
         # Keep discovery utilities available for future network diagnostics.
