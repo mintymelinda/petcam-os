@@ -128,7 +128,7 @@ def validate_config(values: dict[str, Any], check_hardware: bool = False) -> dic
                 if isinstance(error, ConfigError):
                     raise
                 raise ConfigError(f"Unable to verify configured USB camera: {error}") from error
-        if config["SOURCE"] == "csi" and (config["CSI_DEVICE_PATH"] or config["CAMERA"] != "auto"):
+        if config["SOURCE"] in {"auto", "csi"} and (config["CSI_DEVICE_PATH"] or config["CAMERA"] != "auto"):
             try:
                 result = subprocess.run(
                     ["/usr/local/bin/petcam-camera", "discover-csi"],
