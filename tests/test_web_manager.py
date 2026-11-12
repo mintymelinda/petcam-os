@@ -69,19 +69,68 @@ class WebManagerTests(unittest.TestCase):
                 })
             apply.assert_called_once_with(
                 {
-                    "SOURCE": "usb", "DEVICE": "/dev/video0", "CAMERA": "auto",
+                    "SOURCE": "usb", "DEVICE": "/dev/video0",
+                    "USB_PHYSICAL_PATH": "", "CSI_DEVICE_PATH": "", "CAMERA": "auto",
                     "FORMAT": "MJPG", "RESOLUTION": "640x480", "FPS": "30",
                 },
-                {"kind": "usb", "device": "/dev/video0"},
+                {
+                    "kind": "usb", "device": "/dev/video0",
+                    "modes": [{"width": 640, "height": 480, "fps": [30], "format": "MJPG"}],
+                },
             )
         finally:
             MODULE.camera_inventory = original
+
+    def test_primary_usb_selection_persists_physical_topology(self):
+        physical_path = "/sys/devices/platform/soc/usb1/1-1/1-1.2"
+        camera = {
+            "kind": "usb",
+            "id": "usb-stable",
+            "device": "/dev/video4",
+            "physical_path": physical_path,
+            "modes": [{"width": 640, "height": 480, "fps": [30], "format": "MJPG"}],
+        }
+        with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \
+                mock.patch.object(MODULE, "apply_primary_config") as apply:
+            MODULE.save_selection({
+                "kind": "usb",
+                "camera_id": "usb-stable",
+                "device": "/dev/video0",
+                "physical_path": physical_path,
+                "mode": {"width": 640, "height": 480, "fps": 30, "format": "MJPG"},
+            })
+        values = apply.call_args.args[0]
+        self.assertEqual(values["DEVICE"], "")
+        self.assertEqual(values["USB_PHYSICAL_PATH"], physical_path)
+
+    def test_primary_csi_selection_persists_device_tree_path(self):
+        device_path = "/base/soc/i2c0mux/i2c@1/imx708@1a"
+        camera = {
+            "kind": "csi",
+            "id": "csi-stable",
+            "camera": 1,
+            "sensor": "imx708",
+            "device_path": device_path,
+            "modes": [{"width": 640, "height": 480, "fps": 30}],
+        }
+        with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \
+                mock.patch.object(MODULE, "apply_primary_config") as apply:
+            MODULE.save_selection({
+                "kind": "csi",
+                "camera_id": "csi-stable",
+                "camera": 0,
+                "device_path": device_path,
+                "mode": {"width": 640, "height": 480, "fps": 30},
+            })
+        values = apply.call_args.args[0]
+        self.assertEqual(values["CAMERA"], "auto")
+        self.assertEqual(values["CSI_DEVICE_PATH"], device_path)
 
     def test_usb_selection_rejects_unadvertised_device(self):
         original = MODULE.camera_inventory
         MODULE.camera_inventory = lambda: []
         try:
-            with self.assertRaisesRegex(ValueError, "no longer advertised"):
+            with self.assertRaisesRegex(ValueError, "no longer available"):
                 MODULE.save_selection({
                     "kind": "usb", "device": "/dev/video0",
                     "mode": {"width": 640, "height": 480, "fps": 30, "format": "MJPG"},
