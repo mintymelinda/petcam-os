@@ -382,7 +382,6 @@ def run(config: dict[str, object] | None = None, stop=lambda: _STOP, sleep=time.
         try:
             client.connect()
             client.publish_availability("online")
-            delay = 5
             last_publish = 0.0
             while not stop():
                 now = time.monotonic()
@@ -391,6 +390,7 @@ def run(config: dict[str, object] | None = None, stop=lambda: _STOP, sleep=time.
                     last_publish = now
                 sleep(5)
                 client.ping()
+                delay = 5
         except (OSError, MQTTError, ssl.SSLError, subprocess.SubprocessError) as error:
             print(f"Home Assistant MQTT connection unavailable: {error}", file=sys.stderr, flush=True)
         finally:
