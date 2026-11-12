@@ -44,6 +44,7 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("Downloading release", status["logs"])
 
     def test_valid_selection_uses_transactional_config_apply(self):
+        original = MODULE.camera_inventory
         MODULE.camera_inventory = lambda: [{
             "kind": "usb",
             "device": "/dev/video0",
