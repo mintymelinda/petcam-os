@@ -181,7 +181,14 @@ def collect_diagnostics() -> dict[str, Any]:
     interfaces = collect_interfaces()
     addresses = _addresses_from_ip(command_output(["ip", "-j", "address", "show"]))
     routes = _parse_default_routes(command_output(["ip", "-j", "route", "show", "default"]))
-    listeners = _listener_report(command_output(["ss", "-ltn"]))
+    raw_listeners = _listener_report(command_output(["ss", "-ltn"]))
+    listeners = {
+        "healthy": all(bool(entries) for entries in raw_listeners.values()),
+        "ports": {
+            port: {"listening": bool(entries), "bindings": entries}
+            for port, entries in raw_listeners.items()
+        },
+    }
 
     backend_url = f"http://127.0.0.1:{backend_port}"
     backend_http = probe_http(backend_url + "/", timeout=3)
@@ -241,6 +248,13 @@ def collect_diagnostics() -> dict[str, Any]:
         problems.append("No non-loopback network interface reports an up link.")
     if not routes:
         problems.append("No default network route was found.")
+    for port, label in (
+        (str(OBS_PORT), "OBS stream"),
+        (str(DEFAULT_BACKEND_PORT), "capture backend"),
+        (str(MANAGER_PORT), "HTTPS manager"),
+    ):
+        if not listeners["ports"][port]["listening"]:
+            problems.append(f"No listening socket was found for the {label} port {port}.")
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
