@@ -138,8 +138,10 @@ FPS=auto
 CSI_QUALITY=70
 PORT=8081
 CONF
-chown petcam:petcam /etc/petcam
-chmod 0750 /etc/petcam
+# Keep root-owned update trust and TLS material protected while allowing the petcam
+# service to atomically replace only files it owns (camera config and lock files).
+chown root:petcam /etc/petcam
+chmod 1770 /etc/petcam
 chown petcam:petcam /etc/petcam/petcam.conf
 chmod 0640 /etc/petcam/petcam.conf
 
