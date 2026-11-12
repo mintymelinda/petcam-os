@@ -1,5 +1,8 @@
 import importlib.util
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location("petcam_camera", "stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py")
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -52,6 +55,44 @@ class CameraDiscoveryTests(unittest.TestCase):
         self.assertEqual(mode["format"], "MJPG")
         self.assertEqual((mode["width"], mode["height"]), (1280, 720))
         self.assertEqual(device["device"], "/dev/video0")
+
+    def test_native_mjpeg_is_mapped_to_ustreamer_passthrough_format(self):
+        self.assertEqual(MODULE.ustreamer_format("MJPG"), "MJPEG")
+        self.assertEqual(MODULE.ustreamer_format("MJPEG"), "MJPEG")
+        self.assertEqual(MODULE.ustreamer_format("YUYV"), "YUYV")
+
+    def test_discovery_excludes_platform_nodes_and_deduplicates_usb_interfaces(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sysfs = root / "sys/class/video4linux"
+            dev = root / "dev"
+            usb = root / "sys/devices/platform/usb1/1-1/1-1.4"
+            interface = usb / "1-1.4:1.0"
+            interface2 = usb / "1-1.4:1.1"
+            platform = root / "sys/devices/platform/bcm2835-codec"
+            for directory in (sysfs, dev, interface, interface2, platform):
+                directory.mkdir(parents=True, exist_ok=True)
+            (usb / "idVendor").write_text("046d")
+            (usb / "idProduct").write_text("085c")
+            (sysfs / "video0").mkdir()
+            (sysfs / "video1").mkdir()
+            (sysfs / "video10").mkdir()
+            (sysfs / "video0/device").symlink_to(interface)
+            (sysfs / "video1/device").symlink_to(interface2)
+            (sysfs / "video10/device").symlink_to(platform)
+            for name in ("video0", "video1", "video10"):
+                (dev / name).touch()
+            by_id = dev / "v4l/by-id"
+            by_id.mkdir(parents=True)
+            (by_id / "usb-camera-video-index0").symlink_to(dev / "video0")
+
+            completed = type("Result", (), {"returncode": 0, "stdout": SAMPLE})()
+            with patch.object(MODULE.subprocess, "run", return_value=completed) as run:
+                found = MODULE.discover_devices(sysfs, dev)
+
+            self.assertEqual(len(found), 1)
+            self.assertEqual(found[0]["device"], str(by_id / "usb-camera-video-index0"))
+            self.assertEqual(run.call_count, 1)
 
     def test_filters_to_user_selected_supported_pixel_format(self):
         devices = [{"device": "/dev/video0", "modes": MODULE.parse_modes(SAMPLE)}]
