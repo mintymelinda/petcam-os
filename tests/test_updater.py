@@ -187,6 +187,7 @@ class UpdateArchiveTests(unittest.TestCase):
             (release / "systemd").mkdir(parents=True)
             (release / "etc/petcam").mkdir(parents=True)
             (release / "systemd/petcam-home-assistant.service").write_text("[Service]\n")
+            (release / "systemd/petcam-timelapse.service").write_text("[Service]\n")
             (release / "etc/petcam/home-assistant.conf").write_text("MQTT_ENABLED=false\n")
             with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=1000)), \
                     mock.patch("updater.os.geteuid", return_value=1000):
@@ -201,11 +202,13 @@ class UpdateArchiveTests(unittest.TestCase):
             mock.Mock(returncode=0, stderr=""),
             mock.Mock(returncode=0),
             mock.Mock(returncode=0, stderr=""),
+            mock.Mock(returncode=0),
+            mock.Mock(returncode=0, stderr=""),
         ]
         with mock.patch("updater.subprocess.run", side_effect=results) as run:
             self.assertEqual(restart_services(), "")
-        self.assertEqual(run.call_count, 4)
-        self.assertEqual(run.call_args_list[-1].args[0], ["systemctl", "restart", "petcam-home-assistant.service"])
+        self.assertEqual(run.call_count, 6)
+        self.assertEqual(run.call_args_list[-1].args[0], ["systemctl", "restart", "petcam-timelapse.service"])
 
     def test_validates_required_release_files_and_embedded_version(self):
         files = {
