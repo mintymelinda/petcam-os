@@ -20,6 +20,7 @@ REQUIRED_FILES = (
     "lib/web_auth.py",
     "lib/health_monitor.py",
     "lib/config.py",
+    "lib/network_diagnostics.py",
     "lib/start-stream.sh",
     "vendor/bin/ustreamer",
 )

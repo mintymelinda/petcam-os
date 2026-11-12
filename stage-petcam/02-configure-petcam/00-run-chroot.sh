@@ -32,7 +32,11 @@ cat > /usr/local/bin/petcam-config <<'SCRIPT'
 #!/bin/sh
 exec python3 /opt/petcam/current/lib/config.py "$@"
 SCRIPT
-chmod 0755 /usr/local/bin/petcam-camera /usr/local/bin/petcam-status /usr/local/bin/petcam-admin /usr/local/bin/petcam-config
+cat > /usr/local/bin/petcam-diagnostics <<'SCRIPT'
+#!/bin/sh
+exec python3 /opt/petcam/current/lib/network_diagnostics.py "$@"
+SCRIPT
+chmod 0755 /usr/local/bin/petcam-camera /usr/local/bin/petcam-status /usr/local/bin/petcam-admin /usr/local/bin/petcam-config /usr/local/bin/petcam-diagnostics
 
 install -d -m 0755 "/opt/petcam/releases/$APP_VERSION/lib" /etc/petcam
 

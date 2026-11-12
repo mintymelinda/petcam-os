@@ -25,6 +25,10 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("/api/update/check", MODULE.PAGE)
         self.assertIn("/api/update/install", MODULE.PAGE)
         self.assertIn("/api/update/status", MODULE.PAGE)
+        self.assertIn("Network and OBS diagnostics", MODULE.PAGE)
+        self.assertIn("/api/diagnostics", MODULE.PAGE)
+        self.assertIn("/api/support-bundle", MODULE.PAGE)
+        self.assertIn("Download redacted support bundle", MODULE.PAGE)
 
     def test_update_check_uses_fixed_privileged_command(self):
         completed = mock.Mock(returncode=0, stdout='{"update_available": false}', stderr="")
