@@ -108,6 +108,14 @@ class TimelapseTests(unittest.TestCase):
             self.assertFalse(oldest.exists())
             self.assertTrue(newest.exists())
 
+    def test_free_space_guard_blocks_capture_below_threshold(self):
+        config = MODULE.validate_config({"min_free_mb": 128})
+        usage = mock.Mock(free=64 * 1024 * 1024)
+        with mock.patch.object(MODULE.shutil, "disk_usage", return_value=usage):
+            allowed, free = MODULE._free_space_ok(config, "/tmp")
+        self.assertFalse(allowed)
+        self.assertEqual(free, usage.free)
+
     def test_restart_recovery_ignores_partial_temporary_frames(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

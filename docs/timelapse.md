@@ -9,7 +9,7 @@ Open the authenticated PetCam manager and use the **Timelapse** section. Timelap
 - Capture interval (60 seconds to 24 hours).
 - Daily local-time start/end window, including windows that cross midnight.
 - Maximum image width (0 keeps the live stream's native width).
-- JPEG quality (0 preserves the source JPEG; 1–95 re-encodes).
+- JPEG quality (0 preserves the source JPEG when no resize is requested; resizing with quality 0 uses quality 95, while 1–95 explicitly re-encodes).
 - Retention period, storage cap, and minimum free-space threshold.
 - Storage directory, restricted to a location under `/var/lib/petcam`.
 

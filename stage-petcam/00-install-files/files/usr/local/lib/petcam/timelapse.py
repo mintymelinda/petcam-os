@@ -216,7 +216,7 @@ def process_frame(frame, config):
         if image.mode not in ("RGB", "L"):
             image = image.convert("RGB")
         output = BytesIO()
-        image.save(output, format="JPEG", quality=config["jpeg_quality"] or 85, optimize=False)
+        image.save(output, format="JPEG", quality=config["jpeg_quality"] or 95, optimize=False)
         return output.getvalue()
 
 
