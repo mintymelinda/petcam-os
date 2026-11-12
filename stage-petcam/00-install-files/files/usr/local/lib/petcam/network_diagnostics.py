@@ -329,6 +329,11 @@ def main() -> int:
         )
         destination.write_bytes(create_support_bundle())
         os.chmod(destination, 0o600)
+        if os.geteuid() == 0 and os.environ.get("SUDO_UID"):
+            try:
+                os.chown(destination, int(os.environ["SUDO_UID"]), int(os.environ["SUDO_GID"]))
+            except (KeyError, ValueError, OSError):
+                pass
         print(destination)
         return 0
     print(json.dumps(collect_diagnostics(), indent=2))
