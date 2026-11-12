@@ -10,6 +10,8 @@ PetCam includes an optional MQTT 3.1.1 publisher that uses Home Assistant MQTT d
 
 Enable MQTT discovery in Home Assistant's MQTT integration. The default discovery prefix is `homeassistant`.
 
+On an existing installation, first install the current signed PetCam application update. The updater installs the signed service unit and seeds the default configuration if it is missing; it preserves an existing Home Assistant configuration and credentials.
+
 ## Configure PetCam
 
 Edit `/etc/petcam/home-assistant.conf`:
@@ -30,9 +32,9 @@ MQTT_STREAM_URL=
 
 Use `MQTT_TLS=true` with a TLS-enabled broker listener (commonly port 8883). TLS certificate verification is enabled. Leave username and password empty if the broker allows anonymous clients. A password requires a username.
 
-The file is installed as `root:petcam` with mode `0640`. Keep it that way: it contains the broker credentials. Do not put credentials in the topic prefix, client ID, or stream URL.
+The file is installed as `root:petcam` with mode `0640`. Keep it that way: it contains the broker credentials. Do not put credentials in the topic prefix, client ID, or stream URL. After changing settings on an already-running publisher, apply them with `sudo systemctl restart petcam-home-assistant.service`.
 
-Enable and start the publisher:
+After saving the configuration, enable and start the publisher:
 
 ```sh
 sudo systemctl enable --now petcam-home-assistant.service
