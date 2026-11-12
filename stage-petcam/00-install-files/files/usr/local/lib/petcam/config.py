@@ -96,7 +96,7 @@ def validate_config(values: dict[str, Any], check_hardware: bool = False) -> dic
     if check_hardware:
         if config["DEVICE"] and not Path(config["DEVICE"]).exists():
             raise ConfigError(f"Configured camera device is unavailable: {config['DEVICE']}")
-        if config["SOURCE"] == "csi" and config["CAMERA"] != "auto":
+        if config["SOURCE"] in {"auto", "csi"} and config["CAMERA"] != "auto":
             try:
                 result = subprocess.run(
                     ["/usr/local/bin/petcam-camera", "discover-csi"],
