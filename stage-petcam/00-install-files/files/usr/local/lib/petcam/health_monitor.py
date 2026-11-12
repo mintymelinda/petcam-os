@@ -15,9 +15,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from config import parse_config
+
 STATE_FILE = Path("/var/lib/petcam/health.json")
 BACKEND_STREAM_URL = "http://127.0.0.1:8081/stream"
 PUBLIC_STREAM_URL = "http://127.0.0.1:8080/stream"
+
+
+def backend_stream_url() -> str:
+    try:
+        return f"http://127.0.0.1:{parse_config()['PORT']}/stream"
+    except Exception:
+        return BACKEND_STREAM_URL
 STARTUP_GRACE_SECONDS = 30
 BACKEND_FRAME_TIMEOUT_SECONDS = 15
 PUBLIC_FRAME_TIMEOUT_SECONDS = 5
@@ -183,7 +192,7 @@ def check_health(now: float | None = None) -> dict[str, Any]:
         return _persist(report)
 
     backend_ready = backend["state"] == "active" and probe_stream(
-        BACKEND_STREAM_URL, BACKEND_FRAME_TIMEOUT_SECONDS
+        backend_stream_url(), BACKEND_FRAME_TIMEOUT_SECONDS
     )
     report["backend_stream_ready"] = backend_ready
     if not backend_ready:
