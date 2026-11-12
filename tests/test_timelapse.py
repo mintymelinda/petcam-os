@@ -22,6 +22,8 @@ class TimelapseTests(unittest.TestCase):
             MODULE.validate_config({"interval_seconds": 10})
         with self.assertRaises(ValueError):
             MODULE.validate_config({"schedule_start": "25:00"})
+        with self.assertRaises(ValueError):
+            MODULE.validate_config({"storage_path": "/etc/petcam"})
 
     def test_schedule_supports_normal_and_overnight_windows(self):
         normal = datetime(2026, 1, 1, 12, 0)
@@ -94,6 +96,21 @@ class TimelapseTests(unittest.TestCase):
             MODULE.prune_frames(config, root, now=300)
             self.assertFalse(oldest.exists())
             self.assertTrue(newest.exists())
+
+    def test_restart_recovery_ignores_partial_temporary_frames(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "incomplete.jpg.tmp").write_bytes(b"partial")
+            result = MODULE.storage_status(root)
+            self.assertEqual(result, {"frames": 0, "storage_bytes": 0})
+
+    def test_camera_disconnect_is_reported_without_creating_a_frame(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = MODULE.validate_config({"jpeg_quality": 0})
+            with unittest.mock.patch.object(MODULE.urllib.request, "urlopen", side_effect=OSError("camera disconnected")):
+                with self.assertRaisesRegex(OSError, "camera disconnected"):
+                    MODULE.capture_from_stream(config, directory)
+            self.assertEqual(MODULE.storage_status(directory)["frames"], 0)
 
     def test_state_snapshot_reports_storage(self):
         with tempfile.TemporaryDirectory() as directory:

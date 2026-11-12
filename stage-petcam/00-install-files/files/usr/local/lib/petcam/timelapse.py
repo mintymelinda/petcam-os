@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Capture periodic JPEG frames from PetCam's existing MJPEG stream."""
 import argparse
+from io import BytesIO
 import json
 import os
 import shutil
@@ -23,6 +24,9 @@ DEFAULTS = {
     "retention_days": 30,
     "max_storage_mb": 2048,
     "min_free_mb": 256,
+    "storage_path": "/var/lib/petcam/timelapse/frames",
+    "max_width": 0,
+    "jpeg_quality": 85,
 }
 STREAM_URL = "http://127.0.0.1:8080/stream"
 _running = True
@@ -52,6 +56,17 @@ def validate_config(values):
         ("max_storage_mb", 64, 102400),
         ("min_free_mb", 64, 102400),
     ):
+        value = result[key]
+        if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+            raise ValueError(f"{key} must be an integer between {low} and {high}.")
+    result["storage_path"] = str(result["storage_path"])
+    storage_root = Path("/var/lib/petcam").resolve()
+    storage_path = Path(result["storage_path"])
+    if not storage_path.is_absolute() or ".." in storage_path.parts:
+        raise ValueError("storage_path must be an absolute path inside /var/lib/petcam.")
+    if not storage_path.resolve().is_relative_to(storage_root):
+        raise ValueError("storage_path must remain inside /var/lib/petcam.")
+    for key, low, high in (("max_width", 0, 4096), ("jpeg_quality", 0, 95)):
         value = result[key]
         if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
             raise ValueError(f"{key} must be an integer between {low} and {high}.")
@@ -115,14 +130,14 @@ def jpeg_frames(response, chunk_size=4096):
             del buffer[:end + 2]
 
 
-def storage_status(directory=FRAMES):
-    directory = Path(directory)
+def storage_status(directory=None):
+    directory = Path(directory or FRAMES)
     files = sorted((p for p in directory.glob("*.jpg") if p.is_file()), key=lambda p: p.name) if directory.exists() else []
     return {"frames": len(files), "storage_bytes": sum(p.stat().st_size for p in files)}
 
 
-def prune_frames(config, directory=FRAMES, now=None):
-    directory = Path(directory)
+def prune_frames(config, directory=None, now=None):
+    directory = Path(directory or config["storage_path"])
     directory.mkdir(parents=True, exist_ok=True)
     now = now or time.time()
     cutoff = now - config["retention_days"] * 86400
@@ -141,10 +156,10 @@ def prune_frames(config, directory=FRAMES, now=None):
     return storage_status(directory)
 
 
-def capture_frame(frame, directory=FRAMES, now=None):
+def capture_frame(frame, directory=None, now=None):
     if not frame.startswith(b"\xff\xd8") or not frame.endswith(b"\xff\xd9"):
         raise ValueError("The camera stream did not provide a complete JPEG frame.")
-    directory = Path(directory)
+    directory = Path(directory or FRAMES)
     directory.mkdir(parents=True, exist_ok=True)
     stamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     base = stamp.strftime("%Y%m%dT%H%M%S.%fZ")
@@ -170,19 +185,48 @@ def write_state(state, path=STATE):
     os.replace(temporary, path)
 
 
-def state_snapshot(config, state_path=STATE, frames_dir=FRAMES):
+def state_snapshot(config, state_path=STATE, frames_dir=None):
     try:
         state = json.loads(Path(state_path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         state = {"state": "waiting", "last_capture_at": None, "last_error": None}
-    return {**state, **storage_status(frames_dir), "enabled": config["enabled"], "config": config}
+    return {**state, **storage_status(frames_dir or config["storage_path"]), "enabled": config["enabled"], "config": config}
 
 
-def _free_space_ok(config, directory=BASE):
-    directory = Path(directory)
+def _free_space_ok(config, directory=None):
+    directory = Path(directory or config["storage_path"])
     directory.mkdir(parents=True, exist_ok=True)
     free = shutil.disk_usage(directory).free
     return free >= config["min_free_mb"] * 1024 * 1024, free
+
+
+def process_frame(frame, config):
+    if config["max_width"] == 0 and config["jpeg_quality"] == 0:
+        return frame
+    try:
+        from PIL import Image
+    except ImportError as error:
+        raise RuntimeError("Pillow is required to resize or adjust timelapse JPEG quality.") from error
+    with Image.open(BytesIO(frame)) as image:
+        image.load()
+        if config["max_width"] and image.width > config["max_width"]:
+            height = max(1, round(image.height * config["max_width"] / image.width))
+            resampling = getattr(Image, "Resampling", Image).LANCZOS
+            image = image.resize((config["max_width"], height), resampling)
+        if image.mode not in ("RGB", "L"):
+            image = image.convert("RGB")
+        output = BytesIO()
+        image.save(output, format="JPEG", quality=config["jpeg_quality"] or 85, optimize=False)
+        return output.getvalue()
+
+
+def capture_from_stream(config, directory=None, url=STREAM_URL):
+    request = urllib.request.Request(url, headers={"User-Agent": "PetCam-Timelapse/1"})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        frame = next(jpeg_frames(response), None)
+    if frame is None:
+        raise OSError("The live stream closed before a JPEG frame arrived.")
+    return capture_frame(process_frame(frame, config), directory or config["storage_path"])
 
 
 def run():
@@ -206,8 +250,9 @@ def run():
             if time.monotonic() < next_capture:
                 time.sleep(min(2, max(0.2, next_capture - time.monotonic())))
                 continue
-            prune_frames(config)
-            enough_space, free = _free_space_ok(config)
+            directory = Path(config["storage_path"])
+            prune_frames(config, directory)
+            enough_space, free = _free_space_ok(config, directory)
             if not enough_space:
                 last_error = f"Free space below configured minimum ({free // 1048576} MiB available)."
                 write_state({"state": "storage_limit", "last_error": last_error, **storage_status()})
@@ -215,13 +260,8 @@ def run():
                 time.sleep(2)
                 continue
             try:
-                request = urllib.request.Request(STREAM_URL, headers={"User-Agent": "PetCam-Timelapse/1"})
-                with urllib.request.urlopen(request, timeout=10) as response:
-                    frame = next(jpeg_frames(response), None)
-                if frame is None:
-                    raise OSError("The live stream closed before a JPEG frame arrived.")
-                path = capture_frame(frame)
-                prune_frames(config)
+                path = capture_from_stream(config, directory)
+                prune_frames(config, directory)
                 last_error = None
                 write_state({
                     "state": "capturing", "last_capture_at": datetime.now(timezone.utc).isoformat(),
