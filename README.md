@@ -22,14 +22,14 @@ The workflow builds a 32-bit Raspberry Pi OS Lite image and adds PetCam's camera
 
 PetCam selects the appropriate capture backend automatically. USB UVC cameras use [µStreamer](https://github.com/pikvm/ustreamer), preferring native MJPEG passthrough and falling back to CPU JPEG encoding for supported raw formats when needed. CSI modules use Raspberry Pi's `rpicam-vid` camera stack with MJPEG output. Both backends expose the same `/stream` endpoint internally; the PetCam web interface provides the public port 8080 page and stream proxy.
 
-- Stream endpoint: http://petcam.local:8080/stream
-- Stream viewer/status page: http://petcam.local:8080/
+- Stream endpoint (OBS): http://petcam.local:8080/stream
+- Authenticated management page: https://petcam.local:8443/
 
 If mDNS is unavailable, use the Pi's DHCP address instead.
 
 ### Web camera management
 
-Open http://petcam.local:8080/ to view the live stream and manage the active camera. The lightweight built-in page is served by Python's standard library; it adds no Node.js runtime, frontend framework, database, or background camera polling. Use **Refresh cameras** after plugging in or removing a camera, select an advertised mode, preview it, and apply it. The selected USB/CSI camera and mode are saved in /etc/petcam/petcam.conf and survive reboots. Applying a selection briefly restarts the capture backend; the public stream URL remains unchanged. The capture backend listens only on loopback, while the management interface proxies the stream and exposes the camera controls.
+Open https://petcam.local:8443/ to manage the active camera. The manager uses a per-device self-signed HTTPS certificate; your browser will show a certificate warning until you explicitly trust that device certificate. The lightweight built-in page is served by Python's standard library; it adds no Node.js runtime, frontend framework, database, or background camera polling. Use **Refresh cameras** after plugging in or removing a camera, select an advertised mode, preview it, and apply it. The selected USB/CSI camera and mode are saved in /etc/petcam/petcam.conf and survive reboots. Applying a selection briefly restarts the capture backend; the public stream URL remains unchanged. The capture backend listens only on loopback, while the management interface proxies the stream and exposes the camera controls.
 
 Camera discovery runs when the page is opened or refreshed, not continuously in the background. The page is intentionally small to conserve memory and CPU on the original Zero W.
 
@@ -96,4 +96,6 @@ Camera mode discovery and automatic selection are software features; they do not
 
 ## Security
 
-The web manager exposes the public stream and management page on port 8080. The camera backend listens only on loopback at port 8081. Keep the device on a trusted private network; do not port-forward port 8080 to the internet.
+The web manager listens on HTTPS port 8443 and requires a password for camera settings and software-update controls. Set the initial password over SSH or a local terminal with `sudo petcam-admin`; password hashes use PBKDF2-HMAC-SHA256 and are stored in `/etc/petcam/web-auth.json`. The management certificate and private key are generated uniquely on each device. Sessions are HTTP-only, Secure, SameSite=Strict, expire after eight hours, and are invalidated when the password changes or the service restarts.
+
+Port 8080 is a separate unauthenticated HTTP stream-only endpoint for OBS compatibility; it serves only `/stream` and no management routes. The camera backend listens only on loopback at port 8081. Keep the device on a trusted private network; do not port-forward either public port to the internet.
