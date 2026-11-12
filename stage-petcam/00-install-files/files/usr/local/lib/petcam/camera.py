@@ -334,6 +334,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("discover", "select", "discover-csi", "select-csi", "status"))
     parser.add_argument("--device")
+    parser.add_argument("--physical-path")
     parser.add_argument("--camera", type=int)
     parser.add_argument("--device-path")
     parser.add_argument("--format", default="auto")
@@ -344,6 +345,8 @@ def main():
     model = read_model()
     tier = model_tier(model)
     devices = discover_devices()
+    if args.physical_path:
+        devices = [item for item in devices if item.get("physical_path") == args.physical_path]
     if args.device:
         requested = str(Path(args.device).resolve())
         devices = [
