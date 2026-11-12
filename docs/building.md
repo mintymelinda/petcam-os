@@ -75,7 +75,7 @@ The PetCam manager is configured from a browser; an SSH session is not required 
 4. On a new image, the manager displays a one-time administrator setup form. Create and confirm a password of at least 12 characters. The browser is signed in automatically after setup.
 5. Continue with camera discovery and configuration in the manager.
 
-The PetCam manager password is separate from the Linux account created in Imager. The first-run endpoint refuses to replace an existing password, so it cannot be used to reset an established device. `sudo petcam-admin` is retained as a local/SSH recovery command, not a normal installation step.
+The PetCam manager password is separate from the Linux account created in Imager. The first-run endpoint refuses to replace an existing password, so it cannot be used to reset an established device. `sudo petcam-admin` is retained as a local/SSH recovery command, not a normal installation step. Complete first-run setup on a trusted private network and do not expose the manager to the public internet.
 
 The manager uses a per-device self-signed HTTPS certificate. The browser will warn that the certificate is not trusted until you explicitly trust it; verify that you are connecting to your own device before proceeding.
 
