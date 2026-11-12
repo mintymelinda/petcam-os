@@ -1,3 +1,4 @@
+import contextlib
 import importlib.util
 import sys
 import tempfile
@@ -43,7 +44,7 @@ class HealthMonitorTests(unittest.TestCase):
         self.assertEqual(report["next_recovery_at"], 0)
 
     def test_health_recovery_pauses_during_config_transaction(self):
-        with mock.patch.object(MODULE, "configuration_change_in_progress", return_value=True), \
+        with mock.patch.object(MODULE, "config_transaction_guard", return_value=contextlib.nullcontext(False)), \
                 mock.patch.object(MODULE, "service_snapshot") as snapshot, \
                 mock.patch.object(MODULE, "restart_service") as restart:
             report = MODULE.check_health(now=1000)
