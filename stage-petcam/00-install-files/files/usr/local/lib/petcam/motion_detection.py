@@ -341,14 +341,18 @@ def run():
                         if cooldown_elapsed(epoch, last_event, config["min_event_interval_seconds"]):
                             enough_space, free = free_space_ok(config, directory)
                             if enough_space:
-                                event = record_event(frame, changed_percent, config, directory, now=event_time)
-                                last_event = epoch
-                                write_state({
-                                    "state": "motion_detected", "last_event_at": event["timestamp"],
-                                    "last_file": event["file"], "last_motion_percent": event["changed_percent"],
-                                    "last_error": None, "event_count": len(load_events()),
-                                    **_metrics(started, cpu_started),
-                                })
+                                try:
+                                    event = record_event(frame, changed_percent, config, directory, now=event_time)
+                                except OSError as error:
+                                    write_state({"state": "storage_limit", "last_error": str(error)})
+                                else:
+                                    last_event = epoch
+                                    write_state({
+                                        "state": "motion_detected", "last_event_at": event["timestamp"],
+                                        "last_file": event["file"], "last_motion_percent": event["changed_percent"],
+                                        "last_error": None, "event_count": len(load_events()),
+                                        **_metrics(started, cpu_started),
+                                    })
                             else:
                                 write_state({"state": "storage_limit", "last_error": f"Free space below configured minimum ({free // 1048576} MiB available)."})
                     if tick - last_status_write >= 30:
