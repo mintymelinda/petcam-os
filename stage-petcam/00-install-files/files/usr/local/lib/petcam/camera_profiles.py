@@ -194,7 +194,11 @@ def _mode_selection(camera: dict[str, Any], mode: dict[str, Any]) -> tuple[dict[
         discovered = next(
             (
                 item for item in discover_devices()
-                if item["device"] == identity["device"]
+                if (
+                    item.get("physical_path") == identity["physical_path"]
+                    if identity["physical_path"]
+                    else item["device"] == identity["device"]
+                )
             ),
             None,
         )
@@ -214,6 +218,8 @@ def _mode_selection(camera: dict[str, Any], mode: dict[str, Any]) -> tuple[dict[
         values = {
             "SOURCE": "usb",
             "DEVICE": identity["device"] if identity["device"].startswith("/dev/v4l/by-id/") or not identity["physical_path"] else "",
+            "USB_PHYSICAL_PATH": identity["physical_path"],
+            "CSI_DEVICE_PATH": "",
             "CAMERA": "auto",
             "FORMAT": selected_format,
             "RESOLUTION": f"{width}x{height}",
@@ -240,6 +246,8 @@ def _mode_selection(camera: dict[str, Any], mode: dict[str, Any]) -> tuple[dict[
         values = {
             "SOURCE": "csi",
             "DEVICE": "",
+            "USB_PHYSICAL_PATH": "",
+            "CSI_DEVICE_PATH": identity["device_path"],
             "CAMERA": "auto" if identity["device_path"] else str(identity["camera"]),
             "FORMAT": "auto",
             "RESOLUTION": f"{width}x{height}",
@@ -284,6 +292,8 @@ def _default_stream_estimate(config_override: dict[str, str] | None = None) -> d
     tier = model_tier(model)
     if config["SOURCE"] in {"auto", "usb"}:
         devices = discover_devices()
+        if config.get("USB_PHYSICAL_PATH"):
+            devices = [item for item in devices if item.get("physical_path") == config["USB_PHYSICAL_PATH"]]
         if config["DEVICE"]:
             devices = [item for item in devices if _same_usb_device(item["device"], config["DEVICE"])]
         devices = filter_devices_by_format(devices, config["FORMAT"])
@@ -326,7 +336,8 @@ def _default_stream_estimate(config_override: dict[str, str] | None = None) -> d
     if config["SOURCE"] in {"auto", "csi"}:
         camera_index = None if config["CAMERA"] == "auto" else int(config["CAMERA"])
         selected = select_csi_mode(
-            discover_csi_cameras(), tier, camera_index, config["RESOLUTION"], config["FPS"]
+            discover_csi_cameras(), tier, camera_index, config["RESOLUTION"], config["FPS"],
+            config.get("CSI_DEVICE_PATH") or None,
         )
         if selected:
             width, height = map(int, selected["resolution"].split("x"))
