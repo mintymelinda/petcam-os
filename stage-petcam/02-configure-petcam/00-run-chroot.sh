@@ -32,6 +32,19 @@ cat > /usr/local/bin/petcam-config <<'SCRIPT'
 #!/bin/sh
 exec python3 /opt/petcam/current/lib/config.py "$@"
 SCRIPT
+cat > /usr/local/sbin/petcam-stream-service <<'SCRIPT'
+#!/bin/sh
+set -eu
+action="\${1:-}"
+profile="\${2:-}"
+case "$action" in start|stop|restart|enable|disable) ;; *) echo "Usage: petcam-stream-service start|stop|restart|enable|disable PROFILE" >&2; exit 2 ;; esac
+case "$profile" in ""|*[!a-z0-9-]*) echo "Invalid camera profile identifier." >&2; exit 2 ;; esac
+[ -f "/etc/petcam/cameras.d/$profile.conf" ] || { echo "Camera profile does not exist." >&2; exit 1; }
+if [ "$action" = enable ]; then exec /usr/bin/systemctl enable --now "petcam-stream@$profile.service"; fi
+if [ "$action" = disable ]; then exec /usr/bin/systemctl disable --now "petcam-stream@$profile.service"; fi
+exec /usr/bin/systemctl "$action" "petcam-stream@$profile.service"
+SCRIPT
+chmod 0755 /usr/local/sbin/petcam-stream-service
 cat > /usr/local/bin/petcam-diagnostics <<'SCRIPT'
 #!/bin/sh
 exec python3 /opt/petcam/current/lib/network_diagnostics.py "$@"
@@ -43,7 +56,7 @@ install -d -m 0755 "/opt/petcam/releases/$APP_VERSION/lib" /etc/petcam
 cat > "/opt/petcam/releases/$APP_VERSION/lib/start-stream.sh" <<'SCRIPT'
 #!/bin/bash
 set -euo pipefail
-CONFIG=/etc/petcam/petcam.conf
+CONFIG="${PETCAM_CONFIG_PATH:-/etc/petcam/petcam.conf}"
 python3 /opt/petcam/current/lib/config.py validate --check-hardware
 if [[ -r "$CONFIG" ]]; then
     # shellcheck disable=SC1090
@@ -86,7 +99,16 @@ start_usb() {
 
 start_csi() {
     args=(select-csi --resolution "$RESOLUTION" --fps "$FPS")
-    if [[ "$CAMERA" != "auto" ]]; then args+=(--camera "$CAMERA"); fi
+    if [[ -n "${PETCAM_PROFILE_ID:-}" ]]; then
+        profile_device_path="$(python3 -c 'import json,sys; print(next(p for p in json.load(open("/etc/petcam/cameras.json", encoding="utf-8")) if p["id"] == sys.argv[1]).get("device_path", ""))' "$PETCAM_PROFILE_ID")"
+        if [[ -n "$profile_device_path" ]]; then
+            args+=(--device-path "$profile_device_path")
+        elif [[ "$CAMERA" != "auto" ]]; then
+            args+=(--camera "$CAMERA")
+        fi
+    elif [[ "$CAMERA" != "auto" ]]; then
+        args+=(--camera "$CAMERA")
+    fi
     selection="$(/usr/local/bin/petcam-camera "${args[@]}")"
     json_value() {
         python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1" <<< "$selection"
@@ -138,8 +160,8 @@ FPS=auto
 CSI_QUALITY=70
 PORT=8081
 CONF
-# Keep root-owned update trust and TLS material protected while allowing the petcam
-# service to atomically replace only files it owns (camera config and lock files).
+# The sticky directory permits atomic replacement of petcam-owned config files
+# without allowing the service account to replace root-owned trust or TLS files.
 chown root:petcam /etc/petcam
 chmod 1770 /etc/petcam
 chown petcam:petcam /etc/petcam/petcam.conf
@@ -204,11 +226,12 @@ ReadWritePaths=/var/lib/petcam
 WantedBy=multi-user.target
 UNIT
 
+systemctl daemon-reload
 systemctl enable avahi-daemon.service
 systemctl enable petcam-stream.service
 
 cat > /etc/sudoers.d/petcam-web <<'SUDO'
-petcam ALL=(root) NOPASSWD: /usr/bin/systemctl restart petcam-stream.service, /usr/local/bin/petcam-update check, /usr/bin/systemctl start petcam-update.service, /usr/bin/journalctl -u petcam-update.service -n 20 --no-pager -o cat
+petcam ALL=(root) NOPASSWD: /usr/bin/systemctl restart petcam-stream.service, /usr/local/sbin/petcam-stream-service, /usr/local/bin/petcam-update check, /usr/bin/systemctl start petcam-update.service, /usr/bin/journalctl -u petcam-update.service -n 20 --no-pager -o cat
 SUDO
 chmod 0440 /etc/sudoers.d/petcam-web
 visudo -cf /etc/sudoers.d/petcam-web
@@ -243,6 +266,34 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 UNIT
+
+cat > /etc/systemd/system/petcam-stream@.service <<'UNIT'
+[Unit]
+Description=PetCam independent camera stream %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=petcam
+Group=video
+SupplementaryGroups=video i2c
+Environment=PETCAM_CONFIG_PATH=/etc/petcam/cameras.d/%i.conf
+Environment=PETCAM_PROFILE_ID=%i
+ExecStart=/opt/petcam/current/lib/start-stream.sh
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/petcam
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+install -d -o petcam -g petcam -m 0750 /etc/petcam/cameras.d
 
 cat > /etc/systemd/system/petcam-web.service <<'UNIT'
 [Unit]
