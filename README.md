@@ -129,6 +129,7 @@ On first boot, open the manager from another device on the same network:
 - `https://petcam.local:8443/` (use the Pi's DHCP address if mDNS is unavailable).
 - Create the PetCam manager administrator password in the browser. The password must be at least 12 characters.
 - The first-run setup is one-time and signs the browser in automatically. SSH is not required.
+- Complete first-run setup while the Pi is on a trusted private network; do not expose the manager to the public internet.
 
 This manager password is separate from the Linux administrator account configured in Raspberry Pi Imager. The `sudo petcam-admin` command remains available as a local/SSH recovery path; it is not part of normal first-run setup.
 
