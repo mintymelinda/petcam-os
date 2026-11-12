@@ -39,7 +39,11 @@ action="\${1:-}"
 profile="\${2:-}"
 case "$action" in start|stop|restart|enable|disable) ;; *) echo "Usage: petcam-stream-service start|stop|restart|enable|disable PROFILE" >&2; exit 2 ;; esac
 case "$profile" in ""|*[!a-z0-9-]*) echo "Invalid camera profile identifier." >&2; exit 2 ;; esac
-[ -f "/etc/petcam/cameras.d/$profile.conf" ] || { echo "Camera profile does not exist." >&2; exit 1; }
+case "$action" in
+    start|restart|enable)
+        [ -f "/etc/petcam/cameras.d/$profile.conf" ] || { echo "Camera profile does not exist." >&2; exit 1; }
+        ;;
+esac
 if [ "$action" = enable ]; then exec /usr/bin/systemctl enable --now "petcam-stream@$profile.service"; fi
 if [ "$action" = disable ]; then exec /usr/bin/systemctl disable --now "petcam-stream@$profile.service"; fi
 exec /usr/bin/systemctl "$action" "petcam-stream@$profile.service"
