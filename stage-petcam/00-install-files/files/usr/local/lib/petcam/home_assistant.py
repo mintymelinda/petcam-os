@@ -86,6 +86,8 @@ def load_config(path: Path = CONFIG_FILE) -> dict[str, object]:
     for key in ("MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_CLIENT_ID"):
         if any(char in str(values[key]) for char in "\r\n\x00"):
             raise MQTTError(f"{key} contains an invalid control character.")
+    if values["MQTT_PASSWORD"] and not values["MQTT_USERNAME"]:
+        raise MQTTError("MQTT_PASSWORD requires MQTT_USERNAME.")
     for key in ("MQTT_DISCOVERY_PREFIX", "MQTT_TOPIC_PREFIX"):
         value = str(values[key]).strip("/")
         if not value or any(char in value for char in "+#\x00"):
