@@ -385,6 +385,18 @@ class StreamHandler(BaseHTTPRequestHandler):
         pass
 
 
+def health_monitor_loop():
+    from health_monitor import check_health
+    while True:
+        started = time.monotonic()
+        try:
+            report = check_health()
+            print(f"PetCam health: {report['state']} - {report.get('reason', '')}", flush=True)
+        except Exception as error:
+            print(f"PetCam health monitor failed: {error}", file=sys.stderr, flush=True)
+        time.sleep(max(1, 30 - (time.monotonic() - started)))
+
+
 def main():
     if len(sys.argv) == 2 and sys.argv[1] == "--set-password":
         if os.geteuid() != 0:
@@ -398,6 +410,7 @@ def main():
         return
     if not TLS_CERT.is_file() or not TLS_KEY.is_file():
         raise SystemExit("PetCam HTTPS certificate is missing.")
+    threading.Thread(target=health_monitor_loop, name="petcam-health-monitor", daemon=True).start()
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.load_cert_chain(TLS_CERT, TLS_KEY)
