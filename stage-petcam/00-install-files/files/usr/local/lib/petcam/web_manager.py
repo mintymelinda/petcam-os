@@ -22,6 +22,7 @@ CONFIG = Path("/etc/petcam/petcam.conf")
 STREAM_URL = "http://127.0.0.1:8081"
 TLS_CERT = Path("/etc/petcam/web-manager.crt")
 TLS_KEY = Path("/etc/petcam/web-manager.key")
+HEALTH_FILE = Path("/var/lib/petcam/health.json")
 _login_attempts = {}
 _login_lock = threading.Lock()
 PAGE = r"""<!doctype html>
@@ -50,7 +51,7 @@ small,.muted{color:#aeb7c2}#message{min-height:1.5em;color:#b9d8ff}.row{display:
 <label for="mode">Capture mode</label><select id="mode"></select>
 <div class="row" style="margin-top:1rem"><button id="apply">Use selected camera and mode</button></div>
 <p class="muted">Only modes advertised by the camera are offered. Settings are saved across reboots. A camera change briefly restarts the stream.</p></section>
-<section><h2>Account security</h2><p class="muted">Change the password used to access this manager.</p><button id="change-password">Change password</button> <button id="logout">Sign out</button></section>
+<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Stream health</h2><button id="refresh-health">Refresh</button></div><p id="health-state" role="status">Checking stream health…</p><p id="health-reason" class="muted"></p><small id="health-details" class="muted"></small></section>\n<section><h2>Account security</h2><p class="muted">Change the password used to access this manager.</p><button id="change-password">Change password</button> <button id="logout">Sign out</button></section>
 <footer style="text-align:center;padding:1rem 0 2rem"><small>Enjoying PetCam? <a href="https://www.paypal.me/kimmynightmare" target="_blank" rel="noopener noreferrer" style="color:#b9d8ff">Support development with PayPal</a></small></footer>
 <script>
 const $=id=>document.getElementById(id);let inventory=[];
@@ -64,7 +65,7 @@ async function refresh(){ $("message").textContent="Scanning connected cameras�
 $("refresh").onclick=refresh;$("camera").onchange=fillModes;
 $("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,device:c.device,camera:c.camera,mode:JSON.parse(m)})});$("message").textContent="Camera settings saved. Stream restarted.";setTimeout(refresh,1200)}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
 $("logout").onclick=async()=>{try{await request("/api/logout",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});csrfToken=null;location.reload()}catch(e){alert(e.message)}};$("change-password").onclick=async()=>{const current=prompt("Current password");if(current===null)return;const next=prompt("New password (at least 12 characters)");if(next===null)return;try{const d=await request("/api/password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({current_password:current,new_password:next})});csrfToken=d.csrf_token;alert("Password changed. Other sessions were signed out.")}catch(e){alert(e.message)}};
-refresh();
+async function refreshHealth(){try{const h=await request("/api/health");$("health-state").textContent="Status: "+h.state.replaceAll("_"," ");$("health-reason").textContent=h.reason||"No active issue reported."; $("health-details").textContent="Recoveries: "+(h.recovery_count||0)+" · Last checked: "+(h.last_checked_at||"not yet")+(h.last_recovery_at?" · Last recovery: "+h.last_recovery_at:"")}catch(e){$("health-state").textContent="Health status unavailable";$("health-reason").textContent=e.message}}$("refresh-health").onclick=refreshHealth;refresh();refreshHealth();setInterval(refreshHealth,30000);
 const autoCheck=$("auto-check");autoCheck.checked=localStorage.getItem("petcam-auto-update-check")==="true";
 autoCheck.onchange=()=>localStorage.setItem("petcam-auto-update-check",String(autoCheck.checked));
 let updateAvailable=false,updateBusy=false;
@@ -252,6 +253,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/session":
             self.send_json(200, {"csrf_token": self._session()["csrf"]})
+            return
+        if path == "/api/health":
+            try:
+                health = json.loads(HEALTH_FILE.read_text(encoding="utf-8"))
+                self.send_json(200, health)
+            except (OSError, ValueError):
+                self.send_json(200, {"state": "not_checked", "reason": "The periodic health monitor has not reported yet.", "recovery_count": 0})
             return
         if path == "/api/update/check":
             try:
