@@ -22,6 +22,7 @@ REQUIRED_FILES = (
     "lib/config.py",
     "lib/network_diagnostics.py",
     "lib/camera_profiles.py",
+    "lib/home_assistant.py",
     "lib/start-stream.sh",
     "vendor/bin/ustreamer",
 )
