@@ -23,6 +23,8 @@ REQUIRED_FILES = (
     "lib/network_diagnostics.py",
     "lib/camera_profiles.py",
     "lib/home_assistant.py",
+    "systemd/petcam-home-assistant.service",
+    "etc/petcam/home-assistant.conf",
     "lib/start-stream.sh",
     "vendor/bin/ustreamer",
 )
