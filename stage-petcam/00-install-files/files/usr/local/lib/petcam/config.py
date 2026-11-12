@@ -248,6 +248,40 @@ def _apply_config_transaction(
 _apply_lock = threading.Lock()
 
 
+def _config_lock_path(path: Path | str = CONFIG_PATH) -> Path:
+    path = Path(path)
+    return path.with_name(".petcam-config.lock")
+
+
+def ensure_config_lock(path: Path | str = CONFIG_PATH) -> Path:
+    lock_path = _config_lock_path(path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+") as lock_file:
+        os.chmod(lock_path, 0o660)
+        try:
+            import grp
+            os.chown(lock_path, -1, grp.getgrnam("petcam").gr_gid)
+        except (ImportError, KeyError, PermissionError):
+            pass
+    return lock_path
+
+
+def configuration_change_in_progress(path: Path | str = CONFIG_PATH) -> bool:
+    lock_path = _config_lock_path(path)
+    if not lock_path.exists():
+        return False
+    try:
+        with lock_path.open("r+") as lock_file:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            return False
+    except OSError:
+        return False
+
+
 def apply_config(
     updates: dict[str, Any],
     path: Path | str = CONFIG_PATH,
@@ -256,15 +290,8 @@ def apply_config(
     ready=wait_for_stream,
 ) -> dict[str, str]:
     path = Path(path)
-    lock_path = path.with_name(".petcam-config.lock")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with _apply_lock, lock_path.open("a+") as lock_file:
-        os.chmod(lock_path, 0o660)
-        try:
-            import grp
-            os.chown(lock_path, -1, grp.getgrnam("petcam").gr_gid)
-        except (ImportError, KeyError, PermissionError):
-            pass
+    lock_path = ensure_config_lock(path)
+    with _apply_lock, lock_path.open("r+") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         try:
             return _apply_config_transaction(
