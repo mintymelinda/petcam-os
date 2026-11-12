@@ -57,6 +57,8 @@ def is_configured():
 
 def initialize_password(password):
     """Create the first administrator password without replacing an existing one."""
+    if AUTH_FILE.exists():
+        raise ValueError("PetCam administrator setup has already been completed.")
     data = hash_password(password)
     AUTH_FILE.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(data) + "\n"
