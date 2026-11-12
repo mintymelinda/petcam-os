@@ -118,6 +118,16 @@ class TransactionalApplyTests(unittest.TestCase):
     def updates(self):
         return {"SOURCE": "csi", "CAMERA": "auto", "RESOLUTION": "640x480", "FPS": "30.0"}
 
+    def test_invalid_active_config_can_be_repaired_from_last_good(self):
+        self.config.write_text("SOURCE=invalid\nUNKNOWN=value\n")
+        self.last_good.write_bytes(self.original)
+        result = MODULE.apply_config(
+            self.updates(), self.config, self.last_good,
+            restart=mock.Mock(), ready=mock.Mock(return_value=True),
+        )
+        self.assertEqual(result["SOURCE"], "csi")
+        self.assertEqual(MODULE.parse_config(self.config)["SOURCE"], "csi")
+
     def test_successful_apply_commits_and_updates_last_known_good(self):
         restart = mock.Mock()
         ready = mock.Mock(return_value=True)
