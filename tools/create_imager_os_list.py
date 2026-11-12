@@ -33,7 +33,7 @@ def extracted_metadata(image: Path) -> tuple[int, str]:
     return size, digest.hexdigest()
 
 
-def create_os_list(image: Path, image_url: str, version: str, output: Path) -> None:
+def create_os_list(image: Path, image_url: str, output: Path) -> None:
     if not image.is_file() or image.suffixes[-2:] != [".img", ".xz"]:
         raise ValueError("image must be an existing .img.xz file")
     if not image_url.startswith("https://"):
@@ -62,10 +62,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("image", type=Path, help="Published PetCam .img.xz image")
     parser.add_argument("--image-url", required=True, help="Public HTTPS release asset URL")
-    parser.add_argument("--version", required=True, help="PetCam release version")
     parser.add_argument("--output", type=Path, default=Path("petcam-os-os-list.json"))
     args = parser.parse_args()
-    create_os_list(args.image, args.image_url, args.version, args.output)
+    create_os_list(args.image, args.image_url, args.output)
 
 
 if __name__ == "__main__":
