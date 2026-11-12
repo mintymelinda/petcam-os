@@ -98,8 +98,8 @@ def _parse_default_routes(raw: str) -> list[dict[str, str]]:
     ]
 
 
-def _listener_report(raw: str) -> dict[str, list[dict[str, str]]]:
-    wanted = {str(MANAGER_PORT), str(OBS_PORT), str(DEFAULT_BACKEND_PORT)}
+def _listener_report(raw: str, ports: tuple[int, ...] | None = None) -> dict[str, list[dict[str, str]]]:
+    wanted = {str(port) for port in (ports or (MANAGER_PORT, OBS_PORT, DEFAULT_BACKEND_PORT))}
     result = {port: [] for port in sorted(wanted)}
     lines = raw.splitlines()
     for line in lines[1:]:
@@ -181,7 +181,9 @@ def collect_diagnostics() -> dict[str, Any]:
     interfaces = collect_interfaces()
     addresses = _addresses_from_ip(command_output(["ip", "-j", "address", "show"]))
     routes = _parse_default_routes(command_output(["ip", "-j", "route", "show", "default"]))
-    raw_listeners = _listener_report(command_output(["ss", "-ltn"]))
+    raw_listeners = _listener_report(
+        command_output(["ss", "-ltn"]), (MANAGER_PORT, OBS_PORT, backend_port)
+    )
     listeners = {
         "healthy": all(bool(entries) for entries in raw_listeners.values()),
         "ports": {
@@ -250,7 +252,7 @@ def collect_diagnostics() -> dict[str, Any]:
         problems.append("No default network route was found.")
     for port, label in (
         (str(OBS_PORT), "OBS stream"),
-        (str(DEFAULT_BACKEND_PORT), "capture backend"),
+        (str(backend_port), "capture backend"),
         (str(MANAGER_PORT), "HTTPS manager"),
     ):
         if not listeners["ports"][port]["listening"]:
