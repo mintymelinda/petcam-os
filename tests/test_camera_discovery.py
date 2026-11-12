@@ -92,6 +92,7 @@ class CameraDiscoveryTests(unittest.TestCase):
 
             self.assertEqual(len(found), 1)
             self.assertEqual(found[0]["device"], str(by_id / "usb-camera-video-index0"))
+            self.assertEqual(found[0]["physical_path"], str(usb))
             self.assertEqual(run.call_count, 1)
 
     def test_filters_to_user_selected_supported_pixel_format(self):
@@ -129,8 +130,14 @@ class CameraDiscoveryTests(unittest.TestCase):
         cameras = MODULE.parse_csi_cameras(CSI_SAMPLE)
         self.assertEqual(len(cameras), 2)
         self.assertEqual(cameras[0]["sensor"], "imx477")
+        self.assertEqual(cameras[0]["device_path"], "/base/soc/i2c0mux/i2c@1/imx477@1a")
         self.assertEqual((cameras[0]["sensor_width"], cameras[0]["sensor_height"]), (4056, 3040))
         self.assertEqual(len(cameras[0]["modes"]), 4)
+        selected = MODULE.select_csi_mode(
+            cameras, "pi5", requested_device_path=cameras[0]["device_path"]
+        )
+        self.assertEqual(selected["camera"], 0)
+        self.assertEqual(selected["device_path"], cameras[0]["device_path"])
         self.assertAlmostEqual(cameras[0]["modes"][0]["fps"], 120.05)
 
     def test_selects_csi_mode_within_board_budget_and_validates_overrides(self):

@@ -21,6 +21,8 @@ class ConfigValidationTests(unittest.TestCase):
         values = {
             "SOURCE": "auto",
             "DEVICE": "",
+            "USB_PHYSICAL_PATH": "",
+            "CSI_DEVICE_PATH": "",
             "CAMERA": "auto",
             "FORMAT": "auto",
             "RESOLUTION": "auto",
@@ -86,6 +88,68 @@ class ConfigValidationTests(unittest.TestCase):
             with self.subTest(updates=updates):
                 with self.assertRaisesRegex(MODULE.ConfigError, expected):
                     MODULE.validate_config({**MODULE.DEFAULTS, **updates})
+
+    def test_validates_stable_physical_camera_paths_and_source_compatibility(self):
+        usb = MODULE.validate_config({
+            **MODULE.DEFAULTS,
+            "SOURCE": "usb",
+            "USB_PHYSICAL_PATH": "/sys/devices/platform/soc/usb1/1-1/1-1.2",
+        })
+        self.assertEqual(usb["USB_PHYSICAL_PATH"], "/sys/devices/platform/soc/usb1/1-1/1-1.2")
+        csi = MODULE.validate_config({
+            **MODULE.DEFAULTS,
+            "SOURCE": "csi",
+            "CSI_DEVICE_PATH": "/base/soc/i2c0mux/i2c@1/imx708@1a",
+        })
+        self.assertEqual(csi["CSI_DEVICE_PATH"], "/base/soc/i2c0mux/i2c@1/imx708@1a")
+        for updates in (
+            {"SOURCE": "auto", "USB_PHYSICAL_PATH": "/sys/devices/platform/usb1"},
+            {"SOURCE": "csi", "USB_PHYSICAL_PATH": "/sys/devices/platform/usb1"},
+            {"SOURCE": "usb", "USB_PHYSICAL_PATH": "/sys/devices/platform/usb1", "DEVICE": "/dev/video0"},
+            {"SOURCE": "csi", "CSI_DEVICE_PATH": "/base/soc/i2c@1", "CAMERA": "0"},
+            {"SOURCE": "usb", "CSI_DEVICE_PATH": "/base/soc/i2c@1"},
+            {"SOURCE": "usb", "USB_PHYSICAL_PATH": "/sys/devices/$(touch-pwned)"},
+            {"SOURCE": "csi", "CSI_DEVICE_PATH": "/base/soc/$(touch-pwned)"},
+        ):
+            with self.subTest(updates=updates):
+                with self.assertRaises(MODULE.ConfigError):
+                    MODULE.validate_config({**MODULE.DEFAULTS, **updates})
+
+    def test_stable_usb_path_must_match_a_discovered_physical_camera(self):
+        values = {
+            **MODULE.DEFAULTS,
+            "SOURCE": "usb",
+            "USB_PHYSICAL_PATH": "/sys/devices/platform/soc/usb1/1-1/1-1.2",
+        }
+        result = SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({"usb_devices": [{"physical_path": values["USB_PHYSICAL_PATH"]}]}),
+            stderr="",
+        )
+        with mock.patch.object(MODULE.subprocess, "run", return_value=result):
+            self.assertEqual(MODULE.validate_config(values, check_hardware=True)["USB_PHYSICAL_PATH"], values["USB_PHYSICAL_PATH"])
+        result.stdout = json.dumps({"usb_devices": []})
+        with mock.patch.object(MODULE.subprocess, "run", return_value=result):
+            with self.assertRaisesRegex(MODULE.ConfigError, "physical camera path is not available"):
+                MODULE.validate_config(values, check_hardware=True)
+
+    def test_stable_csi_path_must_match_a_discovered_camera(self):
+        values = {
+            **MODULE.DEFAULTS,
+            "SOURCE": "csi",
+            "CSI_DEVICE_PATH": "/base/soc/i2c0mux/i2c@1/imx708@1a",
+        }
+        result = SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({"csi_cameras": [{"index": 0, "device_path": values["CSI_DEVICE_PATH"]}]}),
+            stderr="",
+        )
+        with mock.patch.object(MODULE.subprocess, "run", return_value=result):
+            self.assertEqual(MODULE.validate_config(values, check_hardware=True)["CSI_DEVICE_PATH"], values["CSI_DEVICE_PATH"])
+        result.stdout = json.dumps({"csi_cameras": []})
+        with mock.patch.object(MODULE.subprocess, "run", return_value=result):
+            with self.assertRaisesRegex(MODULE.ConfigError, "physical device path is not available"):
+                MODULE.validate_config(values, check_hardware=True)
 
     def test_csi_allows_fractional_fps_and_usb_requires_whole_fps(self):
         csi = MODULE.validate_config({**MODULE.DEFAULTS, "SOURCE": "csi", "FPS": "56.03"})

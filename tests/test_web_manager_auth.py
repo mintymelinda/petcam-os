@@ -151,6 +151,78 @@ class WebManagerRouteAuthenticationTests(unittest.TestCase):
             for key, value in headers
         ))
 
+    def test_stream_inventory_api_requires_authentication(self):
+        status, _, _ = self.request("GET", "/api/streams")
+        self.assertEqual(status, 401)
+        cookie, _ = self.login()
+        with mock.patch.object(MANAGER, "list_profiles", return_value=[{"id": "default"}]):
+            status, _, payload = self.request("GET", "/api/streams", cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload)["streams"], [{"id": "default"}])
+
+    def test_independent_stream_mutations_require_authentication_and_csrf(self):
+        camera = {"id": "usb-test", "kind": "usb", "device": "/dev/v4l/by-id/usb-test"}
+        cookie, csrf = self.login()
+        with mock.patch.object(MANAGER, "camera_inventory", return_value=[camera]), \
+                mock.patch.object(MANAGER, "create_profile", return_value={"id": "usb-test"}) as create, \
+                mock.patch.object(MANAGER, "configure_profile", return_value={"id": "usb-test"}) as configure, \
+                mock.patch.object(MANAGER, "remove_profile") as remove:
+            status, _, _ = self.request("POST", "/api/streams", {"camera_id": "usb-test", "mode": {}}, cookie=cookie)
+            self.assertEqual(status, 403)
+            status, _, payload = self.request("POST", "/api/streams", {"camera_id": "usb-test", "mode": {}}, cookie=cookie, csrf=csrf)
+            self.assertEqual(status, 201)
+            self.assertEqual(json.loads(payload)["profile"]["id"], "usb-test")
+            status, _, _ = self.request("POST", "/api/streams/configure", {"profile_id": "usb-test", "camera_id": "usb-test", "mode": {}}, cookie=cookie, csrf=csrf)
+            self.assertEqual(status, 200)
+            status, _, _ = self.request("POST", "/api/streams/remove", {"profile_id": "usb-test"}, cookie=cookie, csrf=csrf)
+            self.assertEqual(status, 200)
+        create.assert_called_once()
+        configure.assert_called_once()
+        remove.assert_called_once_with("usb-test")
+
+    def test_authenticated_manager_preview_routes_to_selected_profile(self):
+        cookie, _ = self.login()
+        seen = []
+        def proxy(handler, port):
+            seen.append(port)
+            handler.send_response(200)
+            handler.send_header("Content-Length", "2")
+            handler.end_headers()
+            handler.wfile.write(b"ok")
+        with mock.patch.object(MANAGER, "stream_port", return_value=8082), \
+                mock.patch.object(MANAGER, "proxy_stream", side_effect=proxy):
+            status, _, payload = self.request("GET", "/stream/usb-test", cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, b"ok")
+        self.assertEqual(seen, [8082])
+
+    def test_obs_stream_only_endpoint_routes_profile_without_management_auth(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), MANAGER.StreamHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        seen = []
+        def proxy(handler, port):
+            seen.append(port)
+            handler.send_response(200)
+            handler.send_header("Content-Length", "2")
+            handler.end_headers()
+            handler.wfile.write(b"ok")
+        try:
+            with mock.patch.object(MANAGER, "stream_port", return_value=8082), \
+                    mock.patch.object(MANAGER, "proxy_stream", side_effect=proxy):
+                connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=5)
+                connection.request("GET", "/stream/usb-test")
+                response = connection.getresponse()
+                payload = response.read()
+                connection.close()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(payload, b"ok")
+            self.assertEqual(seen, [8082])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
     def test_state_changes_require_csrf_and_valid_session(self):
         cookie, csrf = self.login()
         with mock.patch.object(MANAGER, "save_selection") as save:

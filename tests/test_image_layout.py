@@ -25,6 +25,7 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn('"$RELEASE_DIR/lib/csi_stream.py"', script)
         self.assertIn('"$RELEASE_DIR/lib/web_manager.py"', script)
         self.assertIn('"$RELEASE_DIR/manifest.json"', script)
+        self.assertIn('"$RELEASE_DIR/lib/camera_profiles.py"', script)
         self.assertIn('"architecture":"armhf"', script)
 
     def test_runtime_uses_stable_wrappers_and_active_release(self):
@@ -32,6 +33,8 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn('ln -sfn "releases/$APP_VERSION" /opt/petcam/current', script)
         self.assertIn('/opt/petcam/current/lib/camera.py', script)
         self.assertIn('/opt/petcam/current/lib/start-stream.sh', script)
+        self.assertIn('args+=(--physical-path "$USB_PHYSICAL_PATH")', script)
+        self.assertIn('args+=(--device-path "$CSI_DEVICE_PATH")', script)
         self.assertIn('/opt/petcam/current/lib/web_manager.py', script)
         self.assertIn('/opt/petcam/current/lib/csi_stream.py', script)
 
@@ -57,6 +60,13 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertNotIn("chmod 0750 /etc/petcam", script)
         self.assertIn("chown petcam:petcam /etc/petcam/petcam.conf", script)
         self.assertIn("chmod 0640 /etc/petcam/petcam.conf", script)
+        self.assertIn("SupplementaryGroups=petcam video i2c", script)
+        self.assertIn("petcam-stream@.service", script)
+        template_at = script.index('cat > /etc/systemd/system/petcam-stream@.service')
+        self.assertGreater(script.index("systemctl daemon-reload", template_at), template_at)
+        self.assertIn("install -d -o petcam -g petcam -m 0750 /etc/petcam/cameras.d", script)
+        self.assertIn('case "$action" in\n    start|restart|enable)', script)
+        self.assertIn("Environment=PETCAM_CONFIG_PATH=/etc/petcam/cameras.d/%i.conf", script)
         self.assertNotIn(r"\nchmod", script)
 
     def test_release_manifest_schema_is_versioned(self):

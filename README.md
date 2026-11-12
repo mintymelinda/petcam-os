@@ -49,10 +49,13 @@ Edit /etc/petcam/petcam.conf to override:
 
 ~~~bash
 SOURCE=auto          # auto, usb, or csi
-# USB only: pin a specific V4L2 node
+# USB only: optional persistent V4L2 device path
 # DEVICE=/dev/v4l/by-id/your-camera-video-index0
+# Stable USB topology and CSI device-tree paths are managed by the web UI.
+USB_PHYSICAL_PATH=
 # CSI only: camera index from petcam-camera discover-csi
 CAMERA=0
+CSI_DEVICE_PATH=
 FORMAT=MJPG           # USB only
 RESOLUTION=1920x1080
 FPS=30
@@ -71,6 +74,16 @@ sudo petcam-config apply /tmp/petcam.conf.new
 ~~~
 
 The web manager uses the same transaction: it validates the selection, stages the config, restarts the backend, and waits for an actual MJPEG frame. If startup or frame readiness fails, it restores the previous settings and restarts the previous stream. The last known-good configuration is preserved at \`/etc/petcam/petcam.conf.last-good\`.
+
+### Multiple camera streams
+
+The manager can expose additional cameras without replacing or interrupting the primary \`/stream\` endpoint. Select a discovered camera and mode, then choose **Add independent stream**. Each additional camera receives its own configuration under \`/etc/petcam/cameras.d/\`, a systemd instance (\`petcam-stream@…\`), and a public OBS URL such as \`http://petcam.local:8080/stream/usb-…\`. The primary stream keeps its existing URL; its settings can also be changed independently from the additional streams.
+
+USB identities use the camera's persistent \`/dev/v4l/by-id\` path when available, otherwise the physical USB topology from sysfs. CSI identities use the physical device-tree path when available and fall back to sensor plus camera index. The manager persists these physical paths so a \`/dev/videoN\` renumbering or CSI enumeration change does not silently select a different camera. Cameras without a stable hardware path are marked as having an unstable identity.
+
+Before starting or reconfiguring a stream, PetCam checks the combined capture pixel rate, estimated raw USB bandwidth, and frame-buffer memory against conservative limits for the detected Pi model. A request that exceeds those limits is rejected with an explanation rather than starting a stream likely to overload the device. Each stream can be previewed, reconfigured, and removed without restarting the others; removing an additional stream disables its systemd instance and deletes its profile.
+
+
 
 ### Runtime diagnostics
 

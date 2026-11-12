@@ -26,6 +26,7 @@ class SignedReleasePublisherTests(unittest.TestCase):
             "lib/health_monitor.py": b"# health monitor\n",
             "lib/config.py": b"# config\n",
             "lib/network_diagnostics.py": b"# network diagnostics\n",
+            "lib/camera_profiles.py": b"# camera profiles\n",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"fake armhf binary",
         }
