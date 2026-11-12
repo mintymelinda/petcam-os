@@ -23,7 +23,8 @@ from camera_profiles import (
     USTREAMER_FORMATS, apply_primary_config, camera_identity, configure_profile, create_profile, list_profiles,
     remove_profile, stream_port,
 )
-from timelapse import load_config as load_timelapse_config, save_config as save_timelapse_config, state_snapshot as timelapse_snapshot\nfrom web_auth import SESSION_TTL, get_session, invalidate_session, new_session, save_password, verify_password
+from timelapse import load_config as load_timelapse_config, save_config as save_timelapse_config, state_snapshot as timelapse_snapshot
+from web_auth import SESSION_TTL, get_session, invalidate_session, new_session, save_password, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
 DEFAULT_STREAM_URL = "http://127.0.0.1:8081"
@@ -45,7 +46,7 @@ PAGE = r"""<!doctype html>
 <style>
 :root{color-scheme:dark;font:16px system-ui,sans-serif;background:#17191d;color:#eee}
 body{max-width:760px;margin:2rem auto;padding:0 1rem}h1{font-size:1.5rem}section{background:#22262c;border:1px solid #383e47;border-radius:10px;padding:1rem;margin:1rem 0}
-button,select{font:inherit;padding:.55rem .7rem;border-radius:6px;border:1px solid #59616d;background:#303741;color:inherit}
+button,select,input{font:inherit;padding:.55rem .7rem;border-radius:6px;border:1px solid #59616d;background:#303741;color:inherit}
 button{cursor:pointer}button:disabled{opacity:.5}label{display:block;margin:.7rem 0 .25rem}select{width:100%}
 video,img{display:block;width:100%;max-height:55vh;object-fit:contain;background:#090a0b;border-radius:6px}
 small,.muted{color:#aeb7c2}#message{min-height:1.5em;color:#b9d8ff}.row{display:flex;gap:.5rem;flex-wrap:wrap}
@@ -77,7 +78,10 @@ small,.muted{color:#aeb7c2}#message{min-height:1.5em;color:#b9d8ff}.row{display:
 <label for="timelapse-end">Daily schedule end (local time)</label><input id="timelapse-end" type="time" value="23:59">
 <label for="timelapse-retention">Retention (days)</label><input id="timelapse-retention" type="number" min="1" max="3650" value="30">
 <label for="timelapse-storage">Maximum storage (MiB)</label><input id="timelapse-storage" type="number" min="64" max="102400" value="2048">
-<label for="timelapse-free">Minimum free disk space (MiB)</label><input id="timelapse-free" type="number" min="64" max="102400" value="256">\n<label for="timelapse-width">Maximum image width (0 = live resolution)</label><input id="timelapse-width" type="number" min="0" max="4096" value="0">\n<label for="timelapse-quality">JPEG quality (0 = preserve source unless resizing; 1–95 = re-encode)</label><input id="timelapse-quality" type="number" min="0" max="95" value="85">\n<label for="timelapse-path">Storage directory (inside /var/lib/petcam)</label><input id="timelapse-path" type="text" value="/var/lib/petcam/timelapse/frames">
+<label for="timelapse-free">Minimum free disk space (MiB)</label><input id="timelapse-free" type="number" min="64" max="102400" value="256">
+<label for="timelapse-width">Maximum image width (0 = live resolution)</label><input id="timelapse-width" type="number" min="0" max="4096" value="0">
+<label for="timelapse-quality">JPEG quality (0 = preserve source unless resizing; 1–95 = re-encode)</label><input id="timelapse-quality" type="number" min="0" max="95" value="85">
+<label for="timelapse-path">Storage directory (inside /var/lib/petcam)</label><input id="timelapse-path" type="text" value="/var/lib/petcam/timelapse/frames">
 <p class="muted">Frames reuse the active MJPEG stream, so timelapse does not open another camera process. Optional resizing/re-encoding is performed only after a frame is received.</p>
 <div class="row"><button id="save-timelapse">Save timelapse settings</button></div></section>
 <section><h2>Account security</h2><p class="muted">Change the password used to access this manager.</p><button id="change-password">Change password</button> <button id="logout">Sign out</button></section>
