@@ -229,7 +229,7 @@ class MQTTClient:
             "name": hostname,
             "manufacturer": "PetCam",
             "model": model or "Raspberry Pi",
-            "configuration_url": "http://petcam.local:8080/",
+            "configuration_url": f"http://{hostname}.local:8080/",
         }
         for entity in entities:
             component = entity["component"]
@@ -320,6 +320,8 @@ def collect_snapshot(config: dict[str, object], health: dict | None = None) -> d
     if capture_format != "auto":
         mode += f" · {capture_format}"
     return {
+        "service_active": "ON" if active else "OFF",
+        "health_available": "ON" if active and health_state in {"healthy", "camera_disconnected", "starting", "configuring"} else "OFF",
         "camera_connected": "ON" if camera_connected is True else ("OFF" if camera_connected is False else "UNKNOWN"),
         "stream_ready": "ON" if active and public_ready is True and backend_ready is True else "OFF",
         "health_state": health_state,
@@ -353,11 +355,16 @@ def publish_once(client: MQTTClient, config: dict[str, object]) -> None:
     except OSError:
         model = "Raspberry Pi"
     node_id = _client_identifier(config).replace("-", "_")
-    client.publish_discovery(node_id, hostname, model, ENTITIES)
+    entities = ENTITIES if config.get("MQTT_PUBLISH_STREAM_URL") else [
+        entity for entity in ENTITIES if entity["object_id"] != "stream_url"
+    ]
+    client.publish_discovery(node_id, hostname, model, entities)
+    if not config.get("MQTT_PUBLISH_STREAM_URL"):
+        topic = f"{config['MQTT_DISCOVERY_PREFIX']}/sensor/{node_id}/stream_url/config"
+        client.publish(topic, "")
     client.publish_availability("online")
-    health_ok = snapshot["health_state"] == "healthy" and snapshot["stream_ready"] == "ON"
-    client.publish(client._topic("health_availability"), "healthy" if health_ok else "unhealthy")
-    client.publish_state(snapshot)
+    client.publish(client._topic("health_availability"), "healthy" if snapshot["health_available"] == "ON" else "unhealthy")
+    client.publish_state({key: value for key, value in snapshot.items() if key != "health_available" and key != "service_active" and (key != "stream_url" or config.get("MQTT_PUBLISH_STREAM_URL"))})
 
 
 def run(config: dict[str, object] | None = None, stop=lambda: _STOP, sleep=time.sleep) -> int:
