@@ -232,6 +232,33 @@ class HomeAssistantMQTTTests(unittest.TestCase):
         self.assertIn(("petcam/test/health_availability", "unhealthy", True), fake.messages)
         self.assertIn(("petcam/test/broker", "offline", True), fake.messages)
 
+    def test_reconnect_backoff_increases_and_is_bounded(self):
+        delays = []
+        stopped = {"value": False}
+
+        class Client:
+            def __init__(self, config):
+                pass
+
+            def connect(self):
+                raise OSError("broker unavailable")
+
+            def close(self, graceful=True):
+                pass
+
+        def sleep(seconds):
+            delays.append(seconds)
+            if len(delays) == 4:
+                stopped["value"] = True
+
+        with mock.patch.object(MODULE, "MQTTClient", Client):
+            MODULE.run(
+                {**MODULE.DEFAULTS, "MQTT_ENABLED": True},
+                stop=lambda: stopped["value"],
+                sleep=sleep,
+            )
+        self.assertEqual(delays, [5, 10, 20, 40])
+
     def test_reconnects_after_broker_loss_with_bounded_backoff(self):
         attempts = {"connect": 0, "ping": 0, "sleep": 0}
         stopped = {"value": False}
