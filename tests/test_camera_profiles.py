@@ -59,6 +59,57 @@ class CameraIdentityTests(unittest.TestCase):
         self.assertEqual(first["id"], second["id"])
 
 
+    def test_usb_identity_is_stable_when_video_node_number_changes(self):
+        first = MODULE.camera_identity({
+            "kind": "usb",
+            "device": "/dev/video0",
+            "physical_path": "/sys/devices/platform/soc/usb1/1-1/1-1.2",
+        })
+        second = MODULE.camera_identity({
+            "kind": "usb",
+            "device": "/dev/video4",
+            "physical_path": "/sys/devices/platform/soc/usb1/1-1/1-1.2",
+        })
+        self.assertEqual(first["id"], second["id"])
+        self.assertTrue(first["stable_identity"])
+
+    def test_usb_profile_pins_to_physical_path_not_video_node(self):
+        camera = {
+            "kind": "usb",
+            "device": "/dev/video0",
+            "physical_path": "/sys/devices/platform/soc/usb1/1-1/1-1.2",
+            "label": "USB camera",
+        }
+        discovered = {
+            "device": "/dev/video4",
+            "physical_path": camera["physical_path"],
+            "modes": [{"format": "MJPG", "width": 640, "height": 480, "fps": [30]}],
+        }
+        with mock.patch.object(MODULE, "discover_devices", return_value=[discovered]):
+            values, profile = MODULE._mode_selection(camera, self.mode())
+        self.assertEqual(values["DEVICE"], "")
+        self.assertEqual(values["USB_PHYSICAL_PATH"], camera["physical_path"])
+        self.assertEqual(values["CSI_DEVICE_PATH"], "")
+
+    def test_csi_profile_persists_physical_device_tree_path(self):
+        camera = {
+            "kind": "csi",
+            "camera": 0,
+            "sensor": "imx708",
+            "device_path": "/base/soc/i2c0mux/i2c@1/imx708@1a",
+            "label": "CSI camera",
+        }
+        discovered = {
+            "index": 1,
+            "sensor": "imx708",
+            "device_path": camera["device_path"],
+            "modes": [{"width": 640, "height": 480, "fps": 30.0}],
+        }
+        with mock.patch.object(MODULE, "discover_csi_cameras", return_value=[discovered]):
+            values, profile = MODULE._mode_selection(camera, {"width": 640, "height": 480, "fps": 30})
+        self.assertEqual(values["CAMERA"], "auto")
+        self.assertEqual(values["CSI_DEVICE_PATH"], camera["device_path"])
+
 class CameraProfileTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
