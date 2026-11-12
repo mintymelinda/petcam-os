@@ -475,6 +475,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         if path == "/api/setup":
+            if is_configured():
+                self.send_json(409, {"error": "PetCam administrator setup has already been completed."})
+                return
             if not _origin_ok(self):
                 self.send_json(403, {"error": "Request origin is not allowed"})
                 return
