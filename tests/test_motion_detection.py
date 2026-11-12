@@ -169,6 +169,25 @@ class MotionDetectionTests(unittest.TestCase):
             self.assertEqual(result["event_count"], 1)
             self.assertEqual(result["cpu_percent"], 1.2)
 
+    def test_worker_fetches_one_frame_and_closes_the_stream_connection(self):
+        class Response:
+            def __init__(self):
+                self.closed = False
+                self.parts = [b"boundary\r\n" + jpeg("green")]
+            def __enter__(self):
+                return self
+            def __exit__(self, *_args):
+                self.closed = True
+            def read1(self, _size):
+                return self.parts.pop(0) if self.parts else b""
+        response = Response()
+        with mock.patch.object(MODULE.urllib.request, "urlopen", return_value=response) as opened:
+            frame = MODULE.read_stream_frame("http://127.0.0.1:8080/stream")
+        self.assertTrue(frame.startswith(b"\xff\xd8"))
+        self.assertTrue(frame.endswith(b"\xff\xd9"))
+        self.assertTrue(response.closed)
+        self.assertEqual(opened.call_args.args[0].full_url, "http://127.0.0.1:8080/stream")
+
     def test_benchmark_reports_cpu_and_peak_memory(self):
         metrics = MODULE._metrics(__import__("time").monotonic(), __import__("time").process_time())
         self.assertGreaterEqual(metrics["cpu_percent"], 0)
