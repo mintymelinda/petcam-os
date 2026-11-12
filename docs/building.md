@@ -95,7 +95,7 @@ Supported settings:
 - RESOLUTION: `auto` or an advertised mode for the selected backend
 - FPS: `auto` or an advertised frame rate for the selected backend
 - CSI_QUALITY: CSI MJPEG quality from 1 to 100, default 70
-- PORT: internal camera-backend HTTP port, default 8081 (loopback only); the web manager remains on public LAN port 8080
+- PORT: internal camera-backend HTTP port, default 8081 (loopback only); manager HTTPS is on 8443 and OBS stream-only HTTP is on 8080
 
 For USB, automatic FPS uses µStreamer's no-application-cap request (`--desired-fps=0`). For CSI, automatic selection chooses an advertised sensor mode within the model's starting pixel-rate budget, or the least demanding advertised mode with a warning if none fit. Unsupported explicit modes fail clearly rather than silently falling back. If a USB camera has no native MJPEG mode, PetCam may select a supported raw V4L2 mode and use CPU JPEG encoding, with a performance warning. CSI is encoded to MJPEG by `rpicam-vid`; this encoder workload can be significant on older Pi boards, so verify sustained capture on the target hardware and reduce resolution, FPS, or `CSI_QUALITY` if needed.
 
@@ -123,6 +123,6 @@ Use the network stream URL:
 http://petcam.local:8080/stream
 ~~~
 
-If OBS cannot consume the MJPEG endpoint directly, add it through a VLC Video Source or use the µStreamer page at http://petcam.local:8080/ in a Browser Source. If mDNS does not resolve, substitute the Pi's DHCP address.
+If OBS cannot consume the MJPEG endpoint directly, add it through a VLC Video Source. The authenticated management UI is separate from the OBS stream endpoint. If mDNS does not resolve, substitute the Pi's DHCP address.
 
 Do not expose port 8080 to the public internet.
