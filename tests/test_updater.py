@@ -165,6 +165,7 @@ class UpdateArchiveTests(unittest.TestCase):
             "lib/health_monitor.py": b"# health monitor",
             "lib/config.py": b"# config",
             "lib/network_diagnostics.py": b"# network diagnostics",
+            "lib/camera_profiles.py": b"# camera profiles",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"binary",
         }
