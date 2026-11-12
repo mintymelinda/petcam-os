@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import parse_config
+from network_diagnostics import collect_diagnostics
 
 MODE_RE = re.compile(r"Size: Discrete (\d+)x(\d+)")
 FORMAT_RE = re.compile(r"\[\d+\]: '([^']+)'")
@@ -519,6 +520,7 @@ def main():
         "health_recovery_count": health.get("recovery_count", 0),
         "health_last_checked_at": health.get("last_checked_at"),
         "health_last_recovery_at": health.get("last_recovery_at"),
+        "connectivity": collect_diagnostics(),
         "service": status,
         "http_endpoint_reachable": http_status is not None,
         "http_status": http_status,
