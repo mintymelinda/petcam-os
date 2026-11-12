@@ -26,8 +26,8 @@ MANAGER_PORT = 8443
 OBS_PORT = 8080
 DEFAULT_BACKEND_PORT = 8081
 SECRET_LINE = re.compile(
-    r"(?i)(\b(?:password|passwd|token|secret|authorization|cookie|credential|"
-    r"private[_ -]?key|psk|ssid|api[_ -]?key)\b\s*[:=]\s*).*$",
+    r"(?i)(\b[\w.-]*(?:password|passwd|token|secret|authorization|cookie|credential|"
+    r"private[_ -]?key|psk|ssid|api[_ -]?key)[\w.-]*\s*[:=]\s*).*$",
     re.MULTILINE,
 )
 BEARER = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+")
