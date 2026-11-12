@@ -15,6 +15,17 @@ from updater import parse_manifest, verify_signature
 
 
 class SignedReleasePublisherTests(unittest.TestCase):
+    def test_image_stage_copies_required_network_diagnostics_module_into_update_release(self):
+        repo = Path(__file__).resolve().parents[1]
+        stage_script = repo / "stage-petcam/00-install-files/00-run.sh"
+        source = repo / "stage-petcam/00-install-files/files/usr/local/lib/petcam/network_diagnostics.py"
+        script = stage_script.read_text(encoding="utf-8")
+        self.assertTrue(source.is_file())
+        self.assertIn(
+            'install -m 0644 files/usr/local/lib/petcam/network_diagnostics.py "$RELEASE_DIR/lib/network_diagnostics.py"',
+            script,
+        )
+
     def make_release_tree(self, root):
         files = {
             "VERSION": b"1.2.3\n",
