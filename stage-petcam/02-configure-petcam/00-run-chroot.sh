@@ -65,6 +65,8 @@ fi
 PORT="${PORT:-8081}"
 SOURCE="${SOURCE:-auto}"
 DEVICE="${DEVICE:-}"
+USB_PHYSICAL_PATH="${USB_PHYSICAL_PATH:-}"
+CSI_DEVICE_PATH="${CSI_DEVICE_PATH:-}"
 CAMERA="${CAMERA:-auto}"
 FORMAT="${FORMAT:-auto}"
 RESOLUTION="${RESOLUTION:-auto}"
@@ -73,6 +75,7 @@ CSI_QUALITY="${CSI_QUALITY:-70}"
 
 start_usb() {
     args=(select --format "$FORMAT" --resolution "$RESOLUTION" --fps "$FPS")
+    if [[ -n "$USB_PHYSICAL_PATH" ]]; then args+=(--physical-path "$USB_PHYSICAL_PATH"); fi
     if [[ -n "$DEVICE" ]]; then args+=(--device "$DEVICE"); fi
     selection="$(/usr/local/bin/petcam-camera "${args[@]}")"
     json_value() {
@@ -99,7 +102,9 @@ start_usb() {
 
 start_csi() {
     args=(select-csi --resolution "$RESOLUTION" --fps "$FPS")
-    if [[ -n "${PETCAM_PROFILE_ID:-}" ]]; then
+    if [[ -n "$CSI_DEVICE_PATH" ]]; then
+        args+=(--device-path "$CSI_DEVICE_PATH")
+    elif [[ -n "${PETCAM_PROFILE_ID:-}" ]]; then
         profile_device_path="$(python3 -c 'import json,sys; print(next(p for p in json.load(open("/etc/petcam/cameras.json", encoding="utf-8")) if p["id"] == sys.argv[1]).get("device_path", ""))' "$PETCAM_PROFILE_ID")"
         if [[ -n "$profile_device_path" ]]; then
             args+=(--device-path "$profile_device_path")
@@ -131,6 +136,7 @@ case "$SOURCE" in
     csi) start_csi ;;
     auto)
         usb_probe=(select --format "$FORMAT" --resolution "$RESOLUTION" --fps "$FPS")
+        if [[ -n "$USB_PHYSICAL_PATH" ]]; then usb_probe+=(--physical-path "$USB_PHYSICAL_PATH"); fi
         if [[ -n "$DEVICE" ]]; then usb_probe+=(--device "$DEVICE"); fi
         if /usr/local/bin/petcam-camera "${usb_probe[@]}" >/dev/null 2>&1; then
             start_usb
@@ -150,10 +156,12 @@ chmod 0755 "/opt/petcam/releases/$APP_VERSION/lib/start-stream.sh"
 cat > /etc/petcam/petcam.conf <<'CONF'
 # SOURCE=auto selects USB when available, then falls back to CSI; force usb or csi if preferred.
 SOURCE=auto
-# USB camera path override, preferably /dev/v4l/by-id/...
+# USB camera path and physical topology are managed by the web UI.
 DEVICE=
-# CSI camera index from petcam-camera discover-csi
+USB_PHYSICAL_PATH=
+# CSI camera index and physical device-tree path are managed by the web UI.
 CAMERA=auto
+CSI_DEVICE_PATH=
 FORMAT=auto
 RESOLUTION=auto
 FPS=auto
