@@ -40,6 +40,13 @@ class HealthMonitorTests(unittest.TestCase):
         self.assertEqual(report["recovery_count"], 4)
         self.assertEqual(report["next_recovery_at"], 0)
 
+    def test_unknown_systemd_state_does_not_trigger_recovery(self):
+        with mock.patch.object(MODULE, "service_snapshot", return_value={"state": "unknown", "active_age": None}), \
+                mock.patch.object(MODULE, "restart_service") as restart:
+            report = MODULE.check_health(now=1000)
+        self.assertEqual(report["state"], "service_state_unknown")
+        restart.assert_not_called()
+
     def test_startup_grace_does_not_probe_or_restart(self):
         self.active = {"state": "active", "active_age": 5.0}
         with mock.patch.object(MODULE, "probe_stream") as probe, \
