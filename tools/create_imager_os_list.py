@@ -10,8 +10,6 @@ import json
 import lzma
 from pathlib import Path
 
-DEVICES = ["pi0", "pi0w", "pi02w", "pi1", "pi2", "pi3", "pi4", "pi5", "pi400", "cm1", "cm3", "cm4", "cm5"]
-
 
 def digest_file(path: Path) -> tuple[int, str]:
     digest = hashlib.sha256()
@@ -51,7 +49,8 @@ def create_os_list(image: Path, image_url: str, output: Path) -> None:
         "extract_sha256": extract_hash,
         "image_download_size": download_size,
         "image_download_sha256": download_hash,
-        "devices": DEVICES,
+        # Omit "devices" until we publish matching Imager device profiles/tags.
+        # An incorrect compatibility list makes Imager filter out the OS entirely.
         "init_format": "cloudinit-rpi",
         "architecture": "armhf",
     }
