@@ -177,21 +177,6 @@ chmod 1770 /etc/petcam
 chown petcam:petcam /etc/petcam/petcam.conf
 chmod 0640 /etc/petcam/petcam.conf
 
-cat > /etc/petcam/home-assistant.conf <<'CONF'
-# Optional Home Assistant MQTT discovery publisher. Disabled unless explicitly enabled.
-MQTT_ENABLED=false
-MQTT_HOST=
-MQTT_PORT=1883
-MQTT_USERNAME=
-MQTT_PASSWORD=
-MQTT_TLS=false
-MQTT_CLIENT_ID=
-MQTT_DISCOVERY_PREFIX=homeassistant
-MQTT_TOPIC_PREFIX=petcam
-# Publishing the LAN OBS URL is opt-in; leave false to avoid exposing it on MQTT.
-MQTT_PUBLISH_STREAM_URL=false
-MQTT_STREAM_URL=
-CONF
 chown root:petcam /etc/petcam/home-assistant.conf
 chmod 0640 /etc/petcam/home-assistant.conf
 
@@ -322,35 +307,6 @@ WantedBy=multi-user.target
 UNIT
 
 install -d -o petcam -g petcam -m 0750 /etc/petcam/cameras.d
-
-cat > /etc/systemd/system/petcam-home-assistant.service <<'UNIT'
-[Unit]
-Description=Optional PetCam Home Assistant MQTT discovery publisher
-After=network-online.target petcam-stream.service petcam-web.service
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=petcam
-Group=petcam
-SupplementaryGroups=petcam
-ExecStart=/usr/bin/python3 /opt/petcam/current/lib/home_assistant.py
-Restart=on-failure
-RestartSec=10
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-PrivateTmp=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-LockPersonality=true
-RestrictSUIDSGID=true
-
-[Install]
-WantedBy=multi-user.target
-UNIT
 
 cat > /etc/systemd/system/petcam-web.service <<'UNIT'
 [Unit]
