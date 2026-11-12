@@ -1,14 +1,8 @@
-avahi-daemon
 avahi-utils
 git
-build-essential
-pkg-config
 libevent-dev
 libjpeg-dev
 libbsd-dev
 libv4l-dev
-v4l-utils
-python3-minimal
-rpicam-apps-lite
 openssl
 python3-pil

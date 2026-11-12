@@ -6,9 +6,27 @@ The workflow is named **Build PetCam OS image**.
 
 - Pull requests, pushes to `main`, and manual workflow dispatches run validation: Python byte-compilation, shell syntax checks, and the unit test suite.
 - A full Raspberry Pi OS image build and GitHub Release publication runs only when a version tag matching `vMAJOR.MINOR.PATCH` is pushed.
-- The tagged release job checks out the official Raspberry Pi [pi-gen](https://github.com/RPi-Distro/pi-gen) project, adds the PetCam stage, builds the image, generates and validates the Raspberry Pi Imager OS sublist, packages the exact application release from the built image, signs the update manifest, and uploads the resulting assets to the GitHub Release.
+- The tagged release job checks out the official Raspberry Pi [pi-gen](https://github.com/RPi-Distro/pi-gen) project at a fixed commit, adds the PetCam stage, builds and shrinks the image, inventories the packages in the final root filesystem, generates and validates the Raspberry Pi Imager OS sublist, packages the exact application release from the built image, signs the update manifest, and uploads the resulting assets to the GitHub Release.
+
+The pi-gen revision is pinned to `6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78`. This prevents upstream stage/package changes from silently changing release contents. Each release also includes a TSV inventory of installed packages (including versions and installed sizes) and a build-info file recording the pi-gen commit.
 
 Running **Actions → Build PetCam OS image → Run workflow** does not build or upload a flashable image; it runs the validation job. Use a version tag to invoke the release build.
+
+## pi-gen base package audit
+
+PetCam currently builds on the standard `stage0`, `stage1`, and `stage2` stages. The pinned upstream revision already supplies several packages that the custom stage used to repeat:
+
+- Stage 0 provides locale setup, Raspberry Pi firmware/kernel packages, and bootstrap certificates.
+- Stage 1 supplies Raspberry Pi configuration, network base data, and time synchronisation.
+- Stage 2 installs the standard system tools, including `build-essential`, `pkg-config`, `v4l-utils`, and `avahi-daemon`. It also installs `python-is-python3`, which brings in the Python 3 runtime dependencies.
+- Stage 2's `00-packages-nr` installs `rpicam-apps-lite` without recommended packages.
+- Stage 2's networking and cloud-init stages provide NetworkManager, Wi-Fi support, and the enabled cloud-init integration.
+
+The PetCam package list therefore avoids repeating `avahi-daemon`, `build-essential`, `pkg-config`, `v4l-utils`, `python3-minimal`, and `rpicam-apps-lite`. The custom stage still explicitly installs its own build dependencies and application dependencies, including Git, the µStreamer development libraries, OpenSSL, and Pillow.
+
+`avahi-utils` is deliberately retained even though the current application does not invoke its command-line tools. It provides useful `avahi-browse` and `avahi-resolve` commands for future mDNS and service-discovery diagnostics.
+
+Each tagged release exports the final installed-package inventory from the built root filesystem. Use that inventory to identify the largest installed packages and compare changes when deliberately updating the pi-gen pin; do not infer final image contents solely from PetCam's package list.
 
 ## Local image build
 
@@ -16,6 +34,7 @@ Use a Linux x86-64 host with Docker, Git, and sufficient free disk space (allow 
 
 ```bash
 git clone https://github.com/RPi-Distro/pi-gen.git
+git -C pi-gen checkout 6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78
 git clone https://github.com/mintymelinda/petcam-os.git
 cp petcam-os/config pi-gen/config
 cp -a petcam-os/stage-petcam pi-gen/stage-petcam
@@ -32,7 +51,7 @@ sudo ./build-docker.sh
 
 The resulting image is written to `pi-gen/deploy/`. The PetCam application is installed under `/opt/petcam/releases/<version>/`, and `/opt/petcam/current` selects the active release. Device configuration under `/etc/petcam/` and runtime data under `/var/lib/petcam/` are outside the versioned application tree.
 
-The release workflow pins the pi-gen checkout to its configured upstream branch at build time. For fully repeatable local builds, use the same pi-gen revision as the workflow run rather than assuming that the upstream branch remains unchanged.
+The release workflow and the local instructions use the same pinned pi-gen commit. Update that pin deliberately, review the upstream stage/package changes, and update the package audit expectations when changing it.
 
 ## Tagged release assets
 
