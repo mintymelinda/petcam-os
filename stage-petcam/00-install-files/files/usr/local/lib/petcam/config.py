@@ -121,7 +121,9 @@ def parse_config(path: Path | str = CONFIG_PATH, check_hardware: bool = False) -
     values: dict[str, str] = {}
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
-    except FileNotFoundError:
+    except FileNotFoundError as error:
+        if path != CONFIG_PATH:
+            raise ConfigError(f"Configuration file does not exist: {path}") from error
         lines = []
     except OSError as error:
         raise ConfigError(f"Unable to read {path}: {error}") from error
