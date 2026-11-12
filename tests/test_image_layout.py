@@ -62,6 +62,8 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn("chmod 0640 /etc/petcam/petcam.conf", script)
         self.assertIn("SupplementaryGroups=petcam video i2c", script)
         self.assertIn("petcam-stream@.service", script)
+        template_at = script.index('cat > /etc/systemd/system/petcam-stream@.service')
+        self.assertGreater(script.index("systemctl daemon-reload", template_at), template_at)
         self.assertIn("install -d -o petcam -g petcam -m 0750 /etc/petcam/cameras.d", script)
         self.assertIn("Environment=PETCAM_CONFIG_PATH=/etc/petcam/cameras.d/%i.conf", script)
         self.assertNotIn(r"\nchmod", script)
