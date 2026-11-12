@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from config import apply_config, parse_config
+from config import apply_config, ensure_config_lock, parse_config
 from web_auth import SESSION_TTL, get_session, invalidate_session, new_session, save_password, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
@@ -407,6 +407,7 @@ def main():
         return
     if not TLS_CERT.is_file() or not TLS_KEY.is_file():
         raise SystemExit("PetCam HTTPS certificate is missing.")
+    ensure_config_lock()
     threading.Thread(target=health_monitor_loop, name="petcam-health-monitor", daemon=True).start()
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
