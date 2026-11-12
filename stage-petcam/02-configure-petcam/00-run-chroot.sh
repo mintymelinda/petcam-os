@@ -129,8 +129,8 @@ chown petcam:petcam /etc/petcam/petcam.conf
 chmod 0640 /etc/petcam/petcam.conf
 
 cat > /etc/petcam/update.conf <<'UPDATE'
-# Signed release metadata endpoint. Leave empty until the official signing key is provisioned.
-MANIFEST_URL=
+# Stable GitHub Releases endpoint; independent of the Raspberry Pi Imager catalogue.
+MANIFEST_URL=https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json
 PUBLIC_KEY=/etc/petcam/update-signing.pub
 UPDATE
 chown root:root /etc/petcam/update.conf
