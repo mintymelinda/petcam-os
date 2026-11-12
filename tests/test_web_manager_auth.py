@@ -145,7 +145,7 @@ class WebManagerRouteAuthenticationTests(unittest.TestCase):
             status, headers, payload = self.request("GET", "/api/support-bundle", cookie=cookie)
         self.assertEqual(status, 200)
         self.assertEqual(payload, b"test archive")
-        self.assertIn(("Content-Type", "application/gzip"), headers)
+        self.assertTrue(any(key.lower() == "content-type" and value == "application/gzip" for key, value in headers))
         self.assertTrue(any(
             key.lower() == "content-disposition" and "petcam-support.tar.gz" in value
             for key, value in headers
