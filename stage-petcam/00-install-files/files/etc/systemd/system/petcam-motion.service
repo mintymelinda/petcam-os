@@ -1,0 +1,36 @@
+[Unit]
+Description=PetCam low-resource motion detection and event snapshots
+After=network-online.target petcam-stream.service petcam-web.service
+Wants=network-online.target petcam-web.service
+
+[Service]
+Type=simple
+User=petcam
+Group=petcam
+SupplementaryGroups=petcam video
+StateDirectory=petcam/motion
+StateDirectoryMode=0750
+ExecStart=/usr/bin/python3 /opt/petcam/current/lib/motion_detection.py
+Restart=on-failure
+RestartSec=5
+Nice=19
+CPUWeight=5
+CPUQuota=10%
+MemoryHigh=48M
+MemoryMax=64M
+IOSchedulingClass=idle
+IOSchedulingPriority=7
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/petcam/motion
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

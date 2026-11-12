@@ -24,6 +24,7 @@ from camera_profiles import (
     remove_profile, stream_port,
 )
 from timelapse import load_config as load_timelapse_config, save_config as save_timelapse_config, state_snapshot as timelapse_snapshot
+from motion_detection import load_config as load_motion_config, save_config as save_motion_config, state_snapshot as motion_snapshot, FRAMES as MOTION_FRAMES
 from web_auth import SESSION_TTL, get_session, invalidate_session, new_session, save_password, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
@@ -48,7 +49,7 @@ PAGE = r"""<!doctype html>
 body{max-width:760px;margin:2rem auto;padding:0 1rem}h1{font-size:1.5rem}section{background:#22262c;border:1px solid #383e47;border-radius:10px;padding:1rem;margin:1rem 0}
 button,select,input{font:inherit;padding:.55rem .7rem;border-radius:6px;border:1px solid #59616d;background:#303741;color:inherit}
 button{cursor:pointer}button:disabled{opacity:.5}label{display:block;margin:.7rem 0 .25rem}select{width:100%}
-video,img{display:block;width:100%;max-height:55vh;object-fit:contain;background:#090a0b;border-radius:6px}
+video,img{display:block;width:100%;max-height:55vh;object-fit:contain;background:#090a0b;border-radius:6px}.motion-event{display:flex;gap:.75rem;align-items:center;margin:.6rem 0}.motion-event img{width:160px;max-height:110px;object-fit:cover}
 small,.muted{color:#aeb7c2}#message{min-height:1.5em;color:#b9d8ff}.row{display:flex;gap:.5rem;flex-wrap:wrap}
 </style>
 <body><h1>PetCam <small>Camera</small></h1>
@@ -84,6 +85,23 @@ small,.muted{color:#aeb7c2}#message{min-height:1.5em;color:#b9d8ff}.row{display:
 <label for="timelapse-path">Storage directory (inside /var/lib/petcam)</label><input id="timelapse-path" type="text" value="/var/lib/petcam/timelapse/frames">
 <p class="muted">Frames reuse the active MJPEG stream, so timelapse does not open another camera process. Optional resizing/re-encoding is performed only after a frame is received.</p>
 <div class="row"><button id="save-timelapse">Save timelapse settings</button></div></section>
+<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Motion detection</h2><button id="refresh-motion">Refresh status</button></div>
+<p id="motion-status" role="status">Loading motion status…</p>
+<label style="display:flex;gap:.5rem;align-items:center"><input id="motion-enabled" type="checkbox"> Enable motion snapshots</label>
+<label for="motion-sensitivity">Sensitivity (higher detects smaller changes)</label><input id="motion-sensitivity" type="range" min="1" max="100" value="50">
+<label for="motion-min-change">Minimum changed pixels (%)</label><input id="motion-min-change" type="number" min="0.1" max="20" step="0.1" value="2.5">
+<label for="motion-sample">Sampling interval (seconds)</label><input id="motion-sample" type="number" min="1" max="30" value="2">
+<label for="motion-confirm">Consecutive samples to confirm motion</label><input id="motion-confirm" type="number" min="1" max="5" value="2">
+<label for="motion-cooldown">Minimum time between events (seconds)</label><input id="motion-cooldown" type="number" min="5" max="86400" value="60">
+<label style="display:flex;gap:.5rem;align-items:center"><input id="motion-quiet-enabled" type="checkbox"> Suppress snapshots during quiet hours</label>
+<label for="motion-quiet-start">Quiet hours start (local time)</label><input id="motion-quiet-start" type="time" value="22:00">
+<label for="motion-quiet-end">Quiet hours end (local time)</label><input id="motion-quiet-end" type="time" value="07:00">
+<label for="motion-retention">Event snapshot retention (days)</label><input id="motion-retention" type="number" min="1" max="3650" value="14">
+<label for="motion-storage">Maximum event storage (MiB)</label><input id="motion-storage" type="number" min="64" max="102400" value="512">
+<label for="motion-free">Minimum free disk space (MiB)</label><input id="motion-free" type="number" min="64" max="102400" value="256">
+<p class="muted">Motion samples reuse the active camera MJPEG stream. Frames are reduced to 160×120 grayscale for comparison; no second camera process or continuous video recording is used. The worker runs with a strict CPU and memory limit. Disabled by default.</p>
+<div class="row"><button id="save-motion">Save motion settings</button></div>
+<h3>Recent motion events</h3><div id="motion-events" class="muted">No motion events recorded.</div></section>
 <section><h2>Account security</h2><p class="muted">Change the password used to access this manager.</p><button id="change-password">Change password</button> <button id="logout">Sign out</button></section>
 <footer style="text-align:center;padding:1rem 0 2rem"><small>Enjoying PetCam? <a href="https://www.paypal.me/kimmynightmare" target="_blank" rel="noopener noreferrer" style="color:#b9d8ff">Support development with PayPal</a></small></footer>
 <script>
@@ -107,6 +125,19 @@ async function refreshTimelapse(){try{const d=await request("/api/timelapse");co
 $("refresh-timelapse").onclick=refreshTimelapse;
 $("save-timelapse").onclick=async()=>{const b=$("save-timelapse");b.disabled=true;try{await request("/api/timelapse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:$("timelapse-enabled").checked,interval_seconds:Number($("timelapse-interval").value),schedule_start:$("timelapse-start").value,schedule_end:$("timelapse-end").value,retention_days:Number($("timelapse-retention").value),max_storage_mb:Number($("timelapse-storage").value),min_free_mb:Number($("timelapse-free").value),max_width:Number($("timelapse-width").value),jpeg_quality:Number($("timelapse-quality").value),storage_path:$("timelapse-path").value})});await refreshTimelapse()}catch(e){$("timelapse-status").textContent=e.message}finally{b.disabled=false}};
 refreshTimelapse();
+async function refreshMotion(){
+try{
+const d=await request("/api/motion"),c=d.config,s=d.status;
+$("motion-enabled").checked=c.enabled;$("motion-sensitivity").value=c.sensitivity;$("motion-min-change").value=c.minimum_changed_percent;$("motion-sample").value=c.sample_interval_seconds;$("motion-confirm").value=c.confirm_samples;$("motion-cooldown").value=c.min_event_interval_seconds;$("motion-quiet-enabled").checked=c.quiet_hours_enabled;$("motion-quiet-start").value=c.quiet_hours_start;$("motion-quiet-end").value=c.quiet_hours_end;$("motion-retention").value=c.retention_days;$("motion-storage").value=c.max_storage_mb;$("motion-free").value=c.min_free_mb;
+$("motion-status").textContent="Status: "+s.state+" · "+s.event_count+" events · "+s.snapshots+" snapshots · "+Math.round(s.storage_bytes/1048576)+" MiB"+(s.last_event_at?" · Last event: "+s.last_event_at:"")+(s.cpu_percent!==undefined?" · Worker CPU: "+s.cpu_percent+"%":"")+(s.peak_rss_kib!==undefined?" · Peak RAM: "+Math.round(s.peak_rss_kib/1024)+" MiB":"")+(s.last_error?" · "+s.last_error:"");
+const root=$("motion-events");root.replaceChildren();if(!s.events.length){root.textContent="No motion events recorded.";return}
+for(const event of s.events){const row=document.createElement("div"),img=document.createElement("img"),details=document.createElement("div"),time=document.createElement("div"),change=document.createElement("small");row.className="motion-event";img.src="/api/motion/events/"+encodeURIComponent(event.file);img.alt="Motion snapshot "+event.timestamp;time.textContent=event.timestamp;change.textContent="Changed pixels: "+event.changed_percent+"%";details.append(time,change);row.append(img,details);root.append(row)}
+}catch(e){$("motion-status").textContent="Motion status unavailable: "+e.message}
+}
+$("refresh-motion").onclick=refreshMotion;
+$("save-motion").onclick=async()=>{const b=$("save-motion");b.disabled=true;try{await request("/api/motion",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:$("motion-enabled").checked,sensitivity:Number($("motion-sensitivity").value),minimum_changed_percent:Number($("motion-min-change").value),sample_interval_seconds:Number($("motion-sample").value),confirm_samples:Number($("motion-confirm").value),min_event_interval_seconds:Number($("motion-cooldown").value),quiet_hours_enabled:$("motion-quiet-enabled").checked,quiet_hours_start:$("motion-quiet-start").value,quiet_hours_end:$("motion-quiet-end").value,retention_days:Number($("motion-retention").value),max_storage_mb:Number($("motion-storage").value),min_free_mb:Number($("motion-free").value)})});await refreshMotion()}catch(e){$("motion-status").textContent=e.message}finally{b.disabled=false}};
+refreshMotion();setInterval(refreshMotion,15000);
+
 async function refreshDiagnostics(){try{const d=await request("/api/diagnostics");const layers=d.layers||{};const failed=Object.entries(layers).filter(([k,v])=>v&&(v.healthy===false||v.reachable===false||v.resolved===false||v.available===false));$("diagnostic-summary").textContent=failed.length?failed.map(([k])=>k.replaceAll("_"," ")+": attention needed").join(" · "):"Local camera, listener, and network checks look healthy.";const urls=(d.obs_browser_source_urls||[]).join("\n");$("diagnostic-details").textContent="OBS URL(s): "+urls+"\n"+(d.problems||[]).join("\n")+"\n"+d.remote_client_note}catch(e){$("diagnostic-summary").textContent="Diagnostics unavailable: "+e.message}}$("refresh-diagnostics").onclick=refreshDiagnostics;refreshDiagnostics();
 $("download-support-bundle").onclick=async()=>{const b=$("download-support-bundle");b.disabled=true;try{let r=await fetch("/api/support-bundle");if(r.status===401){await login();r=await fetch("/api/support-bundle")}if(!r.ok)throw Error("Support bundle request failed ("+r.status+")");const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="petcam-support.tar.gz";document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url)}catch(e){$("diagnostic-summary").textContent="Support bundle failed: "+e.message}finally{b.disabled=false}};
 async function refreshHealth(){try{const h=await request("/api/health");$("health-state").textContent="Status: "+h.state.replaceAll("_"," ");$("health-reason").textContent=h.reason||"No active issue reported."; $("health-details").textContent="Recoveries: "+(h.recovery_count||0)+" · Last checked: "+(h.last_checked_at||"not yet")+(h.last_recovery_at?" · Last recovery: "+h.last_recovery_at:"")}catch(e){$("health-state").textContent="Health status unavailable";$("health-reason").textContent=e.message}}$("refresh-health").onclick=refreshHealth;refresh();refreshHealth();setInterval(refreshHealth,30000);
@@ -349,6 +380,31 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as error:
                 self.send_json(503, {"error": str(error)})
             return
+        if path == "/api/motion":
+            try:
+                config = load_motion_config()
+                self.send_json(200, {"config": config, "status": motion_snapshot(config)})
+            except Exception as error:
+                self.send_json(503, {"error": str(error)})
+            return
+        if path.startswith("/api/motion/events/"):
+            filename = path.rsplit("/", 1)[-1]
+            if not re.fullmatch(r"[0-9]{8}T[0-9]{6}\.[0-9]{6}Z(?:-[0-9]{3})?\.jpg", filename):
+                self.send_error(404)
+                return
+            image_path = MOTION_FRAMES / filename
+            try:
+                payload = image_path.read_bytes()
+            except OSError:
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "private, no-store")
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         if path == "/api/diagnostics":
             try:
                 self.send_json(200, collect_diagnostics())
@@ -448,6 +504,11 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/timelapse":
                 current = load_timelapse_config()
                 updated = save_timelapse_config({**current, **data})
+                self.send_json(200, {"ok": True, "config": updated})
+                return
+            if path == "/api/motion":
+                current = load_motion_config()
+                updated = save_motion_config({**current, **data})
                 self.send_json(200, {"ok": True, "config": updated})
                 return
             if path == "/api/password":

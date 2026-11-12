@@ -343,3 +343,10 @@ JSON
 chown petcam:petcam /var/lib/petcam/timelapse/config.json
 chmod 0640 /var/lib/petcam/timelapse/config.json
 systemctl enable petcam-timelapse.service
+install -d -o petcam -g petcam -m 0750 /var/lib/petcam/motion /var/lib/petcam/motion/events
+cat > /var/lib/petcam/motion/config.json <<'JSON'
+{"enabled":false,"sample_interval_seconds":2,"sensitivity":50,"minimum_changed_percent":2.5,"confirm_samples":2,"min_event_interval_seconds":60,"quiet_hours_enabled":false,"quiet_hours_start":"22:00","quiet_hours_end":"07:00","retention_days":14,"max_storage_mb":512,"min_free_mb":256,"max_events":100}
+JSON
+chown petcam:petcam /var/lib/petcam/motion/config.json
+chmod 0640 /var/lib/petcam/motion/config.json
+systemctl enable petcam-motion.service
