@@ -40,7 +40,7 @@ Raspberry Pi must approve the catalogue submission before PetCam appears in Imag
 
 Once PetCam is listed, users select it from Imager's normal OS list and configure hostname `petcam`, Wi-Fi, WLAN country, an administrator account, and optional SSH in the standard Customisation step. WLAN country is not baked into the image.
 
-The camera stream has no authentication and is intended only for a trusted LAN.
+The management UI is served over HTTPS on port 8443 and requires a password configured from SSH or a local terminal using `sudo petcam-admin`. Each device generates its own self-signed certificate. Port 8080 is a separate unauthenticated stream-only endpoint for OBS; it exposes only `/stream`, not management or update controls. Keep both ports on a trusted LAN and do not port-forward them to the internet.
 
 ## Camera discovery and configuration
 
@@ -84,7 +84,7 @@ sudo nano /etc/petcam/petcam.conf
 sudo systemctl restart petcam-stream
 ~~~
 
-The camera backend listens on loopback port 8081. The PetCam web manager proxies it through the public LAN endpoint on port 8080.
+The camera backend listens on loopback port 8081. The HTTPS manager on port 8443 proxies the preview after authentication; a separate HTTP endpoint on port 8080 exposes only the MJPEG stream for OBS.
 
 Supported settings:
 
