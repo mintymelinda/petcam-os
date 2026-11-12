@@ -50,6 +50,41 @@ def verify_password(password):
         return False
 
 
+def is_configured():
+    """Return whether first-run administrator setup has already completed."""
+    return AUTH_FILE.exists()
+
+
+def initialize_password(password):
+    """Create the first administrator password without replacing an existing one."""
+    data = hash_password(password)
+    AUTH_FILE.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(data) + "\\n"
+    with _lock:
+        try:
+            descriptor = os.open(AUTH_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o640)
+        except FileExistsError as error:
+            raise ValueError("PetCam administrator setup has already been completed.") from error
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                output.write(payload)
+                output.flush()
+                os.fsync(output.fileno())
+            os.chmod(AUTH_FILE, 0o640)
+            try:
+                import grp
+                os.chown(AUTH_FILE, 0, grp.getgrnam("petcam").gr_gid)
+            except (ImportError, KeyError, PermissionError):
+                pass
+            _sessions.clear()
+        except Exception:
+            try:
+                AUTH_FILE.unlink()
+            except OSError:
+                pass
+            raise
+
+
 def save_password(password):
     data = hash_password(password)
     AUTH_FILE.parent.mkdir(parents=True, exist_ok=True)
