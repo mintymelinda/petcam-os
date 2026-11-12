@@ -213,7 +213,7 @@ def _mode_selection(camera: dict[str, Any], mode: dict[str, Any]) -> tuple[dict[
             raise ProfileError("That USB mode is no longer advertised by the camera.")
         values = {
             "SOURCE": "usb",
-            "DEVICE": identity["device"],
+            "DEVICE": identity["device"] if identity["device"].startswith("/dev/v4l/by-id/") or not identity["physical_path"] else "",
             "CAMERA": "auto",
             "FORMAT": selected_format,
             "RESOLUTION": f"{width}x{height}",
