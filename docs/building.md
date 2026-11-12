@@ -12,6 +12,22 @@ The pi-gen revision is pinned to `6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78`. Thi
 
 Running **Actions → Build PetCam OS image → Run workflow** does not build or upload a flashable image; it runs the validation job. Use a version tag to invoke the release build.
 
+## pi-gen base package audit
+
+PetCam currently builds on the standard `stage0`, `stage1`, and `stage2` stages. The pinned upstream revision already supplies several packages that the custom stage used to repeat:
+
+- Stage 0 provides locale setup, Raspberry Pi firmware/kernel packages, and bootstrap certificates.
+- Stage 1 supplies Raspberry Pi configuration, network base data, and time synchronisation.
+- Stage 2 installs the standard system tools, including `build-essential`, `pkg-config`, `v4l-utils`, and `avahi-daemon`. It also installs `python-is-python3`, which brings in the Python 3 runtime dependencies.
+- Stage 2's `00-packages-nr` installs `rpicam-apps-lite` without recommended packages.
+- Stage 2's networking and cloud-init stages provide NetworkManager, Wi-Fi support, and the enabled cloud-init integration.
+
+The PetCam package list therefore avoids repeating `avahi-daemon`, `build-essential`, `pkg-config`, `v4l-utils`, `python3-minimal`, and `rpicam-apps-lite`. The custom stage still explicitly installs its own build dependencies and application dependencies, including Git, the µStreamer development libraries, OpenSSL, and Pillow.
+
+`avahi-utils` is deliberately retained even though the current application does not invoke its command-line tools. It provides useful `avahi-browse` and `avahi-resolve` commands for future mDNS and service-discovery diagnostics.
+
+Each tagged release exports the final installed-package inventory from the built root filesystem. Use that inventory to identify the largest installed packages and compare changes when deliberately updating the pi-gen pin; do not infer final image contents solely from PetCam's package list.
+
 ## Local image build
 
 Use a Linux x86-64 host with Docker, Git, and sufficient free disk space (allow at least 30 GB).
