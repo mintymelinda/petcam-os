@@ -116,6 +116,10 @@ jobs:
           assert entry["url"].startswith("https://")
           print("PetCam Imager OS sublist passed Raspberry Pi's published JSON schema.")
           PY
-          gh release create "$TAG" "$IMAGE_NAME" petcam-os-os-list.json --title "PetCam OS $VERSION" --generate-notes
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$IMAGE_NAME" petcam-os-os-list.json --clobber
+          else
+            gh release create "$TAG" "$IMAGE_NAME" petcam-os-os-list.json --title "PetCam OS $VERSION" --generate-notes
+          fi
     permissions:
       contents: write
