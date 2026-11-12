@@ -242,6 +242,7 @@ def run():
     BASE.mkdir(parents=True, exist_ok=True)
     FRAMES.mkdir(parents=True, exist_ok=True)
     next_capture = 0.0
+    directory = FRAMES
     last_error = None
     while _running:
         try:
