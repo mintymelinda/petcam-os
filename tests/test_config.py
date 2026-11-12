@@ -37,6 +37,12 @@ class ConfigValidationTests(unittest.TestCase):
             )
             self.assertEqual(MODULE.parse_config(path)["PORT"], "8081")
 
+    def test_parser_rejects_missing_candidate_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / "missing.conf"
+            with self.assertRaisesRegex(MODULE.ConfigError, "does not exist"):
+                MODULE.parse_config(missing)
+
     def test_parser_rejects_malformed_duplicate_and_unknown_keys(self):
         cases = [
             ("SOURCE=auto\nnot-a-setting\n", "expected KEY=VALUE"),
