@@ -57,7 +57,7 @@ FORMAT=MJPG           # USB only
 RESOLUTION=1920x1080
 FPS=30
 CSI_QUALITY=70        # CSI MJPEG quality, 1..100
-PORT=8081           # internal camera backend; web interface remains on port 8080
+PORT=8081           # internal camera backend; manager HTTPS is on 8443, OBS stream on 8080
 ~~~
 
 SOURCE=auto prefers a usable USB camera, then falls back to CSI. Set SOURCE=usb or SOURCE=csi to force a backend. FORMAT applies to USB only; CSI output is MJPEG. Use RESOLUTION=auto and FPS=auto to return to automatic selection. For USB, FPS=auto asks µStreamer not to impose an application-side frame-rate cap. For CSI, automatic selection chooses a sensor-advertised frame rate. Unsupported explicit modes fail clearly rather than silently falling back. Restart after changes:
