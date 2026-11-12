@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from config import configuration_change_in_progress, parse_config
+from config import config_transaction_guard, parse_config
 
 STATE_FILE = Path("/var/lib/petcam/health.json")
 BACKEND_STREAM_URL = "http://127.0.0.1:8081/stream"
@@ -158,7 +158,7 @@ def _recover(report: dict[str, Any], previous: dict[str, Any], service: str,
     return _persist(report)
 
 
-def check_health(now: float | None = None) -> dict[str, Any]:
+def _check_health_locked(now: float | None = None) -> dict[str, Any]:
     now = time.time() if now is None else now
     previous = load_state()
     report: dict[str, Any] = {
@@ -173,11 +173,6 @@ def check_health(now: float | None = None) -> dict[str, Any]:
         "recovery_target": previous.get("recovery_target"),
         "last_recovery_result": previous.get("last_recovery_result"),
     }
-
-    if configuration_change_in_progress():
-        report["state"] = "configuring"
-        report["reason"] = "A camera configuration transaction is in progress; health recovery is paused."
-        return _persist(report)
 
     backend = service_snapshot("petcam-stream.service")
     web = service_snapshot("petcam-web.service")
@@ -244,6 +239,27 @@ def check_health(now: float | None = None) -> dict[str, Any]:
     report["recovery_target"] = None
     report["last_recovery_result"] = None
     return _persist(report)
+
+
+def check_health(now: float | None = None) -> dict[str, Any]:
+    """Run health detection without racing a camera configuration apply."""
+    with config_transaction_guard() as acquired:
+        if not acquired:
+            current = time.time() if now is None else now
+            previous = load_state()
+            return _persist({
+                "state": "configuring",
+                "reason": "A camera configuration transaction is in progress; health recovery is paused.",
+                "last_checked_at": timestamp(current),
+                "last_healthy_at": previous.get("last_healthy_at"),
+                "last_recovery_at": previous.get("last_recovery_at"),
+                "next_recovery_at": previous.get("next_recovery_at", 0),
+                "recovery_count": int(previous.get("recovery_count", 0)),
+                "consecutive_failures": int(previous.get("consecutive_failures", 0)),
+                "recovery_target": previous.get("recovery_target"),
+                "last_recovery_result": previous.get("last_recovery_result"),
+            })
+        return _check_health_locked(now)
 
 
 def main() -> int:
