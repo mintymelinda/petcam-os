@@ -9,6 +9,7 @@ import json
 import os
 import platform
 import re
+import ssl
 import shutil
 import subprocess
 import sys
@@ -36,6 +37,7 @@ REQUIRED_FILES = (
     "lib/camera.py",
     "lib/csi_stream.py",
     "lib/web_manager.py",
+    "lib/web_auth.py",
     "lib/start-stream.sh",
     "vendor/bin/ustreamer",
 )
@@ -312,7 +314,7 @@ def healthy() -> bool:
     ).returncode != 0:
         return False
     try:
-        with urllib.request.urlopen("http://127.0.0.1:8080/", timeout=3) as response:
+        with urllib.request.urlopen("https://127.0.0.1:8443/", context=ssl._create_unverified_context(), timeout=3) as response:
             return response.status == 200
     except (urllib.error.URLError, TimeoutError):
         return False
