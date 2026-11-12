@@ -49,8 +49,9 @@ def create_os_list(image: Path, image_url: str, output: Path) -> None:
         "extract_sha256": extract_hash,
         "image_download_size": download_size,
         "image_download_sha256": download_hash,
-        # Omit "devices" until we publish matching Imager device profiles/tags.
-        # An incorrect compatibility list makes Imager filter out the OS entirely.
+        # Official Imager tags for the supported 32-bit Pi families:
+        # Pi 1 includes the original Zero; Pi 3 includes the Zero 2 W.
+        "devices": ["pi5-32bit", "pi4-32bit", "pi3-32bit", "pi2-32bit", "pi1-32bit"],
         "init_format": "cloudinit-rpi",
         "architecture": "armhf",
     }
