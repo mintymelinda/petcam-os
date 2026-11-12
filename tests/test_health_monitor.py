@@ -65,6 +65,21 @@ class HealthMonitorTests(unittest.TestCase):
         self.assertFalse(report["camera_connected"])
         restart.assert_not_called()
 
+    def test_dead_capture_process_is_distinguished_from_stalled_stream(self):
+        def snapshot(service):
+            if service == "petcam-stream.service":
+                return {"state": "inactive", "active_age": None}
+            return self.active
+        with mock.patch.object(MODULE, "service_snapshot", side_effect=snapshot), \
+                mock.patch.object(MODULE, "camera_present", return_value=True), \
+                mock.patch.object(MODULE, "probe_stream") as probe, \
+                mock.patch.object(MODULE, "restart_service", return_value=(True, "")) as restart:
+            report = MODULE.check_health(now=1000)
+        self.assertEqual(report["state"], "recovering")
+        self.assertEqual(report["reason"], "Capture service is not active.")
+        probe.assert_not_called()
+        restart.assert_called_once_with("petcam-stream.service")
+
     def test_live_but_stalled_backend_is_restarted(self):
         with mock.patch.object(MODULE, "probe_stream", return_value=False), \
                 mock.patch.object(MODULE, "camera_present", return_value=True), \
