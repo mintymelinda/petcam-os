@@ -238,30 +238,48 @@ def read_model():
         return "Unknown Raspberry Pi model"
 
 
-def discover_devices():
-    paths = []
-    seen_devices = set()
-    for pattern in ("/dev/v4l/by-id/*", "/dev/video*"):
-        for entry in sorted(Path("/").glob(pattern.lstrip("/"))):
-            try:
-                resolved = str(entry.resolve(strict=True))
-            except OSError:
-                continue
-            if resolved not in seen_devices:
-                seen_devices.add(resolved)
-                # Preserve stable by-id symlinks when available; otherwise use /dev/videoN.
-                paths.append(str(entry))
-    devices = []
-    for device in paths:
-        result = subprocess.run(
-            ["v4l2-ctl", "--device", device, "--list-formats-ext"],
-            capture_output=True, text=True, check=False,
-        )
-        if result.returncode:
+def usb_parent_for_video_node(video_entry):
+    """Return the physical USB device directory for a V4L2 node, or None."""
+    try:
+        device_path = (video_entry / "device").resolve(strict=True)
+    except OSError:
+        return None
+    for parent in (device_path, *device_path.parents):
+        if (parent / "idVendor").is_file() and (parent / "idProduct").is_file():
+            return parent
+    return None
+
+
+def discover_devices(sysfs_root=Path("/sys/class/video4linux"), dev_root=Path("/dev")):
+    """Discover one usable V4L2 capture interface per physical USB camera."""
+    groups = {}
+    for entry in sorted(sysfs_root.glob("video*")):
+        parent = usb_parent_for_video_node(entry)
+        if parent is None:
             continue
-        modes = parse_modes(result.stdout)
-        if modes:
-            devices.append({"device": device, "modes": modes})
+        node = dev_root / entry.name
+        if node.exists():
+            groups.setdefault(str(parent), []).append(node)
+    aliases = {}
+    for alias in sorted((dev_root / "v4l/by-id").glob("*")):
+        try:
+            aliases[str(alias.resolve(strict=True))] = alias
+        except OSError:
+            continue
+    devices = []
+    for nodes in groups.values():
+        # A camera may expose multiple video nodes; publish only one interface.
+        candidates = sorted(nodes, key=lambda node: (str(node) not in aliases, str(node)))
+        for node in candidates:
+            device = str(aliases.get(str(node), node))
+            result = subprocess.run(["v4l2-ctl", "--device", device, "--list-formats-ext"],
+                                    capture_output=True, text=True, check=False)
+            if result.returncode:
+                continue
+            modes = parse_modes(result.stdout)
+            if modes:
+                devices.append({"device": device, "modes": modes})
+                break
     return devices
 
 def filter_devices_by_format(devices, requested_format):
@@ -376,7 +394,7 @@ def main():
         warning = pixel_rate > PIXEL_BUDGETS[tier] or not native
         print(json.dumps({
             "device": device["device"], "resolution": width, "fps": fps,
-            "format": "JPEG" if fmt in NATIVE_JPEG_FORMATS else fmt,
+            "format": "MJPEG" if fmt in NATIVE_JPEG_FORMATS else fmt,
             "encoder": encoder, "native_mjpeg": native, "model": model,
             "tier": tier, "mode_fps": mode["fps"],
             "estimated_pixels_per_second": pixel_rate,
