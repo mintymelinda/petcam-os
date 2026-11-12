@@ -233,33 +233,21 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 UNIT
 
-cat > /etc/systemd/system/petcam-web.service <<'UNIT'
-[Unit]
-Description=PetCam lightweight camera management web interface
-Requires=petcam-web-cert.service
-After=network-online.target petcam-stream.service petcam-web-cert.service
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=petcam
-Group=petcam
-SupplementaryGroups=video i2c
-ExecStart=/usr/bin/python3 /opt/petcam/current/lib/web_manager.py
-Restart=always
-RestartSec=3
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-PrivateTmp=true
-ReadWritePaths=/etc/petcam /var/lib/petcam
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-systemctl enable avahi-daemon.service
-systemctl enable petcam-stream.service
-systemctl enable petcam-web-cert.service
+cat > /usr/local/sbin/petcam-create-web-cert <<'SCRIPT'
+#!/bin/sh
+set -eu
+if [ -s /etc/petcam/web-manager.crt ] && [ -s /etc/petcam/web-manager.key ]; then
+    exit 0
+fi
+umask 077
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -sha256 -nodes -days 825 \
+    -keyout /etc/petcam/web-manager.key -out /etc/petcam/web-manager.crt \
+    -subj "/CN=petcam.local" -addext "subjectAltName=DNS:petcam.local,DNS:petcam"
+chown root:petcam /etc/petcam/web-manager.key /etc/petcam/web-manager.crt
+chmod 0640 /etc/petcam/web-manager.key
+chmod 0644 /etc/petcam/web-manager.crt
+SCRIPT
+chmod 0755 /usr/local/sbin/petcam-create-web-cert
 
 cat > /etc/systemd/system/petcam-web-cert.service <<'UNIT'
 [Unit]
@@ -303,38 +291,5 @@ UNIT
 systemctl enable avahi-daemon.service
 systemctl enable petcam-stream.service
 systemctl enable petcam-web-cert.service
-
-cat > /etc/systemd/system/petcam-health.service <<'UNIT'
-[Unit]
-Description=Check PetCam capture and public stream health
-After=network-online.target petcam-stream.service petcam-web.service
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-User=root
-ExecStart=/usr/local/bin/petcam-health
-TimeoutStartSec=90
-ProtectSystem=strict
-ProtectHome=true
-PrivateTmp=true
-ReadWritePaths=/var/lib/petcam
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-UNIT
-
-cat > /etc/systemd/system/petcam-health.timer <<'UNIT'
-[Unit]
-Description=Periodically check PetCam stream health
-
-[Timer]
-OnBootSec=60s
-OnUnitActiveSec=30s
-AccuracySec=5s
-Persistent=true
-Unit=petcam-health.service
-
-[Install]
-WantedBy=timers.target
-UNIT
-
+systemctl enable petcam-web-cert.service
 systemctl enable petcam-web.service
