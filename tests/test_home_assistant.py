@@ -49,6 +49,12 @@ class FakePublisher:
     def publish(self, topic, payload, retain=True):
         self.messages.append((topic, payload, retain))
 
+    def connect(self):
+        pass
+
+    def close(self, graceful=True):
+        pass
+
     def publish_availability(self, state):
         self.publish(self._topic("broker"), state)
 
@@ -215,6 +221,16 @@ class HomeAssistantMQTTTests(unittest.TestCase):
         self.assertNotIn("stream_url", [item["object_id"] for item in fake.discovery[3]])
         self.assertNotIn("stream_url", [topic.rsplit("/", 1)[-1] for topic, _, _ in fake.messages if "/state/" in topic])
         self.assertIn(("petcam/test/health_availability", "unhealthy", True), fake.messages)
+
+    def test_remove_discovery_clears_all_retained_entities(self):
+        fake = FakePublisher()
+        config = {**MODULE.DEFAULTS, "MQTT_HOST": "broker.local"}
+        with mock.patch.object(MODULE, "MQTTClient", return_value=fake):
+            MODULE.remove_discovery(config)
+        cleared = [topic for topic, payload, retain in fake.messages if payload == "" and retain]
+        self.assertEqual(len(cleared), len(MODULE.ENTITIES) * 2)
+        self.assertIn(("petcam/test/health_availability", "unhealthy", True), fake.messages)
+        self.assertIn(("petcam/test/broker", "offline", True), fake.messages)
 
     def test_reconnects_after_broker_loss_with_bounded_backoff(self):
         attempts = {"connect": 0, "ping": 0, "sleep": 0}
