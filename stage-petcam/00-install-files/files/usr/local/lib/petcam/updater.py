@@ -41,6 +41,7 @@ REQUIRED_FILES = (
     "lib/health_monitor.py",
     "lib/config.py",
     "lib/network_diagnostics.py",
+    "lib/camera_profiles.py",
     "lib/start-stream.sh",
     "vendor/bin/ustreamer",
 )
