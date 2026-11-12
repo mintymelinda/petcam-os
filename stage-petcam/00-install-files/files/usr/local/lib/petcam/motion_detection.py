@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Low-resource motion detection using sampled frames from the active MJPEG stream."""
 import argparse
-from datetime import datetime, time as clock_time, timezone
+from datetime import datetime, timezone
 from io import BytesIO
 import json
 import os
@@ -263,6 +263,10 @@ def benchmark(duration_seconds=120, url=STREAM_URL, sample_interval=2):
     }
 
 
+def cooldown_elapsed(now, last_event, minimum_interval):
+    return now - last_event >= minimum_interval
+
+
 def _last_event_epoch(events):
     if not events:
         return 0.0
@@ -334,7 +338,7 @@ def run():
                     if detected:
                         event_time = datetime.now(timezone.utc)
                         epoch = event_time.timestamp()
-                        if epoch - last_event >= config["min_event_interval_seconds"]:
+                        if cooldown_elapsed(epoch, last_event, config["min_event_interval_seconds"]):
                             enough_space, free = free_space_ok(config, directory)
                             if enough_space:
                                 event = record_event(frame, changed_percent, config, directory, now=event_time)
