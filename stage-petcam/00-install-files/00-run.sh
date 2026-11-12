@@ -16,6 +16,7 @@ install -m 0644 files/usr/local/lib/petcam/web_auth.py "$RELEASE_DIR/lib/web_aut
 install -m 0644 files/usr/local/lib/petcam/health_monitor.py "$RELEASE_DIR/lib/health_monitor.py"
 install -m 0644 files/usr/local/lib/petcam/config.py "$RELEASE_DIR/lib/config.py"
 install -m 0644 files/usr/local/lib/petcam/camera_profiles.py "$RELEASE_DIR/lib/camera_profiles.py"
+install -m 0644 files/usr/local/lib/petcam/home_assistant.py "$RELEASE_DIR/lib/home_assistant.py"
 install -m 0755 files/usr/local/lib/petcam/updater.py "${ROOTFS_DIR}/usr/local/bin/petcam-update"
 printf '{"schema_version":1,"application":"petcam-os","version":"%s","architecture":"armhf","ustreamer_commit":"11fd828ab00c01a39bd0843ef442ef0b6d3cac41"}\n' "$APP_VERSION" > "$RELEASE_DIR/manifest.json"
 chmod 0644 "$RELEASE_DIR/manifest.json"
