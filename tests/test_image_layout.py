@@ -54,7 +54,7 @@ class ImageLayoutTests(unittest.TestCase):
         )
         self.assertIn("chown root:petcam /etc/petcam", script)
         self.assertIn("chmod 1770 /etc/petcam", script)
-        self.assertNotIn("chown petcam:petcam /etc/petcam\\n", script)
+        self.assertNotIn("chmod 0750 /etc/petcam", script)
         self.assertIn("chown petcam:petcam /etc/petcam/petcam.conf", script)
         self.assertIn("chmod 0640 /etc/petcam/petcam.conf", script)
         self.assertNotIn(r"\nchmod", script)
