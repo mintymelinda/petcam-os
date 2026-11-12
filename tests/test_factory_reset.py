@@ -35,6 +35,7 @@ class FactoryResetTests(unittest.TestCase):
             with mock.patch.object(MODULE, "ETC", etc), mock.patch.object(MODULE, "STATE", state), \
                     mock.patch.object(MODULE.os, "geteuid", return_value=0), \
                     mock.patch.object(MODULE.subprocess, "run"), \
+                    mock.patch.object(MODULE.os, "chown"), \\
                     mock.patch("pwd.getpwnam", return_value=mock.Mock(pw_uid=1000)), \
                     mock.patch("grp.getgrnam", return_value=mock.Mock(gr_gid=1000)):
                 MODULE.reset()
