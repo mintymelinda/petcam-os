@@ -116,6 +116,18 @@ class WebManagerRouteAuthenticationTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(payload)["csrf_token"], csrf)
 
+    def test_health_api_requires_authentication_and_returns_monitor_state(self):
+        status, _, _ = self.request("GET", "/api/health")
+        self.assertEqual(status, 401)
+        cookie, _ = self.login()
+        with tempfile.TemporaryDirectory() as directory:
+            state_file = Path(directory) / "health.json"
+            state_file.write_text(json.dumps({"state": "camera_disconnected", "reason": "No camera", "recovery_count": 2}))
+            with mock.patch.object(MANAGER, "HEALTH_FILE", state_file):
+                status, _, payload = self.request("GET", "/api/health", cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload)["recovery_count"], 2)
+
     def test_state_changes_require_csrf_and_valid_session(self):
         cookie, csrf = self.login()
         with mock.patch.object(MANAGER, "save_selection") as save:
