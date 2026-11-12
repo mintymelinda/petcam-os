@@ -86,7 +86,7 @@ class CameraIdentityTests(unittest.TestCase):
             "modes": [{"format": "MJPG", "width": 640, "height": 480, "fps": [30]}],
         }
         with mock.patch.object(MODULE, "discover_devices", return_value=[discovered]):
-            values, profile = MODULE._mode_selection(camera, self.mode())
+            values, profile = MODULE._mode_selection(camera, {"format": "MJPG", "width": 640, "height": 480, "fps": 30})
         self.assertEqual(values["DEVICE"], "")
         self.assertEqual(values["USB_PHYSICAL_PATH"], camera["physical_path"])
         self.assertEqual(values["CSI_DEVICE_PATH"], "")
