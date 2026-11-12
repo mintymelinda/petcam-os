@@ -172,9 +172,12 @@ jobs:
           sudo mount -o ro "${ROOT_PARTITION}" "${ROOTFS_MOUNT}"
           PACKAGE_INVENTORY="${RUNNER_TEMP}/${TAG}-installed-packages.tsv"
           sudo dpkg-query --admindir="${ROOTFS_MOUNT}/var/lib/dpkg" \
-            --show --showformat='${binary:Package}\t${Version}\t${db:Status-Abbrev}\t${Installed-Size}\n' \
-            | awk -F '\t' '$3 ~ /^ii/' \
-            | sort -t 
+            --show --showformat='${binary:Package}\\t${Version}\\t${db:Status-Abbrev}\\t${Installed-Size}\\n' \
+            | awk -F '\\t' '$3 ~ /^ii/' \
+            | sort -k4,4nr > "${PACKAGE_INVENTORY}"
+          printf 'PetCam OS release: %s\\npi-gen commit: %s\\n\\n' "${TAG}" \
+            '6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78' > "${RUNNER_TEMP}/${TAG}-build-info.txt"
+          sudo cp -a "${ROOTFS_MOUNT}/opt/petcam/releases/${VERSION}" "${RELEASE_DIR}"
           sudo chown -R "$(id -u):$(id -g)" "${RELEASE_DIR}"
           sudo umount "${ROOTFS_MOUNT}"
 
