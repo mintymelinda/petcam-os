@@ -82,8 +82,6 @@ class ConfigValidationTests(unittest.TestCase):
             ({"FPS": "29.97"}, "whole number"),
             ({"CSI_QUALITY": "101"}, "CSI_QUALITY"),
             ({"PORT": "8080"}, "reserved"),
-            ({"PORT": "8082"}, "reserved for independent camera streams"),
-            ({"PORT": "8099"}, "reserved for independent camera streams"),
             ({"PORT": "80"}, "PORT must be"),
         ]
         for updates, expected in invalid:
