@@ -10,12 +10,13 @@ import time
 import getpass
 import hmac
 import sys
-from web_auth import AUTH_FILE, SESSION_TTL, get_session, invalidate_session, new_session, save_password, verify_password
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from web_auth import SESSION_TTL, get_session, invalidate_session, new_session, save_password, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
 STREAM_URL = "http://127.0.0.1:8081"
