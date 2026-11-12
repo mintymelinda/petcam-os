@@ -25,6 +25,12 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("/api/update/check", MODULE.PAGE)
         self.assertIn("/api/update/install", MODULE.PAGE)
         self.assertIn("/api/update/status", MODULE.PAGE)
+        self.assertIn("Configure stream", MODULE.PAGE)
+        self.assertIn("Add independent stream", MODULE.PAGE)
+        self.assertIn("Camera streams", MODULE.PAGE)
+        self.assertIn("/api/streams/configure", MODULE.PAGE)
+        self.assertIn("/api/streams/remove", MODULE.PAGE)
+        self.assertIn("stream_path", MODULE.PAGE)
         self.assertIn("Network and OBS diagnostics", MODULE.PAGE)
         self.assertIn("/api/diagnostics", MODULE.PAGE)
         self.assertIn("/api/support-bundle", MODULE.PAGE)
@@ -55,16 +61,19 @@ class WebManagerTests(unittest.TestCase):
             "modes": [{"width": 640, "height": 480, "fps": [30], "format": "MJPG"}],
         }]
         try:
-            with mock.patch.object(MODULE, "apply_config") as apply:
+            with mock.patch.object(MODULE, "apply_primary_config") as apply:
                 MODULE.save_selection({
                     "kind": "usb",
                     "device": "/dev/video0",
                     "mode": {"width": 640, "height": 480, "fps": 30, "format": "MJPG"},
                 })
-            apply.assert_called_once_with({
-                "SOURCE": "usb", "DEVICE": "/dev/video0", "CAMERA": "auto",
-                "FORMAT": "MJPG", "RESOLUTION": "640x480", "FPS": "30",
-            })
+            apply.assert_called_once_with(
+                {
+                    "SOURCE": "usb", "DEVICE": "/dev/video0", "CAMERA": "auto",
+                    "FORMAT": "MJPG", "RESOLUTION": "640x480", "FPS": "30",
+                },
+                {"kind": "usb", "device": "/dev/video0"},
+            )
         finally:
             MODULE.camera_inventory = original
 
@@ -79,6 +88,16 @@ class WebManagerTests(unittest.TestCase):
                 })
         finally:
             MODULE.camera_inventory = original
+
+    def test_camera_inventory_exposes_stable_identity_metadata(self):
+        with mock.patch.object(MODULE, "run_camera", return_value={
+            "usb_devices": [{"device": "/dev/v4l/by-id/usb-camera", "modes": []}],
+            "csi_cameras": [{"index": 0, "sensor": "imx708", "modes": []}],
+        }):
+            cameras = MODULE.camera_inventory()
+        self.assertEqual(len(cameras), 2)
+        self.assertTrue(cameras[0]["stable_identity"])
+        self.assertEqual(cameras[1]["id"], "csi-imx708-0")
 
     def test_invalid_capture_values_are_rejected(self):
         for mode in (
