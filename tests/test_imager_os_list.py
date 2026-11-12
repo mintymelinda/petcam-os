@@ -16,11 +16,10 @@ class ImagerOSListTests(unittest.TestCase):
             raw = b"petcam-release-image-" * 4096
             image.write_bytes(lzma.compress(raw))
             output = root / "petcam-os-os-list.json"
-            create_os_list(image, "https://example.com/petcam.img.xz", "0.1.0", output)
+            create_os_list(image, "https://example.com/petcam.img.xz", output)
             entry = json.loads(output.read_text(encoding="utf-8"))["os_list"][0]
             self.assertEqual(entry["name"], "PetCam OS")
             self.assertTrue(entry["url"].startswith("https://"))
-            self.assertEqual(entry["version"], "0.1.0")
             self.assertEqual(entry["init_format"], "cloudinit-rpi")
             self.assertEqual(entry["architecture"], "armhf")
             self.assertIn("pi0w", entry["devices"])
@@ -34,7 +33,7 @@ class ImagerOSListTests(unittest.TestCase):
             image = Path(directory) / "petcam.img.xz"
             image.write_bytes(lzma.compress(b"image"))
             with self.assertRaisesRegex(ValueError, "HTTPS"):
-                create_os_list(image, "file:///tmp/image.img.xz", "0.1.0", Path(directory) / "out.json")
+                create_os_list(image, "file:///tmp/image.img.xz", Path(directory) / "out.json")
 
 
 if __name__ == "__main__":
