@@ -178,9 +178,11 @@ def wait_for_stream(port: int, timeout: int = 30) -> bool:
 
 
 def restart_capture() -> None:
+    command = ["/usr/bin/systemctl", "restart", "petcam-stream.service"]
+    if os.geteuid() != 0:
+        command = ["sudo", "-n", *command]
     result = subprocess.run(
-        ["sudo", "-n", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
-        capture_output=True, text=True, timeout=30, check=False,
+        command, capture_output=True, text=True, timeout=30, check=False,
     )
     if result.returncode:
         raise ConfigApplyError(result.stderr.strip() or "Unable to restart the camera stream service.")
@@ -231,19 +233,32 @@ def apply_config(
 
 
 def main() -> int:
-    if len(sys.argv) not in (2, 3) or sys.argv[1] != "validate":
-        print("Usage: petcam-config validate [--check-hardware]", file=sys.stderr)
-        return 2
-    check_hardware = len(sys.argv) == 3 and sys.argv[2] == "--check-hardware"
-    if len(sys.argv) == 3 and not check_hardware:
-        print("Only --check-hardware is supported.", file=sys.stderr)
-        return 2
-    try:
-        print(json.dumps(parse_config(check_hardware=check_hardware), indent=2))
-        return 0
-    except ConfigError as error:
-        print(str(error), file=sys.stderr)
-        return 2
+    arguments = sys.argv[1:]
+    if arguments in (["validate"], ["validate", "--check-hardware"]):
+        try:
+            print(json.dumps(parse_config(check_hardware="--check-hardware" in arguments), indent=2))
+            return 0
+        except ConfigError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+    if len(arguments) == 2 and arguments[0] == "apply":
+        candidate_path = Path(arguments[1])
+        if candidate_path.resolve() == CONFIG_PATH.resolve():
+            print("Apply requires a separate candidate file; do not overwrite the active config before validation.", file=sys.stderr)
+            return 2
+        try:
+            candidate = parse_config(candidate_path, check_hardware=True)
+            applied = apply_config(candidate)
+            print(json.dumps(applied, indent=2))
+            return 0
+        except ConfigError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+    print(
+        "Usage: petcam-config validate [--check-hardware] | petcam-config apply CANDIDATE_FILE",
+        file=sys.stderr,
+    )
+    return 2
 
 
 if __name__ == "__main__":
