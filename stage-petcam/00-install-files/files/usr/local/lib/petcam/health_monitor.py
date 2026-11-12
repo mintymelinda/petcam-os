@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import http.client
 import json
+import os
+import signal
 import subprocess
 import time
 import urllib.error
@@ -91,8 +93,12 @@ def camera_present() -> bool | None:
 
 def restart_service(service: str) -> tuple[bool, str]:
     try:
+        if service == "petcam-web.service":
+            # Exit so the existing Restart=always policy replaces the web manager.
+            os.kill(os.getpid(), signal.SIGTERM)
+            return True, "Manager process exited for systemd recovery."
         result = subprocess.run(
-            ["/usr/bin/systemctl", "restart", service],
+            ["sudo", "-n", "/usr/bin/systemctl", "restart", service],
             capture_output=True, text=True, timeout=30, check=False,
         )
         if result.returncode:
@@ -128,10 +134,13 @@ def _recover(report: dict[str, Any], previous: dict[str, Any], service: str,
         report["next_recovery_at"] = next_allowed
         return _persist(report)
 
-    succeeded, error = restart_service(service)
     report["recovery_count"] = int(previous.get("recovery_count", 0)) + 1
     report["last_recovery_at"] = timestamp(now)
     report["next_recovery_at"] = now + delay
+    report["last_recovery_result"] = "requested"
+    report["state"] = "recovering"
+    _persist(report)
+    succeeded, error = restart_service(service)
     report["last_recovery_result"] = "requested" if succeeded else error
     report["state"] = "recovering" if succeeded else "recovery_failed"
     return _persist(report)
