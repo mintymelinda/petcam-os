@@ -128,6 +128,17 @@ class TransactionalApplyTests(unittest.TestCase):
         self.assertEqual(result["SOURCE"], "csi")
         self.assertEqual(MODULE.parse_config(self.config)["SOURCE"], "csi")
 
+    def test_config_lock_reports_an_active_transaction(self):
+        lock_path = MODULE.ensure_config_lock(self.config)
+        self.assertFalse(MODULE.configuration_change_in_progress(self.config))
+        with lock_path.open("r+") as lock_file:
+            MODULE.fcntl.flock(lock_file.fileno(), MODULE.fcntl.LOCK_EX)
+            try:
+                self.assertTrue(MODULE.configuration_change_in_progress(self.config))
+            finally:
+                MODULE.fcntl.flock(lock_file.fileno(), MODULE.fcntl.LOCK_UN)
+        self.assertFalse(MODULE.configuration_change_in_progress(self.config))
+
     def test_successful_apply_commits_and_updates_last_known_good(self):
         restart = mock.Mock()
         ready = mock.Mock(return_value=True)
