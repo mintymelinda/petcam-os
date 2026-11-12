@@ -11,6 +11,9 @@ import time
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from config import parse_config
+
 MODE_RE = re.compile(r"Size: Discrete (\d+)x(\d+)")
 FORMAT_RE = re.compile(r"\[\d+\]: '([^']+)'")
 FPS_RE = re.compile(r"\(([\d.]+) fps\)")
@@ -429,14 +432,10 @@ def main():
     start_config = re.findall(r"Starting USB camera (\S+) at (\d+x\d+), format=([^,]+)", log)
     csi_start = re.findall(r"Starting CSI camera index=(\d+) at (\d+x\d+), requested_fps=([\d.]+)", log)
     backend_values = re.findall(r"PetCam backend: (usb|csi)", log)
-    port = 8080
     try:
-        for config_line in Path("/etc/petcam/petcam.conf").read_text().splitlines():
-            match = re.match(r"\s*PORT\s*=\s*(\d+)", config_line)
-            if match:
-                port = int(match.group(1))
-    except OSError:
-        pass
+        port = int(parse_config()["PORT"])
+    except Exception:
+        port = 8081
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2) as response:
             http_status = response.status
