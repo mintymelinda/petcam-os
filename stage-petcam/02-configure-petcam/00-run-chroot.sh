@@ -1,9 +1,10 @@
 #!/bin/bash -e
 # Runs inside the image root filesystem after packages and stage files are installed.
+groupadd --system --force petcam
 if ! id petcam >/dev/null 2>&1; then
-    useradd --system --home-dir /var/lib/petcam --create-home --shell /usr/sbin/nologin petcam
+    useradd --system --gid petcam --home-dir /var/lib/petcam --create-home --shell /usr/sbin/nologin petcam
 fi
-usermod -a -G video,i2c petcam
+usermod -g petcam -a -G video,i2c petcam
 
 APP_VERSION="$(cat /opt/petcam/releases/*/VERSION)"
 install -d -m 0755 /opt
