@@ -155,6 +155,21 @@ class CameraProfileTests(unittest.TestCase):
     def mode(self):
         return {"format": "MJPG", "width": 640, "height": 480, "fps": 30}
 
+    def test_profile_index_rejects_invalid_or_conflicting_ports_and_services(self):
+        cases = [
+            ([{"id": "usb-one", "port": 8081, "service": "petcam-stream@usb-one.service"}], "invalid stream port"),
+            ([
+                {"id": "usb-one", "port": 8082, "service": "petcam-stream@usb-one.service"},
+                {"id": "usb-two", "port": 8082, "service": "petcam-stream@usb-two.service"},
+            ], "duplicate stream port"),
+            ([{"id": "usb-one", "port": 8082, "service": "petcam-stream@other.service"}], "invalid systemd service name"),
+        ]
+        for profiles, expected in cases:
+            with self.subTest(profiles=profiles):
+                self.index.write_text(json.dumps(profiles))
+                with self.assertRaisesRegex(MODULE.ProfileError, expected):
+                    MODULE._load_profiles()
+
     def test_creates_profile_with_separate_config_port_and_service(self):
         restart = mock.Mock()
         ready = mock.Mock(return_value=True)
