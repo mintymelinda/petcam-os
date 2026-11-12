@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import http.client
 import json
 import os
@@ -10,6 +11,7 @@ import re
 import subprocess
 import sys
 import time
+import threading
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -195,7 +197,7 @@ def restart_capture() -> None:
         raise ConfigApplyError(result.stderr.strip() or "Unable to restart the camera stream service.")
 
 
-def apply_config(
+def _apply_config_transaction(
     updates: dict[str, Any],
     path: Path | str = CONFIG_PATH,
     last_good_path: Path | str = LAST_GOOD_PATH,
@@ -241,6 +243,35 @@ def apply_config(
         ) from apply_error
     _atomic_write(last_good_path, serialize_config(candidate))
     return candidate
+
+
+_apply_lock = threading.Lock()
+
+
+def apply_config(
+    updates: dict[str, Any],
+    path: Path | str = CONFIG_PATH,
+    last_good_path: Path | str = LAST_GOOD_PATH,
+    restart=restart_capture,
+    ready=wait_for_stream,
+) -> dict[str, str]:
+    path = Path(path)
+    lock_path = path.with_name(".petcam-config.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with _apply_lock, lock_path.open("a+") as lock_file:
+        os.chmod(lock_path, 0o660)
+        try:
+            import grp
+            os.chown(lock_path, -1, grp.getgrnam("petcam").gr_gid)
+        except (ImportError, KeyError, PermissionError):
+            pass
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            return _apply_config_transaction(
+                updates, path, last_good_path, restart=restart, ready=ready
+            )
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def main() -> int:
