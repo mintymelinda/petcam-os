@@ -15,6 +15,20 @@ from updater import parse_manifest, verify_signature
 
 
 class SignedReleasePublisherTests(unittest.TestCase):
+    def test_image_stage_copies_every_required_python_module_into_update_release(self):
+        repo = Path(__file__).resolve().parents[1]
+        stage_script = repo / "stage-petcam/00-install-files/00-run.sh"
+        source_dir = repo / "stage-petcam/00-install-files/files/usr/local/lib/petcam"
+        script = stage_script.read_text(encoding="utf-8")
+        from create_update_release import REQUIRED_FILES
+        for relative in REQUIRED_FILES:
+            if not relative.startswith("lib/") or not relative.endswith(".py"):
+                continue
+            source = source_dir / Path(relative).name
+            self.assertTrue(source.is_file(), f"Missing staged source for {relative}")
+            install_line = f'install -m 0644 files/usr/local/lib/petcam/{source.name} "$RELEASE_DIR/{relative}"'
+            self.assertIn(install_line, script, f"Image stage does not install required release module {relative}")
+
     def make_release_tree(self, root):
         files = {
             "VERSION": b"1.2.3\n",
@@ -26,6 +40,7 @@ class SignedReleasePublisherTests(unittest.TestCase):
             "lib/health_monitor.py": b"# health monitor\n",
             "lib/config.py": b"# config\n",
             "lib/network_diagnostics.py": b"# network diagnostics\n",
+            "lib/factory_reset.py": b"# factory reset\n",
             "lib/camera_profiles.py": b"# camera profiles\n",
             "lib/home_assistant.py": b"# Home Assistant MQTT\n",
             "systemd/petcam-home-assistant.service": b"[Service]\nExecStart=petcam\n",

@@ -20,6 +20,7 @@ install -m 0644 files/usr/local/lib/petcam/web_auth.py "$RELEASE_DIR/lib/web_aut
 install -m 0644 files/usr/local/lib/petcam/factory_reset.py "$RELEASE_DIR/lib/factory_reset.py"
 install -m 0644 files/usr/local/lib/petcam/health_monitor.py "$RELEASE_DIR/lib/health_monitor.py"
 install -m 0644 files/usr/local/lib/petcam/config.py "$RELEASE_DIR/lib/config.py"
+install -m 0644 files/usr/local/lib/petcam/network_diagnostics.py "$RELEASE_DIR/lib/network_diagnostics.py"
 install -m 0644 files/usr/local/lib/petcam/camera_profiles.py "$RELEASE_DIR/lib/camera_profiles.py"
 install -m 0644 files/usr/local/lib/petcam/home_assistant.py "$RELEASE_DIR/lib/home_assistant.py"
 install -m 0644 files/etc/systemd/system/petcam-timelapse.service "$RELEASE_DIR/systemd/petcam-timelapse.service"

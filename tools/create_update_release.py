@@ -21,6 +21,7 @@ REQUIRED_FILES = (
     "lib/health_monitor.py",
     "lib/config.py",
     "lib/network_diagnostics.py",
+    "lib/factory_reset.py",
     "lib/camera_profiles.py",
     "lib/home_assistant.py",
     "systemd/petcam-home-assistant.service",
