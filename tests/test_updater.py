@@ -166,6 +166,7 @@ class UpdateArchiveTests(unittest.TestCase):
             "lib/config.py": b"# config",
             "lib/network_diagnostics.py": b"# network diagnostics",
             "lib/camera_profiles.py": b"# camera profiles",
+            "lib/home_assistant.py": b"# Home Assistant MQTT",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"binary",
         }
