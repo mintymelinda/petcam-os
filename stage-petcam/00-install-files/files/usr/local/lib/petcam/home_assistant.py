@@ -178,6 +178,11 @@ def _client_identifier(config: dict[str, object]) -> str:
     return f"petcam-{digest}"
 
 
+def _node_identifier(config: dict[str, object]) -> str:
+    value = re.sub(r"[^A-Za-z0-9_-]+", "_", _client_identifier(config)).strip("_")
+    return value or "petcam_device"
+
+
 class MQTTClient:
     def __init__(self, config: dict[str, object]):
         self.config = config
@@ -212,7 +217,7 @@ class MQTTClient:
         self.connection = raw
 
     def _topic(self, suffix: str) -> str:
-        return f"{self.config['MQTT_TOPIC_PREFIX']}/{_client_identifier(self.config)}/{suffix}"
+        return f"{self.config['MQTT_TOPIC_PREFIX']}/{_node_identifier(self.config)}/{suffix}"
 
     def publish(self, topic: str, payload: str, retain: bool = True) -> None:
         if self.connection is None:
@@ -229,7 +234,6 @@ class MQTTClient:
             "name": hostname,
             "manufacturer": "PetCam",
             "model": model or "Raspberry Pi",
-            "configuration_url": f"http://{hostname}.local:8080/",
         }
         for entity in entities:
             component = entity["component"]
@@ -354,7 +358,7 @@ def publish_once(client: MQTTClient, config: dict[str, object]) -> None:
         model = Path("/proc/device-tree/model").read_text(encoding="utf-8").strip("\x00\n ")
     except OSError:
         model = "Raspberry Pi"
-    node_id = _client_identifier(config).replace("-", "_")
+    node_id = _node_identifier(config)
     entities = ENTITIES if config.get("MQTT_PUBLISH_STREAM_URL") else [
         entity for entity in ENTITIES if entity["object_id"] != "stream_url"
     ]
@@ -408,7 +412,7 @@ def remove_discovery(config: dict[str, object]) -> None:
     client = MQTTClient(config)
     client.connect()
     try:
-        node_id = _client_identifier(config).replace("-", "_")
+        node_id = _node_identifier(config)
         for entity in ENTITIES:
             topic = f"{config['MQTT_DISCOVERY_PREFIX']}/{entity['component']}/{node_id}/{entity['object_id']}/config"
             client.publish(topic, "")
