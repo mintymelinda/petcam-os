@@ -60,11 +60,17 @@ CSI_QUALITY=70        # CSI MJPEG quality, 1..100
 PORT=8081           # internal camera backend; manager HTTPS is on 8443, OBS stream on 8080
 ~~~
 
-SOURCE=auto prefers a usable USB camera, then falls back to CSI. Set SOURCE=usb or SOURCE=csi to force a backend. FORMAT applies to USB only; CSI output is MJPEG. Use RESOLUTION=auto and FPS=auto to return to automatic selection. For USB, FPS=auto asks µStreamer not to impose an application-side frame-rate cap. For CSI, automatic selection chooses a sensor-advertised frame rate. Unsupported explicit modes fail clearly rather than silently falling back. Restart after changes:
+SOURCE=auto prefers a usable USB camera, then falls back to CSI. Set SOURCE=usb or SOURCE=csi to force a backend. FORMAT applies to USB only; CSI output is MJPEG. Use RESOLUTION=auto and FPS=auto to return to automatic selection. For USB, FPS=auto asks µStreamer not to impose an application-side frame-rate cap. For CSI, automatic selection chooses a sensor-advertised frame rate. Unsupported explicit modes fail clearly rather than silently falling back.
+
+The shared parser validates configuration before the stream startup script sources it. Check the active file with \`sudo petcam-config validate --check-hardware\`. For manual changes, edit a separate candidate file and apply it transactionally:
 
 ~~~bash
-sudo systemctl restart petcam-stream
+sudo cp /etc/petcam/petcam.conf /tmp/petcam.conf.new
+sudo nano /tmp/petcam.conf.new
+sudo petcam-config apply /tmp/petcam.conf.new
 ~~~
+
+The web manager uses the same transaction: it validates the selection, stages the config, restarts the backend, and waits for an actual MJPEG frame. If startup or frame readiness fails, it restores the previous settings and restarts the previous stream. The last known-good configuration is preserved at \`/etc/petcam/petcam.conf.last-good\`.
 
 ### Runtime diagnostics
 

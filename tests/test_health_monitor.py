@@ -1,5 +1,8 @@
+import contextlib
 import importlib.util
+import sys
 import tempfile
+import config as CONFIG_MODULE
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -7,6 +10,7 @@ from unittest import mock
 MODULE_PATH = Path(
     "stage-petcam/00-install-files/files/usr/local/lib/petcam/health_monitor.py"
 )
+sys.path.insert(0, str(MODULE_PATH.parent))
 SPEC = importlib.util.spec_from_file_location("petcam_health_monitor", MODULE_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
@@ -16,6 +20,12 @@ class HealthMonitorTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.state_file = Path(self.directory.name) / "health.json"
+        self.config_file = Path(self.directory.name) / "petcam.conf"
+        self.config_guard_patch = mock.patch.object(
+            MODULE, "config_transaction_guard",
+            side_effect=lambda: CONFIG_MODULE.config_transaction_guard(self.config_file),
+        )
+        self.config_guard_patch.start()
         self.state_patch = mock.patch.object(MODULE, "STATE_FILE", self.state_file)
         self.state_patch.start()
         self.active = {"state": "active", "active_age": 120.0}
@@ -27,6 +37,7 @@ class HealthMonitorTests(unittest.TestCase):
     def tearDown(self):
         self.services.stop()
         self.state_patch.stop()
+        self.config_guard_patch.stop()
         self.directory.cleanup()
 
     def test_healthy_backend_and_public_proxy_clear_failure_streak(self):
@@ -39,6 +50,15 @@ class HealthMonitorTests(unittest.TestCase):
         self.assertEqual(report["consecutive_failures"], 0)
         self.assertEqual(report["recovery_count"], 4)
         self.assertEqual(report["next_recovery_at"], 0)
+
+    def test_health_recovery_pauses_during_config_transaction(self):
+        with mock.patch.object(MODULE, "config_transaction_guard", return_value=contextlib.nullcontext(False)), \
+                mock.patch.object(MODULE, "service_snapshot") as snapshot, \
+                mock.patch.object(MODULE, "restart_service") as restart:
+            report = MODULE.check_health(now=1000)
+        self.assertEqual(report["state"], "configuring")
+        snapshot.assert_not_called()
+        restart.assert_not_called()
 
     def test_unknown_systemd_state_does_not_trigger_recovery(self):
         with mock.patch.object(MODULE, "service_snapshot", return_value={"state": "unknown", "active_age": None}), \

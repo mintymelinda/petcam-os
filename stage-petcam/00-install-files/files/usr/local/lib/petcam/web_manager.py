@@ -16,10 +16,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from config import apply_config, ensure_config_lock, parse_config
 from web_auth import SESSION_TTL, get_session, invalidate_session, new_session, save_password, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
-STREAM_URL = "http://127.0.0.1:8081"
+DEFAULT_STREAM_URL = "http://127.0.0.1:8081"
+
+
+def backend_stream_url():
+    try:
+        return f"http://127.0.0.1:{parse_config(CONFIG)['PORT']}"
+    except Exception:
+        return DEFAULT_STREAM_URL
 TLS_CERT = Path("/etc/petcam/web-manager.crt")
 TLS_KEY = Path("/etc/petcam/web-manager.key")
 HEALTH_FILE = Path("/var/lib/petcam/health.json")
@@ -61,7 +69,7 @@ $("browser-source-url").textContent=browserSourceUrl;
 $("copy-browser-source").onclick=async()=>{const message=$("copy-message");try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(browserSourceUrl)}else{const field=document.createElement("textarea");field.value=browserSourceUrl;field.setAttribute("readonly","");field.style.position="fixed";field.style.opacity="0";document.body.append(field);field.select();const copied=document.execCommand("copy");field.remove();if(!copied)throw Error("Clipboard access is unavailable")}message.textContent="Browser source URL copied."}catch(e){message.textContent="Could not copy automatically. Select and copy the URL above."}};
 let csrfToken=null;let loginPromise=null;async function login(){if(loginPromise)return loginPromise;loginPromise=(async()=>{const password=window.prompt("Enter your PetCam manager password");if(password===null)throw Error("Sign-in cancelled");const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password})});const d=await r.json();if(!r.ok)throw Error(d.error||"Sign-in failed");csrfToken=d.csrf_token;return d})();try{return await loginPromise}finally{loginPromise=null}}async function request(path,options={}){const headers=new Headers(options.headers||{});if(options.method&&options.method.toUpperCase()!=="GET"&&!csrfToken){let session=await fetch("/api/session");if(session.status===401){await login()}else{const state=await session.json();if(!session.ok)throw Error(state.error||session.statusText);csrfToken=state.csrf_token}}if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);let r=await fetch(path,{...options,headers});if(r.status===401){await login();if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);r=await fetch(path,{...options,headers})}const d=await r.json();if(!r.ok)throw Error(d.error||r.statusText);return d}
 function modesFor(camera){return camera.kind==="usb"?camera.modes.filter(m=>["MJPG","MJPEG","JPEG","YUYV","YVYU","UYVY","YUV420","YVU420","RGB565","RGB24","GREY"].includes(m.format)):camera.modes}
-function fillModes(){const c=inventory[+$("camera").value];$("mode").replaceChildren();if(!c)return;for(const m of modesFor(c)){const fps=m.fps?.length?m.fps:[m.fps_range?.max||30];for(const f of fps){const o=document.createElement("option");o.value=JSON.stringify({format:m.format||"CSI",width:m.width,height:m.height,fps:f});o.textContent=`${m.width}×${m.height} · ${f} fps · ${m.format||"CSI"}`; $("mode").append(o)}}}
+function fillModes(){const c=inventory[+$("camera").value];$("mode").replaceChildren();if(!c)return;for(const m of modesFor(c)){let fps=m.fps?.length?m.fps:[m.fps_range?.max||30];if(c.kind==="usb")fps=fps.filter(Number.isInteger);for(const f of fps){const o=document.createElement("option");o.value=JSON.stringify({format:m.format||"CSI",width:m.width,height:m.height,fps:f});o.textContent=`${m.width}×${m.height} · ${f} fps · ${m.format||"CSI"}`; $("mode").append(o)}}}
 async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{$("message").textContent=`${inventory.length} camera(s) found. Select one to preview and configure.`;fillModes()}}catch(e){$("message").textContent=e.message}}
 $("refresh").onclick=refresh;$("camera").onchange=fillModes;
 $("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,device:c.device,camera:c.camera,mode:JSON.parse(m)})});$("message").textContent="Camera settings saved. Stream restarted.";setTimeout(refresh,1200)}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
@@ -108,6 +116,8 @@ def save_selection(data):
     if not (1 <= width <= 10000 and 1 <= height <= 10000 and isinstance(fps, (int, float)) and 0 < fps <= 240):
         raise ValueError("Invalid capture mode")
     if kind == "usb":
+        if not float(fps).is_integer():
+            raise ValueError("USB camera FPS must be a whole number")
         device = data.get("device", "")
         if not re.fullmatch(r"/dev/(video[0-9]+|v4l/by-id/[A-Za-z0-9._:+-]+)", device):
             raise ValueError("Invalid USB device path")
@@ -119,7 +129,7 @@ def save_selection(data):
                                 for m in match["modes"]):
             raise ValueError("That USB mode is no longer advertised by the camera")
         values = {"SOURCE": "usb", "DEVICE": device, "CAMERA": "auto",
-                  "FORMAT": mode["format"], "RESOLUTION": f"{width}x{height}", "FPS": str(fps)}
+                  "FORMAT": mode["format"], "RESOLUTION": f"{width}x{height}", "FPS": str(int(fps))}
     else:
         camera = data.get("camera")
         discovered = camera_inventory()
@@ -128,26 +138,7 @@ def save_selection(data):
             raise ValueError("That CSI mode is no longer advertised by the camera")
         values = {"SOURCE": "csi", "DEVICE": "", "CAMERA": str(camera),
                   "FORMAT": "auto", "RESOLUTION": f"{width}x{height}", "FPS": str(fps)}
-    existing = {}
-    try:
-        for line in CONFIG.read_text().splitlines():
-            match = re.match(r"^([A-Z_]+)=(.*)$", line)
-            if match:
-                existing[match.group(1)] = match.group(2)
-    except FileNotFoundError:
-        pass
-    existing.update(values)
-    order = ("SOURCE", "DEVICE", "CAMERA", "FORMAT", "RESOLUTION", "FPS", "CSI_QUALITY", "PORT")
-    CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    tmp = CONFIG.with_suffix(".conf.tmp")
-    tmp.write_text("# PetCam camera settings; managed by the web interface.\n" +
-                   "".join(f"{key}={existing.get(key, default)}\n" for key, default in
-                           (("SOURCE","auto"),("DEVICE",""),("CAMERA","auto"),("FORMAT","auto"),
-                            ("RESOLUTION","auto"),("FPS","auto"),("CSI_QUALITY","70"),("PORT","8081"))))
-    os.chmod(tmp, 0o640)
-    os.replace(tmp, CONFIG)
-    subprocess.run(["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
-                   check=True, timeout=30, capture_output=True, text=True)
+    return apply_config(values)
 
 
 def update_check():
@@ -284,7 +275,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/stream":
             try:
-                with urllib.request.urlopen(STREAM_URL + "/stream", timeout=5) as upstream:
+                with urllib.request.urlopen(backend_stream_url() + "/stream", timeout=5) as upstream:
                     self.send_response(upstream.status)
                     self.send_header("Content-Type", upstream.headers.get("Content-Type", "multipart/x-mixed-replace"))
                     self.send_header("Cache-Control", "no-store")
@@ -416,6 +407,7 @@ def main():
         return
     if not TLS_CERT.is_file() or not TLS_KEY.is_file():
         raise SystemExit("PetCam HTTPS certificate is missing.")
+    ensure_config_lock()
     threading.Thread(target=health_monitor_loop, name="petcam-health-monitor", daemon=True).start()
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_2

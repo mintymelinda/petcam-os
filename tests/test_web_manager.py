@@ -43,6 +43,27 @@ class WebManagerTests(unittest.TestCase):
         self.assertEqual(status["result"], "success")
         self.assertIn("Downloading release", status["logs"])
 
+    def test_valid_selection_uses_transactional_config_apply(self):
+        original = MODULE.camera_inventory
+        MODULE.camera_inventory = lambda: [{
+            "kind": "usb",
+            "device": "/dev/video0",
+            "modes": [{"width": 640, "height": 480, "fps": [30], "format": "MJPG"}],
+        }]
+        try:
+            with mock.patch.object(MODULE, "apply_config") as apply:
+                MODULE.save_selection({
+                    "kind": "usb",
+                    "device": "/dev/video0",
+                    "mode": {"width": 640, "height": 480, "fps": 30, "format": "MJPG"},
+                })
+            apply.assert_called_once_with({
+                "SOURCE": "usb", "DEVICE": "/dev/video0", "CAMERA": "auto",
+                "FORMAT": "MJPG", "RESOLUTION": "640x480", "FPS": "30",
+            })
+        finally:
+            MODULE.camera_inventory = original
+
     def test_usb_selection_rejects_unadvertised_device(self):
         original = MODULE.camera_inventory
         MODULE.camera_inventory = lambda: []

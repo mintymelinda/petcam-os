@@ -77,12 +77,21 @@ Preview a supported CSI mode (camera index is shown by `discover-csi`):
 sudo petcam-camera select-csi --camera 0 --resolution 1920x1080 --fps 30
 ~~~
 
-Set the chosen values in /etc/petcam/petcam.conf and restart:
+The same shared parser is used by the CLI, web manager, camera status command, and stream startup script. Validate the active configuration with:
 
 ~~~bash
-sudo nano /etc/petcam/petcam.conf
-sudo systemctl restart petcam-stream
+sudo petcam-config validate --check-hardware
 ~~~
+
+For manual changes, create a separate candidate file and apply it transactionally:
+
+~~~bash
+sudo cp /etc/petcam/petcam.conf /tmp/petcam.conf.new
+sudo nano /tmp/petcam.conf.new
+sudo petcam-config apply /tmp/petcam.conf.new
+~~~
+
+The web manager uses the same transaction. It validates the requested mode, stages the configuration, restarts capture, and waits for a real MJPEG frame before committing. If restart or frame readiness fails, it restores the previous file and restarts the previous configuration. The last successful configuration is retained at \`/etc/petcam/petcam.conf.last-good\`. Stream startup validates the file before sourcing it, so malformed lines, unknown keys, and shell expressions are rejected before they can disrupt or execute in the service.
 
 The camera backend listens on loopback port 8081. The HTTPS manager on port 8443 proxies the preview after authentication; a separate HTTP endpoint on port 8080 exposes only the MJPEG stream for OBS.
 
