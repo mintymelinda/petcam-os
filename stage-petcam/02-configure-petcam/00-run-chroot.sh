@@ -361,10 +361,10 @@ while IFS= read -r library; do
     if [[ -n "$package" ]]; then
         apt-mark manual "$package" >/dev/null
     fi
-done < <(ldd "$USTREAMER_BIN" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^\\//) print $i }' | sort -u)
+done < <(ldd "$USTREAMER_BIN" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^\//) print $i }' | sort -u)
 
-apt-get purge -y --auto-remove \\
-    build-essential pkg-config git \\
+apt-get purge -y --auto-remove \
+    build-essential pkg-config git \
     libevent-dev libjpeg-dev libbsd-dev libv4l-dev
 apt-get clean
 rm -rf /var/lib/apt/lists/*
