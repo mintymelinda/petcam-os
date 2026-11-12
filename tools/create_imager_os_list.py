@@ -49,8 +49,9 @@ def create_os_list(image: Path, image_url: str, output: Path) -> None:
         "extract_sha256": extract_hash,
         "image_download_size": download_size,
         "image_download_sha256": download_hash,
-        # Omit "devices" until we publish matching Imager device profiles/tags.
-        # An incorrect compatibility list makes Imager filter out the OS entirely.
+        # Raspberry Pi Imager uses this tag for the original Pi Zero family,
+        # including the Zero W and Zero WH (not the Zero 2 W).
+        "devices": ["pizero-32bit"],
         "init_format": "cloudinit-rpi",
         "architecture": "armhf",
     }
