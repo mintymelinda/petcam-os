@@ -17,7 +17,7 @@ _lock = threading.RLock()
 
 def hash_password(password):
     if not isinstance(password, str) or not 12 <= len(password) <= 1024:
-        raise ValueError("Password must contain between 12 and 1024 characters")
+        raise ValueError("Password must be at least 12 characters and no more than 1024 characters")
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ITERATIONS)
     return {"algorithm": "pbkdf2_sha256", "iterations": PBKDF2_ITERATIONS,
