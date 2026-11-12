@@ -33,6 +33,8 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn('ln -sfn "releases/$APP_VERSION" /opt/petcam/current', script)
         self.assertIn('/opt/petcam/current/lib/camera.py', script)
         self.assertIn('/opt/petcam/current/lib/start-stream.sh', script)
+        self.assertIn('args+=(--physical-path "$USB_PHYSICAL_PATH")', script)
+        self.assertIn('args+=(--device-path "$CSI_DEVICE_PATH")', script)
         self.assertIn('/opt/petcam/current/lib/web_manager.py', script)
         self.assertIn('/opt/petcam/current/lib/csi_stream.py', script)
 
