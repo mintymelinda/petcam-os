@@ -2,6 +2,7 @@ import contextlib
 import importlib.util
 import sys
 import tempfile
+import config as CONFIG_MODULE
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -19,6 +20,12 @@ class HealthMonitorTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.state_file = Path(self.directory.name) / "health.json"
+        self.config_file = Path(self.directory.name) / "petcam.conf"
+        self.config_guard_patch = mock.patch.object(
+            MODULE, "config_transaction_guard",
+            side_effect=lambda: CONFIG_MODULE.config_transaction_guard(self.config_file),
+        )
+        self.config_guard_patch.start()
         self.state_patch = mock.patch.object(MODULE, "STATE_FILE", self.state_file)
         self.state_patch.start()
         self.active = {"state": "active", "active_age": 120.0}
@@ -30,6 +37,7 @@ class HealthMonitorTests(unittest.TestCase):
     def tearDown(self):
         self.services.stop()
         self.state_patch.stop()
+        self.config_guard_patch.stop()
         self.directory.cleanup()
 
     def test_healthy_backend_and_public_proxy_clear_failure_streak(self):
