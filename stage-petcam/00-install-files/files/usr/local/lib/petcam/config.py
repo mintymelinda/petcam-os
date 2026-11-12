@@ -220,6 +220,7 @@ def apply_config(
             raise ConfigApplyError(
                 f"New settings failed ({apply_error}); previous settings were restored, but the previous stream did not become healthy."
             ) from apply_error
+        _atomic_write(last_good_path, previous_content)
         raise ConfigApplyError(
             f"New settings failed ({apply_error}); previous settings were restored and the stream is healthy again."
         ) from apply_error
