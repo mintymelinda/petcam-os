@@ -62,7 +62,7 @@ def validate_config(values: dict[str, Any], check_hardware: bool = False) -> dic
     if config["SOURCE"] == "csi" and config["DEVICE"]:
         raise ConfigError("DEVICE must be empty when SOURCE=csi.")
 
-    config["FORMAT"] = config["FORMAT"].upper()
+    config["FORMAT"] = "auto" if config["FORMAT"].lower() == "auto" else config["FORMAT"].upper()
     if config["FORMAT"] != "auto" and config["FORMAT"] not in FORMATS:
         raise ConfigError(f"FORMAT must be auto or one of: {', '.join(sorted(FORMATS))}.")
 
@@ -218,6 +218,7 @@ def apply_config(
         raise ConfigApplyError(
             f"New settings failed ({apply_error}); previous settings were restored and the stream is healthy again."
         ) from apply_error
+    _atomic_write(last_good_path, serialize_config(candidate))
     return candidate
 
 
