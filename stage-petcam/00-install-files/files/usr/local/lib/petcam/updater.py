@@ -45,6 +45,8 @@ REQUIRED_FILES = (
     "lib/camera_profiles.py",
     "lib/home_assistant.py",
     "lib/timelapse.py",
+    "lib/motion_detection.py",
+    "systemd/petcam-motion.service",
     "systemd/petcam-home-assistant.service",
     "systemd/petcam-timelapse.service",
     "etc/petcam/home-assistant.conf",
@@ -298,9 +300,12 @@ def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc
     config_destination = etc_root / "petcam/home-assistant.conf"
     timelapse_source = release / "systemd/petcam-timelapse.service"
     timelapse_destination = etc_root / "systemd/system/petcam-timelapse.service"
+    motion_source = release / "systemd/petcam-motion.service"
+    motion_destination = etc_root / "systemd/system/petcam-motion.service"
     service_destination.parent.mkdir(parents=True, exist_ok=True)
     config_destination.parent.mkdir(parents=True, exist_ok=True)
     timelapse_destination.parent.mkdir(parents=True, exist_ok=True)
+    motion_destination.parent.mkdir(parents=True, exist_ok=True)
 
     service_temporary = service_destination.with_name(service_destination.name + ".new")
     shutil.copyfile(service_source, service_temporary)
@@ -310,6 +315,10 @@ def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc
     shutil.copyfile(timelapse_source, timelapse_temporary)
     os.chmod(timelapse_temporary, 0o644)
     os.replace(timelapse_temporary, timelapse_destination)
+    motion_temporary = motion_destination.with_name(motion_destination.name + ".new")
+    shutil.copyfile(motion_source, motion_temporary)
+    os.chmod(motion_temporary, 0o644)
+    os.replace(motion_temporary, motion_destination)
     config_destination_is_new = not config_destination.exists()
     if config_destination_is_new:
         config_temporary = config_destination.with_name(config_destination.name + ".new")
@@ -324,6 +333,7 @@ def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc
         if os.geteuid() == 0:
             os.chown(service_destination, 0, 0)
             os.chown(timelapse_destination, 0, 0)
+            os.chown(motion_destination, 0, 0)
             os.chown(config_destination, 0, group_id)
     except KeyError as error:
         raise UpdateError("The PetCam system group is missing; cannot secure Home Assistant configuration.") from error
@@ -377,6 +387,17 @@ def restart_services() -> str:
         )
         if timelapse.returncode:
             warnings.append("Timelapse worker did not restart; check petcam-timelapse.service logs")
+    motion_active = subprocess.run(
+        ["systemctl", "is-active", "--quiet", "petcam-motion.service"],
+        check=False,
+    )
+    if motion_active.returncode == 0:
+        motion = subprocess.run(
+            ["systemctl", "restart", "petcam-motion.service"],
+            capture_output=True, text=True, check=False,
+        )
+        if motion.returncode:
+            warnings.append("Motion worker did not restart; check petcam-motion.service logs")
     return "; ".join(warnings)
 
 
@@ -429,6 +450,7 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
         install_runtime_integration_files(final)
         subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
         subprocess.run(["systemctl", "enable", "--now", "petcam-timelapse.service"], check=True, capture_output=True)
+        subprocess.run(["systemctl", "enable", "--now", "petcam-motion.service"], check=True, capture_output=True)
         stream_warning = restart_services()
         deadline = time.monotonic() + 45
         while time.monotonic() < deadline:
