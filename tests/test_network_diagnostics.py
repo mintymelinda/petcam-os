@@ -65,6 +65,7 @@ class NetworkDiagnosticsTests(unittest.TestCase):
             report = MODULE.collect_diagnostics()
         self.assertFalse(report["layers"]["network_link"]["healthy"])
         self.assertFalse(report["layers"]["default_route"]["available"])
+        self.assertFalse(report["layers"]["listeners"]["healthy"])
         self.assertTrue(any("network interface" in item for item in report["problems"]))
         self.assertTrue(any("default network route" in item for item in report["problems"]))
 
@@ -78,6 +79,17 @@ class NetworkDiagnosticsTests(unittest.TestCase):
         self.assertTrue(report["layers"]["capture_backend"]["healthy"])
         self.assertFalse(report["layers"]["obs_stream_proxy"]["reachable"])
         self.assertTrue(any("OBS stream proxy" in item for item in report["problems"]))
+
+    def test_custom_backend_port_is_used_for_probe_and_listener_check(self):
+        with mock.patch.object(MODULE, "parse_config", return_value={"PORT": "8082"}), \
+                mock.patch.object(MODULE, "command_output", side_effect=[
+                    "[]", "[]",
+                    "State Recv-Q Send-Q Local Address:Port Peer Address:Port\nLISTEN 0 128 0.0.0.0:8080 0.0.0.0:*\nLISTEN 0 128 0.0.0.0:8443 0.0.0.0:*\nLISTEN 0 128 127.0.0.1:8082 0.0.0.0:*\n",
+                ]), \
+                mock.patch.object(MODULE, "probe_http", return_value={"reachable": True, "status": 200, "frame_byte_received": True}):
+            report = MODULE.collect_diagnostics()
+        self.assertEqual(report["backend_port"], 8082)
+        self.assertTrue(report["layers"]["listeners"]["ports"]["8082"]["listening"])
 
     def test_support_bundle_redacts_credentials_and_tokens(self):
         with tempfile.TemporaryDirectory() as directory:
