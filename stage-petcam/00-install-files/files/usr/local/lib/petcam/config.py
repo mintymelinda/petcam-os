@@ -161,6 +161,11 @@ def _atomic_write(path: Path, content: bytes) -> None:
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_bytes(content)
     os.chmod(temporary, 0o640)
+    try:
+        import grp
+        os.chown(temporary, -1, grp.getgrnam("petcam").gr_gid)
+    except (ImportError, KeyError, PermissionError):
+        pass
     os.replace(temporary, path)
 
 
