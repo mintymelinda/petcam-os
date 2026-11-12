@@ -54,7 +54,6 @@ def create_os_list(image: Path, image_url: str, version: str, output: Path) -> N
         "devices": DEVICES,
         "init_format": "cloudinit-rpi",
         "architecture": "armhf",
-        "version": version,
     }
     output.write_text(json.dumps({"os_list": [entry]}, indent=2) + "\n", encoding="utf-8")
 
