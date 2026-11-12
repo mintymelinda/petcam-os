@@ -128,6 +128,41 @@ chmod 0750 /etc/petcam
 chown petcam:petcam /etc/petcam/petcam.conf
 chmod 0640 /etc/petcam/petcam.conf
 
+cat > /etc/petcam/update.conf <<'UPDATE'
+# Signed release metadata endpoint. Leave empty until the official signing key is provisioned.
+MANIFEST_URL=
+PUBLIC_KEY=/etc/petcam/update-signing.pub
+UPDATE
+chown root:root /etc/petcam/update.conf
+chmod 0600 /etc/petcam/update.conf
+install -d -o root -g root -m 0755 /var/lib/petcam/update
+install -d -o root -g root -m 0755 /var/lib/petcam/update/staging
+
+cat > /etc/systemd/system/petcam-update.service <<'UNIT'
+[Unit]
+Description=Install a verified PetCam application release
+Documentation=https://github.com/mintymelinda/petcam-os
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/petcam/update.conf
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/bin/petcam-update install
+TimeoutStartSec=180
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/petcam /var/lib/petcam/update
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
 cat > /etc/systemd/system/petcam-stream.service <<'UNIT'
 [Unit]
 Description=PetCam USB UVC or Raspberry Pi CSI camera streamer
@@ -156,7 +191,7 @@ systemctl enable avahi-daemon.service
 systemctl enable petcam-stream.service
 
 cat > /etc/sudoers.d/petcam-web <<'SUDO'
-petcam ALL=(root) NOPASSWD: /usr/bin/systemctl restart petcam-stream.service
+petcam ALL=(root) NOPASSWD: /usr/bin/systemctl restart petcam-stream.service, /usr/local/bin/petcam-update check, /usr/bin/systemctl start petcam-update.service, /usr/bin/journalctl -u petcam-update.service -n 20 --no-pager -o cat
 SUDO
 chmod 0440 /etc/sudoers.d/petcam-web
 visudo -cf /etc/sudoers.d/petcam-web

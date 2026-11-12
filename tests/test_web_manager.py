@@ -1,5 +1,6 @@
 import importlib.util
 import unittest
+from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location(
     "petcam_web_manager",
@@ -18,6 +19,29 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn('rel="noopener noreferrer"', MODULE.PAGE)
         self.assertIn("/api/cameras", MODULE.PAGE)
         self.assertIn("/api/select", MODULE.PAGE)
+        self.assertIn("Software updates", MODULE.PAGE)
+        self.assertIn("Check for updates", MODULE.PAGE)
+        self.assertIn("Install update", MODULE.PAGE)
+        self.assertIn("/api/update/check", MODULE.PAGE)
+        self.assertIn("/api/update/install", MODULE.PAGE)
+        self.assertIn("/api/update/status", MODULE.PAGE)
+
+    def test_update_check_uses_fixed_privileged_command(self):
+        completed = mock.Mock(returncode=0, stdout='{"update_available": false}', stderr="")
+        with mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run:
+            self.assertFalse(MODULE.update_check()["update_available"])
+        self.assertEqual(run.call_args.args[0], ["sudo", "-n", "/usr/local/bin/petcam-update", "check"])
+
+    def test_update_status_reports_active_state_and_recent_logs(self):
+        outputs = [
+            mock.Mock(returncode=0, stdout="active\nsuccess\n0\n", stderr=""),
+            mock.Mock(returncode=0, stdout="Downloading release\n", stderr=""),
+        ]
+        with mock.patch.object(MODULE.subprocess, "run", side_effect=outputs):
+            status = MODULE.update_status()
+        self.assertTrue(status["active"])
+        self.assertEqual(status["result"], "success")
+        self.assertIn("Downloading release", status["logs"])
 
     def test_usb_selection_rejects_unadvertised_device(self):
         original = MODULE.camera_inventory
