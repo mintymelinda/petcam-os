@@ -140,6 +140,8 @@ def prune_frames(config, directory=None, now=None):
     directory = Path(directory or config["storage_path"])
     directory.mkdir(parents=True, exist_ok=True)
     now = now or time.time()
+    for temporary in directory.glob("*.jpg.tmp"):
+        temporary.unlink(missing_ok=True)
     cutoff = now - config["retention_days"] * 86400
     files = sorted((p for p in directory.glob("*.jpg") if p.is_file()), key=lambda p: (p.stat().st_mtime, p.name))
     for path in files:
@@ -246,6 +248,7 @@ def run():
             config = load_config()
             if not config["enabled"]:
                 write_state({"state": "disabled", "last_error": None})
+                next_capture = 0.0
                 time.sleep(2)
                 continue
             now = datetime.now().astimezone()
@@ -261,7 +264,7 @@ def run():
             enough_space, free = _free_space_ok(config, directory)
             if not enough_space:
                 last_error = f"Free space below configured minimum ({free // 1048576} MiB available)."
-                write_state({"state": "storage_limit", "last_error": last_error, **storage_status()})
+                write_state({"state": "storage_limit", "last_error": last_error, **storage_status(directory)})
                 next_capture = time.monotonic() + config["interval_seconds"]
                 time.sleep(2)
                 continue
@@ -271,15 +274,15 @@ def run():
                 last_error = None
                 write_state({
                     "state": "running", "last_capture_at": datetime.now(timezone.utc).isoformat(),
-                    "last_file": path.name, "last_error": None, **storage_status(),
+                    "last_file": path.name, "last_error": None, **storage_status(directory),
                 })
             except (OSError, urllib.error.URLError, StopIteration, ValueError) as error:
                 last_error = str(error)
-                write_state({"state": "camera_unavailable", "last_error": last_error, **storage_status()})
+                write_state({"state": "camera_unavailable", "last_error": last_error, **storage_status(directory)})
             next_capture = time.monotonic() + config["interval_seconds"]
         except Exception as error:
             last_error = str(error)
-            write_state({"state": "error", "last_error": last_error, **storage_status()})
+            write_state({"state": "error", "last_error": last_error, **storage_status(directory)})
             time.sleep(5)
 
 

@@ -124,8 +124,10 @@ class TimelapseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "incomplete.jpg.tmp").write_bytes(b"partial")
-            result = MODULE.storage_status(root)
+            config = MODULE.validate_config({"storage_path": "/var/lib/petcam/timelapse/frames"})
+            result = MODULE.prune_frames(config, root)
             self.assertEqual(result, {"frames": 0, "storage_bytes": 0})
+            self.assertFalse((root / "incomplete.jpg.tmp").exists())
 
     def test_camera_disconnect_is_reported_without_creating_a_frame(self):
         with tempfile.TemporaryDirectory() as directory:
