@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from config import parse_config
+from config import configuration_change_in_progress, parse_config
 
 STATE_FILE = Path("/var/lib/petcam/health.json")
 BACKEND_STREAM_URL = "http://127.0.0.1:8081/stream"
@@ -173,6 +173,11 @@ def check_health(now: float | None = None) -> dict[str, Any]:
         "recovery_target": previous.get("recovery_target"),
         "last_recovery_result": previous.get("last_recovery_result"),
     }
+
+    if configuration_change_in_progress():
+        report["state"] = "configuring"
+        report["reason"] = "A camera configuration transaction is in progress; health recovery is paused."
+        return _persist(report)
 
     backend = service_snapshot("petcam-stream.service")
     web = service_snapshot("petcam-web.service")
