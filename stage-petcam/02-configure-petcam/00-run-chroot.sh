@@ -23,7 +23,11 @@ cat > /usr/local/bin/petcam-status <<'SCRIPT'
 #!/bin/sh
 exec python3 /opt/petcam/current/lib/camera.py status
 SCRIPT
-chmod 0755 /usr/local/bin/petcam-camera /usr/local/bin/petcam-status
+cat > /usr/local/bin/petcam-admin <<'SCRIPT'
+#!/bin/sh
+exec python3 /opt/petcam/current/lib/web_manager.py --set-password
+SCRIPT
+chmod 0755 /usr/local/bin/petcam-camera /usr/local/bin/petcam-status /usr/local/bin/petcam-admin
 
 install -d -m 0755 "/opt/petcam/releases/$APP_VERSION/lib" /etc/petcam
 openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 825 -keyout /etc/petcam/web-manager.key -out /etc/petcam/web-manager.crt -subj "/CN=petcam.local" -addext "subjectAltName=DNS:petcam.local,DNS:petcam"
@@ -209,7 +213,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=petcam
-Group=video
+Group=petcam
 SupplementaryGroups=video i2c
 ExecStart=/usr/bin/python3 /opt/petcam/current/lib/web_manager.py
 Restart=always
