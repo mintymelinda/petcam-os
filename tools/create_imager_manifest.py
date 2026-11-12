@@ -34,7 +34,7 @@ def create_manifest(image: Path, output: Path, icon: str | None = None) -> None:
         "name": "PetCam OS",
         "description": "Camera-agnostic Raspberry Pi OS for LAN MJPEG streaming",
         "icon": icon or "https://raw.githubusercontent.com/mintymelinda/petcam-os/main/assets/petcam-icon.svg",
-        "url": str(image),
+        "url": image.as_uri(),
         "extract_size": extract_size,
         "extract_sha256": extract_hash,
         "image_download_size": image.stat().st_size,
