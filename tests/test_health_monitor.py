@@ -90,6 +90,17 @@ class HealthMonitorTests(unittest.TestCase):
         self.assertEqual(report["recovery_count"], 1)
         restart.assert_called_once_with("petcam-stream.service")
 
+    def test_recovered_backend_and_public_stream_return_to_healthy(self):
+        with mock.patch.object(MODULE, "probe_stream", side_effect=[False, True, True]), \
+                mock.patch.object(MODULE, "camera_present", return_value=True), \
+                mock.patch.object(MODULE, "restart_service", return_value=(True, "")):
+            recovering = MODULE.check_health(now=1000)
+            healthy = MODULE.check_health(now=1060)
+        self.assertEqual(recovering["state"], "recovering")
+        self.assertEqual(healthy["state"], "healthy")
+        self.assertEqual(healthy["recovery_count"], 1)
+        self.assertEqual(healthy["consecutive_failures"], 0)
+
     def test_healthy_backend_with_broken_public_proxy_restarts_only_web_service(self):
         with mock.patch.object(MODULE, "probe_stream", side_effect=[True, False]), \
                 mock.patch.object(MODULE, "restart_service", return_value=(True, "")) as restart:
