@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import subprocess
 import time
@@ -69,7 +70,7 @@ def probe_stream(url: str, timeout: int) -> bool:
             if response.status != 200:
                 return False
             return bool(response.read(1))
-    except (OSError, urllib.error.URLError, TimeoutError, ValueError):
+    except (OSError, urllib.error.URLError, TimeoutError, ValueError, http.client.HTTPException):
         return False
 
 
