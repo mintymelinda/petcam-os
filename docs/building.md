@@ -86,7 +86,7 @@ sudo petcam-config validate --check-hardware
 For manual changes, create a separate candidate file and apply it transactionally:
 
 ~~~bash
-cp /etc/petcam/petcam.conf /tmp/petcam.conf.new
+sudo cp /etc/petcam/petcam.conf /tmp/petcam.conf.new
 sudo nano /tmp/petcam.conf.new
 sudo petcam-config apply /tmp/petcam.conf.new
 ~~~
