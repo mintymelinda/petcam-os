@@ -307,8 +307,8 @@ def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc
         shutil.copyfile(config_source, config_temporary)
         os.chmod(config_temporary, 0o640)
         os.replace(config_temporary, config_destination)
-    elif config_destination.is_symlink():
-        raise UpdateError("Refusing to use a symlink as the Home Assistant configuration file.")
+    elif config_destination.is_symlink() or not config_destination.is_file():
+        raise UpdateError("Refusing to use a non-regular Home Assistant configuration file.")
     os.chmod(config_destination, 0o640)
     try:
         group_id = grp.getgrnam("petcam").gr_gid
