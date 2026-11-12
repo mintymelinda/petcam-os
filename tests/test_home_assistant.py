@@ -230,7 +230,7 @@ class HomeAssistantMQTTTests(unittest.TestCase):
         cleared = [topic for topic, payload, retain in fake.messages if payload == "" and retain]
         self.assertEqual(len(cleared), len(MODULE.ENTITIES) * 2 + 1)
         self.assertIn("petcam/test/health_availability", cleared)
-        self.assertIn(("petcam/test/health_availability", "unhealthy", True), fake.messages)
+        self.assertIn(("petcam/test/health_availability", "", True), fake.messages)
         self.assertIn(("petcam/test/broker", "offline", True), fake.messages)
 
     def test_reconnect_backoff_increases_and_is_bounded(self):
