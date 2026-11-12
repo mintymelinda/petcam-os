@@ -328,6 +328,7 @@ ReadWritePaths=/etc/petcam /var/lib/petcam
 [Install]
 WantedBy=multi-user.target
 UNIT
+systemctl daemon-reload
 systemctl enable avahi-daemon.service
 systemctl enable petcam-stream.service
 systemctl enable petcam-web-cert.service
