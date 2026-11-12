@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Restore PetCam application settings to first-run defaults."""
 
-import getpass
 import json
 import os
 import shutil
