@@ -26,17 +26,19 @@ sudo ./build-docker.sh
 
 The resulting image is written to pi-gen/deploy/. PetCam's application is installed under `/opt/petcam/releases/<version>/`, and `/opt/petcam/current` selects the active release. `/etc/petcam/petcam.conf` and `/var/lib/petcam/` remain outside the versioned application tree so future application updates can preserve device configuration and state.
 
-## Raspberry Pi Imager 2 customisation
+## Raspberry Pi Imager catalogue
 
-Imager 2 deliberately disables customisation for an arbitrary local image because it cannot infer the image's first-boot mechanism. The build artifact includes `create_imager_manifest.py`. After extracting the artifact, double-click `prepare-imager.bat` on Windows or run `./prepare-imager.sh` on Linux. The helper finds the image, generates the local manifest with verified checksums, and opens it in Raspberry Pi Imager 2.
+Tagged releases build the image, rename it to a stable versioned asset, generate a Raspberry Pi Imager OS sublist, validate that JSON against Raspberry Pi's published schema, and attach both files to a GitHub Release. The generated entry includes the public HTTPS image URL, compressed and extracted SHA-256 hashes and sizes, supported device tags, `architecture: armhf`, and `init_format: cloudinit-rpi`.
 
-The helper creates `petcam-os.rpi-imager-manifest` beside the image. It calculates the compressed download size and SHA-256, decompresses the image as a stream to calculate the extracted size and SHA-256, and declares `init_format: cloudinit-rpi` for the Raspberry Pi OS cloud-init first-boot integration. It includes the supported Raspberry Pi device tags. No credentials or Wi-Fi details are written into the image or manifest.
+The stable sublist URL intended for the official catalogue submission is:
 
-Double-click `petcam-os.rpi-imager-manifest` to open it in Imager 2. Alternatively, use App Options → Content Repository → Edit → Use custom file, select the manifest, and Apply & Restart. Choose PetCam OS from the OS list. The Customisation step should now be available.
+```
+https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-os-os-list.json
+```
 
-Configure hostname `petcam`, Wi-Fi credentials, WLAN country, an administrator account, and optional SSH there. Wi-Fi country is deliberately not baked into the image. To change it later, run sudo raspi-config → Localisation Options → WLAN Country.
+Raspberry Pi must approve the catalogue submission before PetCam appears in Imager's default OS list. Until then, the sublist can be loaded manually through App Options → Content Repository → Edit → Use custom URL, but that is a maintainer/testing route, not the intended end-user installation experience.
 
-Keep the image and manifest in the same folder until flashing completes.
+Once PetCam is listed, users select it from Imager's normal OS list and configure hostname `petcam`, Wi-Fi, WLAN country, an administrator account, and optional SSH in the standard Customisation step. WLAN country is not baked into the image.
 
 The camera stream has no authentication and is intended only for a trusted LAN.
 

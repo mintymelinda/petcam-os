@@ -80,13 +80,11 @@ Updates are disabled by default until the official Ed25519 release-signing publi
 
 ## First boot and Wi-Fi
 
-Raspberry Pi Imager 2 treats a locally selected image as having no customization support. The build artifact therefore includes `create_imager_manifest.py` alongside the compressed image. After extracting the artifact, double-click `prepare-imager.bat` on Windows. On Linux, run `./prepare-imager.sh` from the extracted folder. The helper finds the image, generates the local manifest with verified checksums, and opens it in Raspberry Pi Imager 2.
+PetCam OS is being prepared for inclusion in the official Raspberry Pi Imager catalogue. The release pipeline generates an Imager OS sublist using Raspberry Pi's published schema, public HTTPS release-asset URLs, verified compressed and extracted SHA-256 hashes, supported device tags, and `init_format: cloudinit-rpi`. The catalogue submission is pending Raspberry Pi review; until accepted, PetCam OS will not appear automatically in Imager's default OS list.
 
-This creates `petcam-os.rpi-imager-manifest` with the image's local path, verified compressed and extracted SHA-256 hashes, supported Pi device tags, and `init_format: cloudinit-rpi`. Double-click the manifest to open it in Raspberry Pi Imager 2 (or choose it through App Options → Content Repository → Edit → Use custom file, then Apply & Restart). Select PetCam OS from the OS list; the Customisation step will then be available.
+Once listed, select PetCam OS in Raspberry Pi Imager and use its normal Customisation step to set hostname `petcam`, configure Wi-Fi, select the WLAN regulatory country where the Pi will operate, create the administrator account, and enable SSH if desired. The image intentionally has no hard-coded Wi-Fi country. Imager applies these settings on first boot. To change the country later, use sudo raspi-config → Localisation Options → WLAN Country.
 
-In Customisation, set hostname `petcam`, configure Wi-Fi, select the WLAN regulatory country where the Pi will operate, create the administrator account, and enable SSH if desired. The image intentionally has no hard-coded Wi-Fi country. Imager applies these settings on first boot. To change the country later, use sudo raspi-config → Localisation Options → WLAN Country.
-
-The helper uses only Python's standard library and validates the exact image bytes through the manifest checksums. Keep the image and generated manifest together until Imager has finished writing.
+Each versioned GitHub Release contains the compressed image and its generated `petcam-os-os-list.json` sublist. The stable catalogue sublist URL for submission is `https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-os-os-list.json`.
 
 ## Build locally
 
