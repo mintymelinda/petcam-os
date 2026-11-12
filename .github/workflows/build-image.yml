@@ -38,7 +38,7 @@ jobs:
     timeout-minutes: 180
     steps:
       - name: Check out PetCam OS
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate PetCam scripts
         run: |
@@ -49,7 +49,7 @@ jobs:
         run: python3 -m unittest discover -s tests -v
 
       - name: Check out pi-gen
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: RPi-Distro/pi-gen
           ref: master
@@ -77,7 +77,7 @@ jobs:
           cp assets/petcam-icon.svg pi-gen/deploy/
 
       - name: Upload image artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: petcam-os-image
           path: pi-gen/deploy/*
