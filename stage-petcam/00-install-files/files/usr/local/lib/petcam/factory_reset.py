@@ -91,6 +91,8 @@ def reset():
     # updater trust configuration, and installed application releases.
     (ETC / "web-auth.json").unlink(missing_ok=True)
     (ETC / "petcam.conf.last-good").unlink(missing_ok=True)
+    (ETC / "cameras.json").unlink(missing_ok=True)
+    (ETC / "cameras.lock").unlink(missing_ok=True)
     for path in (ETC / "cameras.d",):
         shutil.rmtree(path, ignore_errors=True)
         path.mkdir(parents=True, exist_ok=True)
