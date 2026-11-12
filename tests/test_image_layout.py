@@ -60,6 +60,7 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertNotIn("chmod 0750 /etc/petcam", script)
         self.assertIn("chown petcam:petcam /etc/petcam/petcam.conf", script)
         self.assertIn("chmod 0640 /etc/petcam/petcam.conf", script)
+        self.assertIn("SupplementaryGroups=petcam video i2c", script)
         self.assertIn("petcam-stream@.service", script)
         self.assertIn("install -d -o petcam -g petcam -m 0750 /etc/petcam/cameras.d", script)
         self.assertIn("Environment=PETCAM_CONFIG_PATH=/etc/petcam/cameras.d/%i.conf", script)
