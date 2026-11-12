@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
@@ -161,13 +162,17 @@ def _atomic_write(path: Path, content: bytes) -> None:
 
 def wait_for_stream(port: int, timeout: int = 30) -> bool:
     deadline = time.monotonic() + timeout
-    try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/stream", timeout=timeout) as response:
-            if response.status != 200:
-                return False
-            return bool(response.read(1)) and time.monotonic() <= deadline
-    except (OSError, urllib.error.URLError, TimeoutError, ValueError):
-        return False
+    url = f"http://127.0.0.1:{port}/stream"
+    while time.monotonic() < deadline:
+        remaining = deadline - time.monotonic()
+        try:
+            with urllib.request.urlopen(url, timeout=min(15, remaining)) as response:
+                if response.status == 200 and response.read(1):
+                    return True
+        except (OSError, urllib.error.URLError, TimeoutError, ValueError, http.client.HTTPException):
+            pass
+        time.sleep(min(0.5, max(0, deadline - time.monotonic())))
+    return False
 
 
 def restart_capture() -> None:
