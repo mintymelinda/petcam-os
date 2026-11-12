@@ -128,6 +128,29 @@ class WebManagerRouteAuthenticationTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(payload)["recovery_count"], 2)
 
+    def test_network_diagnostics_api_requires_authentication(self):
+        status, _, _ = self.request("GET", "/api/diagnostics")
+        self.assertEqual(status, 401)
+        cookie, _ = self.login()
+        with mock.patch.object(MANAGER, "collect_diagnostics", return_value={"problems": []}):
+            status, _, payload = self.request("GET", "/api/diagnostics", cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload), {"problems": []})
+
+    def test_support_bundle_endpoint_requires_authentication_and_returns_archive(self):
+        status, _, _ = self.request("GET", "/api/support-bundle")
+        self.assertEqual(status, 401)
+        cookie, _ = self.login()
+        with mock.patch.object(MANAGER, "create_support_bundle", return_value=b"test archive"):
+            status, headers, payload = self.request("GET", "/api/support-bundle", cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, b"test archive")
+        self.assertIn(("Content-Type", "application/gzip"), headers)
+        self.assertTrue(any(
+            key.lower() == "content-disposition" and "petcam-support.tar.gz" in value
+            for key, value in headers
+        ))
+
     def test_state_changes_require_csrf_and_valid_session(self):
         cookie, csrf = self.login()
         with mock.patch.object(MANAGER, "save_selection") as save:
