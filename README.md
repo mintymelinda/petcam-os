@@ -65,7 +65,7 @@ SOURCE=auto prefers a usable USB camera, then falls back to CSI. Set SOURCE=usb 
 The shared parser validates configuration before the stream startup script sources it. Check the active file with \`sudo petcam-config validate --check-hardware\`. For manual changes, edit a separate candidate file and apply it transactionally:
 
 ~~~bash
-cp /etc/petcam/petcam.conf /tmp/petcam.conf.new
+sudo cp /etc/petcam/petcam.conf /tmp/petcam.conf.new
 sudo nano /tmp/petcam.conf.new
 sudo petcam-config apply /tmp/petcam.conf.new
 ~~~
