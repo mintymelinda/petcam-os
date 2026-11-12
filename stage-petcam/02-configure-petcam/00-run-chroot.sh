@@ -172,8 +172,8 @@ FPS=auto
 CSI_QUALITY=70
 PORT=8081
 CONF
-chown petcam:petcam /etc/petcam
-chmod 0750 /etc/petcam
+chown root:petcam /etc/petcam
+chmod 1770 /etc/petcam
 chown petcam:petcam /etc/petcam/petcam.conf
 chmod 0640 /etc/petcam/petcam.conf
 
