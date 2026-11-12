@@ -72,6 +72,8 @@ class ConfigValidationTests(unittest.TestCase):
     def test_csi_allows_fractional_fps_and_usb_requires_whole_fps(self):
         csi = MODULE.validate_config({**MODULE.DEFAULTS, "SOURCE": "csi", "FPS": "56.03"})
         self.assertEqual(csi["FPS"], "56.03")
+        usb = MODULE.validate_config({**MODULE.DEFAULTS, "SOURCE": "usb", "FPS": "30.0"})
+        self.assertEqual(usb["FPS"], "30")
         with self.assertRaisesRegex(MODULE.ConfigError, "whole number"):
             MODULE.validate_config({**MODULE.DEFAULTS, "SOURCE": "usb", "FPS": "29.97"})
 
