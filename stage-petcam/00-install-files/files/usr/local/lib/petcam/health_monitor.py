@@ -90,7 +90,7 @@ def camera_present() -> bool | None:
             return None
         inventory = json.loads(result.stdout)
         return bool(inventory.get("usb_devices") or inventory.get("csi_cameras"))
-    except (OSError, subprocess.TimeoutExpired, ValueError, TypeError):
+    except (OSError, subprocess.TimeoutExpired, ValueError, TypeError, AttributeError):
         return None
 
 
