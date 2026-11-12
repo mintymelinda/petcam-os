@@ -145,6 +145,18 @@ class TransactionalApplyTests(unittest.TestCase):
         self.assertEqual(restart.call_count, 2)
         ready.assert_called_once_with(8081)
 
+    def test_failed_rollback_preserves_the_previous_last_known_good_file(self):
+        known_good = b"SOURCE=usb\nDEVICE=/dev/video0\n"
+        self.last_good.write_bytes(known_good)
+        restart = mock.Mock(side_effect=[None, RuntimeError("rollback restart failed")])
+        ready = mock.Mock(return_value=False)
+        with self.assertRaisesRegex(MODULE.ConfigApplyError, "restarting them failed"):
+            MODULE.apply_config(
+                self.updates(), self.config, self.last_good, restart=restart, ready=ready
+            )
+        self.assertEqual(self.config.read_bytes(), self.original)
+        self.assertEqual(self.last_good.read_bytes(), known_good)
+
     def test_invalid_candidate_does_not_write_or_restart(self):
         restart = mock.Mock()
         ready = mock.Mock()
