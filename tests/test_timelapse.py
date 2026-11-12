@@ -70,6 +70,31 @@ class TimelapseTests(unittest.TestCase):
             self.assertTrue(newer.exists())
             self.assertEqual(result["frames"], 1)
 
+    def test_mjpeg_parser_extracts_complete_frames_across_chunks(self):
+        class Response:
+            def __init__(self):
+                self.parts = [b"boundary\r\n\xff", b"\xd8one\xff", b"\xd9boundary\xff\xd8two\xff\xd9"]
+            def read(self, size):
+                return self.parts.pop(0) if self.parts else b""
+        self.assertEqual(list(MODULE.jpeg_frames(Response())), [b"\xff\xd8one\xff\xd9", b"\xff\xd8two\xff\xd9"])
+
+    def test_storage_cap_prunes_oldest_frames(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            oldest = root / "oldest.jpg"
+            newest = root / "newest.jpg"
+            with oldest.open("wb") as stream:
+                stream.truncate(40 * 1024 * 1024)
+            with newest.open("wb") as stream:
+                stream.truncate(40 * 1024 * 1024)
+            import os
+            os.utime(oldest, (100, 100))
+            os.utime(newest, (200, 200))
+            config = MODULE.validate_config({"max_storage_mb": 64})
+            MODULE.prune_frames(config, root, now=300)
+            self.assertFalse(oldest.exists())
+            self.assertTrue(newest.exists())
+
     def test_state_snapshot_reports_storage(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

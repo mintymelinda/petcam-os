@@ -164,6 +164,7 @@ class UpdateArchiveTests(unittest.TestCase):
             (release / "systemd").mkdir(parents=True)
             (release / "etc/petcam").mkdir(parents=True)
             (release / "systemd/petcam-home-assistant.service").write_text("[Service]\nExecStart=petcam\n")
+            (release / "systemd/petcam-timelapse.service").write_text("[Service]\nExecStart=timelapse\n")
             (release / "etc/petcam/home-assistant.conf").write_text("MQTT_ENABLED=false\n")
             config_path = etc_root / "petcam/home-assistant.conf"
             config_path.parent.mkdir(parents=True)
@@ -176,6 +177,7 @@ class UpdateArchiveTests(unittest.TestCase):
                 "[Service]\nExecStart=petcam\n",
             )
             self.assertEqual(config_path.read_text(), "MQTT_ENABLED=true\nMQTT_PASSWORD=preserve-me\n")
+            self.assertEqual((etc_root / "systemd/system/petcam-timelapse.service").read_text(), "[Service]\nExecStart=timelapse\n")
             self.assertEqual(config_path.stat().st_mode & 0o777, 0o640)
 
     def test_installs_default_home_assistant_config_when_missing(self):
@@ -218,7 +220,9 @@ class UpdateArchiveTests(unittest.TestCase):
             "lib/network_diagnostics.py": b"# network diagnostics",
             "lib/camera_profiles.py": b"# camera profiles",
             "lib/home_assistant.py": b"# Home Assistant MQTT",
+            "lib/timelapse.py": b"# Timelapse",
             "systemd/petcam-home-assistant.service": b"[Service]\nExecStart=/usr/bin/python3 /opt/petcam/current/lib/home_assistant.py\n",
+            "systemd/petcam-timelapse.service": b"[Service]\nExecStart=/usr/bin/python3 /opt/petcam/current/lib/timelapse.py\n",
             "etc/petcam/home-assistant.conf": b"MQTT_ENABLED=false\n",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"binary",
