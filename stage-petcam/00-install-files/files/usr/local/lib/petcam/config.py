@@ -71,6 +71,10 @@ def validate_config(values: dict[str, Any], check_hardware: bool = False) -> dic
         raise ConfigError("CAMERA must be auto or a non-negative CSI camera index.")
     if config["SOURCE"] == "usb" and config["CAMERA"] != "auto":
         raise ConfigError("CAMERA must be auto when SOURCE=usb.")
+    if config["USB_PHYSICAL_PATH"] and config["DEVICE"] and not config["DEVICE"].startswith("/dev/v4l/by-id/"):
+        raise ConfigError("DEVICE must be empty or a persistent by-id path when USB_PHYSICAL_PATH is set.")
+    if config["CSI_DEVICE_PATH"] and config["CAMERA"] != "auto":
+        raise ConfigError("CAMERA must be auto when CSI_DEVICE_PATH is set.")
     if config["SOURCE"] == "csi" and (config["DEVICE"] or config["USB_PHYSICAL_PATH"]):
         raise ConfigError("USB device settings must be empty when SOURCE=csi.")
     if config["SOURCE"] == "usb" and config["CSI_DEVICE_PATH"]:
