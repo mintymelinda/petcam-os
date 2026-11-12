@@ -61,7 +61,7 @@ class WebManagerTests(unittest.TestCase):
                 "FORMAT": "MJPG", "RESOLUTION": "640x480", "FPS": "30",
             })
         finally:
-            MODULE.camera_inventory = lambda: []
+            MODULE.camera_inventory = original
 
     def test_usb_selection_rejects_unadvertised_device(self):
         original = MODULE.camera_inventory
