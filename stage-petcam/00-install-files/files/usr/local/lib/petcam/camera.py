@@ -509,6 +509,8 @@ def main():
             pass
     try:
         health = json.loads(Path("/var/lib/petcam/health.json").read_text(encoding="utf-8"))
+        if not isinstance(health, dict):
+            health = {}
     except (OSError, ValueError):
         health = {}
     report = {
