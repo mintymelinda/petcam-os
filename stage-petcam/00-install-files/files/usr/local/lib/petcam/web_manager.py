@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from config import ConfigApplyError, apply_config, parse_config
+from config import apply_config, parse_config
 from web_auth import SESSION_TTL, get_session, invalidate_session, new_session, save_password, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
