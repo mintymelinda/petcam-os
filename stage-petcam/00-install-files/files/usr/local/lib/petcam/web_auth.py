@@ -55,6 +55,16 @@ def is_configured():
     return AUTH_FILE.exists()
 
 
+def _set_auth_owner():
+    """Keep the auth file replaceable by the unprivileged manager in the sticky config directory."""
+    try:
+        import pwd
+        account = pwd.getpwnam("petcam")
+        os.chown(AUTH_FILE, account.pw_uid, account.pw_gid)
+    except (ImportError, KeyError, PermissionError):
+        pass
+
+
 def initialize_password(password):
     """Create the first administrator password without replacing an existing one."""
     if AUTH_FILE.exists():
@@ -73,11 +83,7 @@ def initialize_password(password):
                 output.flush()
                 os.fsync(output.fileno())
             os.chmod(AUTH_FILE, 0o640)
-            try:
-                import grp
-                os.chown(AUTH_FILE, 0, grp.getgrnam("petcam").gr_gid)
-            except (ImportError, KeyError, PermissionError):
-                pass
+            _set_auth_owner()
             _sessions.clear()
         except Exception:
             try:
@@ -94,11 +100,7 @@ def save_password(password):
     temporary.write_text(json.dumps(data) + "\n", encoding="utf-8")
     os.chmod(temporary, 0o640)
     os.replace(temporary, AUTH_FILE)
-    try:
-        import grp
-        os.chown(AUTH_FILE, 0, grp.getgrnam("petcam").gr_gid)
-    except (ImportError, KeyError, PermissionError):
-        pass
+    _set_auth_owner()
     with _lock:
         _sessions.clear()
 
