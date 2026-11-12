@@ -20,7 +20,7 @@ The workflow builds a 32-bit Raspberry Pi OS Lite image and adds PetCam's camera
 
 ## Camera stream
 
-PetCam selects the appropriate capture backend automatically. USB UVC cameras use [µStreamer](https://github.com/pikvm/ustreamer), preferring native MJPEG passthrough and falling back to CPU JPEG encoding for supported raw formats when needed. CSI modules use Raspberry Pi's `rpicam-vid` camera stack with MJPEG output. Both backends expose the same `/stream` endpoint internally; the PetCam web interface provides the public port 8080 page and stream proxy.
+PetCam selects the appropriate capture backend automatically. USB UVC cameras use [µStreamer](https://github.com/pikvm/ustreamer), preferring native MJPEG passthrough and falling back to CPU JPEG encoding for supported raw formats when needed. CSI modules use Raspberry Pi's `rpicam-vid` camera stack with MJPEG output. Both backends expose the same `/stream` endpoint internally; the authenticated manager is served separately over HTTPS on port 8443, while port 8080 is reserved for the public OBS stream endpoint.
 
 - Stream endpoint (OBS): http://petcam.local:8080/stream
 - Authenticated management page: https://petcam.local:8443/
