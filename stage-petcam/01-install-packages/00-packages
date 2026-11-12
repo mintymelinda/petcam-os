@@ -4,6 +4,5 @@ libevent-dev
 libjpeg-dev
 libbsd-dev
 libv4l-dev
-python3-minimal
 openssl
 python3-pil
