@@ -21,6 +21,8 @@ REQUIRED_FILES = (
     "lib/health_monitor.py",
     "lib/config.py",
     "lib/network_diagnostics.py",
+    # Retained for one upgrade cycle so pre-v0.2.3 updaters can validate the archive.
+    "lib/camera_profiles.py",
     "lib/factory_reset.py",
     "lib/home_assistant.py",
     "lib/timelapse.py",
