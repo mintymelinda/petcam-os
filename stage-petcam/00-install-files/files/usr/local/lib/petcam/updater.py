@@ -413,6 +413,18 @@ def healthy() -> bool:
         return False
 
 
+def remove_inactive_release(release: Path) -> bool:
+    """Remove a failed release directory unless it is still the active release."""
+    try:
+        active = CURRENT.resolve(strict=True)
+    except FileNotFoundError:
+        active = None
+    if active == release.resolve():
+        return False
+    shutil.rmtree(release)
+    return True
+
+
 def install_update(config: dict[str, str]) -> dict[str, object]:
     status = check_update(config)
     version = str(status["available_version"])
@@ -469,6 +481,14 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
                 raise UpdateError(
                     f"Update failed ({exc}); automatic rollback also failed ({rollback_error})"
                 ) from rollback_error
+        try:
+            if final.exists():
+                remove_inactive_release(final)
+        except OSError as cleanup_error:
+            raise UpdateError(
+                f"Update failed and previous release was restored: {exc}; "
+                f"unable to remove inactive failed release {final}: {cleanup_error}"
+            ) from cleanup_error
         raise UpdateError(f"Update failed and previous release was restored: {exc}") from exc
 
 

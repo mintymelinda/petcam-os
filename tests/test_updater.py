@@ -19,6 +19,7 @@ from updater import (
     safe_extract,
     validate_release,
     install_runtime_integration_files,
+    remove_inactive_release,
     restart_services,
     verify_signature,
     version_tuple,
@@ -247,6 +248,45 @@ class UpdateArchiveTests(unittest.TestCase):
             safe_extract(self.archive({"VERSION": b"9.9.9"}), root)
             with self.assertRaises(UpdateError):
                 validate_release(root, "1.2.3")
+
+
+class FailedReleaseCleanupTests(unittest.TestCase):
+    def test_removes_failed_release_when_previous_release_is_active(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            releases = root / "releases"
+            releases.mkdir()
+            active = releases / "1.2.2"
+            failed = releases / "1.2.3"
+            active.mkdir()
+            failed.mkdir()
+            current = root / "current"
+            current.symlink_to(active)
+            with mock.patch("updater.CURRENT", current):
+                self.assertTrue(remove_inactive_release(failed))
+            self.assertTrue(active.is_dir())
+            self.assertFalse(failed.exists())
+
+    def test_never_removes_the_active_release(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            release = root / "releases/1.2.3"
+            release.mkdir(parents=True)
+            current = root / "current"
+            current.symlink_to(release)
+            with mock.patch("updater.CURRENT", current):
+                self.assertFalse(remove_inactive_release(release))
+            self.assertTrue(release.is_dir())
+
+
+class UpdaterServiceSandboxTests(unittest.TestCase):
+    def test_updater_service_can_write_only_required_integration_directories(self):
+        script = Path("stage-petcam/02-configure-petcam/00-run-chroot.sh").read_text(encoding="utf-8")
+        self.assertIn(
+            "ReadWritePaths=/opt/petcam /var/lib/petcam/update /etc/systemd/system /etc/petcam",
+            script,
+        )
+        self.assertIn("ProtectSystem=strict", script)
 
 
 if __name__ == "__main__":
