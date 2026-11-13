@@ -26,9 +26,8 @@ class BuildCacheContractTests(unittest.TestCase):
 
     def test_cached_rootfs_is_mounted_as_pi_gen_work_dir(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
-        self.assertIn("src=${RUNNER_TEMP}/pigen-work,dst=/pigen-work", workflow)
-        self.assertIn("-e WORK_DIR=/pigen-work", workflow)
-        self.assertIn("stage-petcam-base/rootfs", workflow)
+        self.assertIn("src=${RUNNER_TEMP}/pigen-work,dst=/pi-gen/work", workflow)
+        self.assertIn("PetCamOS/stage-petcam-base/rootfs", workflow)
         self.assertIn("Base rootfs cache hit:", workflow)
         self.assertIn("Base rootfs cache archive bytes:", workflow)
         self.assertIn("bash -n stage-petcam-base/prerun.sh", workflow)
