@@ -101,7 +101,7 @@ start_usb() {
     fi
     echo "PetCam backend: usb; hardware tier: $tier"
     echo "Starting USB camera $camera at $resolution, format=$format, requested_fps=$fps, encoder=$encoder"
-    exec /opt/petcam/current/vendor/bin/ustreamer --device="$camera" --host=127.0.0.1 --port="$PORT" --format="$format" --encoder="$encoder" --resolution="$resolution" --desired-fps="$fps" --perf
+    exec /opt/petcam/current/vendor/bin/ustreamer --device="$camera" --host=127.0.0.1 --port="$PORT" --format="$format" --encoder="$encoder" --resolution="$resolution" --hw-fps="$fps" --desired-fps="$fps" --perf
 }
 
 start_csi() {
