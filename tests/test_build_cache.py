@@ -16,19 +16,26 @@ class BuildCacheContractTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
         self.assertIn("id: base-rootfs-cache", workflow)
         self.assertIn("pigen-base-rootfs-v1-", workflow)
-        self.assertIn("hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile')", workflow)
+        self.assertIn("hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile')", workflow)
         self.assertIn("pigen-base-rootfs.tar", workflow)
         self.assertIn("sudo tar --numeric-owner --xattrs --acls -xpf", workflow)
         self.assertIn("sudo tar --numeric-owner --xattrs --acls -cpf", workflow)
-        self.assertIn("touch pi-gen/stage0/SKIP pi-gen/stage1/SKIP pi-gen/stage2/SKIP", workflow)
+        self.assertIn("touch pi-gen/stage0/SKIP pi-gen/stage1/SKIP pi-gen/stage2/SKIP pi-gen/stage-petcam-base/SKIP", workflow)
 
     def test_cached_rootfs_is_mounted_as_pi_gen_work_dir(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
         self.assertIn("src=${RUNNER_TEMP}/pigen-work,dst=/pigen-work", workflow)
         self.assertIn("-e WORK_DIR=/pigen-work", workflow)
-        self.assertIn("stage2/rootfs", workflow)
+        self.assertIn("stage-petcam-base/rootfs", workflow)
         self.assertIn("Base rootfs cache hit:", workflow)
         self.assertIn("Base rootfs cache archive bytes:", workflow)
+
+    def test_stable_packages_live_in_the_cached_stage_before_application_changes(self):
+        config = (ROOT / "config").read_text(encoding="utf-8")
+        self.assertIn('STAGE_LIST="stage0 stage1 stage2 stage-petcam-base stage-petcam"', config)
+        self.assertTrue((ROOT / "stage-petcam-base/01-install-packages/00-packages").is_file())
+        self.assertTrue((ROOT / "stage-petcam-base/prerun.sh").is_file())
+        self.assertFalse((ROOT / "stage-petcam/01-install-packages/00-packages").exists())
 
     def test_debian_archives_and_docker_layers_remain_cached(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
