@@ -6,7 +6,7 @@ The workflow is named **Build PetCam OS image**.
 
 - Pull requests, pushes to `main`, and manual workflow dispatches run validation: Python byte-compilation, shell syntax checks, and the unit test suite.
 - A full Raspberry Pi OS image build and GitHub Release publication runs when a version tag matching `vMAJOR.MINOR.PATCH` is pushed. A manual workflow dispatch can also run a non-publishing image build for cache benchmarking.
-- The tagged release job checks out the official Raspberry Pi [pi-gen](https://github.com/RPi-Distro/pi-gen) project at a fixed commit, adds the PetCam stage, builds and shrinks the image, inventories the packages in the final root filesystem, generates and validates the Raspberry Pi Imager OS sublist, packages the exact application release from the built image, signs the update manifest, and uploads the resulting assets to the GitHub Release.
+- The tagged release job checks out the official Raspberry Pi [pi-gen](https://github.com/RPi-Distro/pi-gen) project at a fixed commit, adds the PetCam stage, builds the image, inventories the packages in the final root filesystem, generates and validates the Raspberry Pi Imager OS sublist, packages the exact application release from the built image, signs the update manifest, and uploads the resulting assets to the GitHub Release.
 
 The pi-gen revision is pinned to `6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78`. This prevents upstream stage/package changes from silently changing release contents. Each release also includes a TSV inventory of installed packages (including versions and installed sizes) and a build-info file recording the pi-gen commit.
 
@@ -14,14 +14,19 @@ Running **Actions → Build PetCam OS image → Run workflow** runs validation b
 
 ### Build caches and measuring improvements
 
-The release workflow uses two independent caches:
+The release workflow uses three layers of reusable build data:
 
-- Docker Buildx's GitHub Actions cache stores layers for the pinned pi-gen build-container image. The upstream pi-gen checkout remains pinned, and the build-container layer cache is safe to miss or evict; a normal Docker build still completes from scratch.
-- `actions/cache` stores downloaded Debian `.deb` archives. The cache key includes the runner OS, Raspberry Pi OS release, pinned pi-gen revision, PetCam build configuration, and custom stage inputs. The archive directory is bind-mounted into pi-gen's package-install chroots, then detached before the final `apt-get clean` so image cleanup cannot erase the shared cache. APT still verifies package hashes and signatures; a cache miss simply downloads packages normally.
+- Docker Buildx's GitHub Actions cache stores layers for the pinned pi-gen build-container image. This avoids rebuilding the builder container, but by itself does not cache the Raspberry Pi OS target filesystem.
+- `actions/cache` stores downloaded Debian `.deb` archives. The archive directory is bind-mounted into package-install chroots and detached before target-image cleanup, so `apt-get clean` cannot erase the shared cache. APT still verifies package hashes and signatures.
+- **The stage2 root filesystem is cached as a separate, ownership-preserving tar archive.** On a warm cache hit, pi-gen restores the completed upstream `stage2/rootfs` and marks `stage0`, `stage1`, and `stage2` as skipped. The PetCam stage then copies that clean base filesystem and applies the current PetCam packages, source, configuration, and services. This avoids repeating debootstrap and the standard Raspberry Pi OS package installation on every application release.
 
-To measure the effect, manually run the workflow twice on the same branch with image benchmarking enabled and the same configuration. The first run establishes/warm-populates caches; the second run measures the warm path. Compare **pi-gen build duration seconds** in each run's **Build PetCam OS image** job summary or its `pigen-build-diagnostics-*` artifact. Also compare the APT cache bytes and `.deb` count. The full image build is the measured workload; validation-only runs do not populate either cache. GitHub may evict caches, so the build must never depend on a cache being present.
+The base-rootfs cache key includes the runner OS, Raspberry Pi OS release, pinned pi-gen revision, build configuration, and upstream stage0–stage2/scripts/Dockerfile inputs. It intentionally does not include PetCam's custom stage, so changes to PetCam do not invalidate the reusable operating-system base. The archive preserves numeric ownership, ACLs, extended attributes, hard links, and special files. A cache miss or eviction simply causes pi-gen to rebuild the base stages normally.
 
-Do not cache or restore the entire pi-gen `work/` tree at this stage. It contains large mutable root filesystems and intermediate stage state; reusing it risks stale outputs and can cost more time to transfer than rebuilding. Selective stage-output caching should be evaluated only after these measurements, with keys covering the pi-gen revision, OS release, configuration, and all relevant stage inputs.
+**Refreshing base operating-system packages:** the cache is intentionally stable so routine PetCam releases do not silently upgrade Raspberry Pi OS packages. To deliberately refresh the base OS, bump the `pigen-base-rootfs-v1` cache epoch in `.github/workflows/build-image.yml` (for example, to `v2`) and merge that change. Review the resulting installed-package inventory before publishing. This gives us an explicit OS refresh boundary instead of accidentally mixing OS updates into every application release.
+
+To measure the effect, manually run the workflow twice on the same branch with the same configuration. The first run warms the base-rootfs and APT caches; the second run should report **Base rootfs cache hit: true**. Compare **pi-gen build duration seconds** in each run's **Build PetCam OS image** job summary and the `pigen-build-diagnostics-*` artifact. The duration covers the pi-gen build, not cache restore or archive upload. GitHub may evict caches, so a cold build must always remain valid. Cache transfer and archive creation also take time; use the reported timings to decide whether the warm cache is worthwhile on the current runner.
+
+The build no longer runs PiShrink or performs a second full-image decompression/recompression pass. The standard pi-gen `.img.xz` output is published directly, and first-boot root-filesystem expansion remains enabled.
 
 ## pi-gen base package audit
 
@@ -68,7 +73,7 @@ The release workflow and the local instructions use the same pinned pi-gen commi
 
 A successful version-tag build publishes:
 
-- `petcam-os-vMAJOR.MINOR.PATCH.img.xz`: filesystem- and partition-shrunk, compressed flashable image. The first-boot root-filesystem expansion remains enabled so the installed system grows to use the target card.
+- `petcam-os-vMAJOR.MINOR.PATCH.img.xz`: standard pi-gen compressed flashable image, without a post-build shrink/recompress pass. First-boot root-filesystem expansion remains enabled so the installed system grows to use the target card.
 - `petcam-os-os-list.json`: generated Raspberry Pi Imager OS sublist.
 - `petcam-MAJOR.MINOR.PATCH-armhf.tar.gz`: versioned PetCam application archive.
 - `petcam-update-manifest.json` and `petcam-update-manifest.json.sig`: signed update metadata and detached Ed25519 signature.
