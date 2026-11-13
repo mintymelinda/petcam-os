@@ -197,6 +197,24 @@ class CameraProfileTests(unittest.TestCase):
             with self.assertRaisesRegex(MODULE.ProfileError, "already assigned to the primary"):
                 MODULE.create_profile(self.camera(), self.mode())
 
+    def test_high_performance_profile_requires_confirmation_then_starts(self):
+        camera = self.camera()
+        camera["modes"] = [{"format": "MJPG", "width": 1920, "height": 1080, "fps": [60]}]
+        mode = {"format": "MJPG", "width": 1920, "height": 1080, "fps": 60}
+        discovered = [{"device": camera["device"], "modes": camera["modes"]}]
+        with mock.patch.object(MODULE, "discover_devices", return_value=discovered):
+            with self.assertRaisesRegex(MODULE.ProfileError, "exceeds the estimated performance budget"):
+                MODULE.create_profile(camera, mode, restart_service=mock.Mock(), ready=mock.Mock(return_value=True))
+            profile = MODULE.create_profile(
+                camera, mode, restart_service=mock.Mock(), ready=mock.Mock(return_value=True),
+                allow_performance_override=True,
+            )
+        self.assertEqual(profile["resolution"], "1920x1080")
+        self.assertGreater(
+            profile["resource_budget"]["estimated_total_pixels_per_second"],
+            profile["resource_budget"]["pixel_budget_pixels_per_second"],
+        )
+
     def test_failed_stream_start_removes_partial_profile(self):
         restart = mock.Mock()
         with mock.patch.object(MODULE, "discover_devices", return_value=[
@@ -217,6 +235,35 @@ class CameraProfileTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(MODULE.ProfileError, "aggregate capture budget"):
             MODULE._check_resource_budget(candidate, [])
+
+    def test_explicit_performance_override_allows_pixel_budget_but_keeps_other_limits(self):
+        candidate = {
+            "estimated_pixels_per_second": 200_000_000,
+            "buffer_memory_bytes": 1_000_000,
+            "usb_raw_mbps": 0,
+        }
+        budget = MODULE._check_resource_budget(candidate, [], allow_performance_override=True)
+        self.assertEqual(budget["estimated_total_pixels_per_second"], 209_216_000)
+        with self.assertRaisesRegex(MODULE.ProfileError, "USB 2.0 budget"):
+            MODULE._check_resource_budget(
+                {**candidate, "usb_raw_mbps": 250}, [], allow_performance_override=True
+            )
+
+    def test_primary_mode_requires_and_accepts_explicit_performance_override(self):
+        primary = {
+            "estimated_pixels_per_second": 130_000_000,
+            "buffer_memory_bytes": 1_000_000,
+            "usb_raw_mbps": 0.0,
+        }
+        with mock.patch.object(MODULE, "validate_config", return_value={"SOURCE": "usb"}), \
+                mock.patch.object(MODULE, "_default_stream_estimate", return_value=primary), \
+                mock.patch.object(MODULE, "_load_profiles", return_value=[]):
+            with self.assertRaisesRegex(MODULE.ProfileError, "exceeds the estimated performance budget"):
+                MODULE.validate_primary_change({"SOURCE": "usb"})
+            result = MODULE.validate_primary_change(
+                {"SOURCE": "usb"}, allow_performance_override=True
+            )
+        self.assertEqual(result["estimated_total_pixels_per_second"], 130_000_000)
 
     def test_rejects_raw_usb_bandwidth_overrun(self):
         candidate = {

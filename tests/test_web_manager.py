@@ -17,6 +17,8 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("Refresh cameras", MODULE.PAGE)
         self.assertIn("Live preview", MODULE.PAGE)
         self.assertIn("Apply selected camera and mode", MODULE.PAGE)
+        self.assertIn("above device estimate", MODULE.PAGE)
+        self.assertIn("Use this mode anyway?", MODULE.PAGE)
         self.assertIn("https://www.paypal.me/kimmynightmare", MODULE.PAGE)
         self.assertIn('rel="noopener noreferrer"', MODULE.PAGE)
         self.assertIn("/api/cameras", MODULE.PAGE)
@@ -150,9 +152,24 @@ class WebManagerTests(unittest.TestCase):
                     "kind": "usb", "device": "/dev/video0",
                     "modes": [{"width": 640, "height": 480, "fps": [30], "format": "MJPG"}],
                 },
+                allow_performance_override=False,
             )
         finally:
             MODULE.camera_inventory = original
+
+    def test_performance_override_is_forwarded_to_primary_configuration(self):
+        camera = {
+            "kind": "usb", "id": "usb-fast", "device": "/dev/video0",
+            "modes": [{"width": 1920, "height": 1080, "fps": [60], "format": "MJPG"}],
+        }
+        with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \
+                mock.patch.object(MODULE, "apply_primary_config") as apply:
+            MODULE.save_selection({
+                "kind": "usb", "camera_id": "usb-fast",
+                "mode": {"width": 1920, "height": 1080, "fps": 60, "format": "MJPG"},
+                "allow_performance_override": True,
+            })
+        self.assertTrue(apply.call_args.kwargs["allow_performance_override"])
 
     def test_primary_usb_selection_persists_physical_topology(self):
         physical_path = "/sys/devices/platform/soc/usb1/1-1/1-1.2"
@@ -220,6 +237,15 @@ class WebManagerTests(unittest.TestCase):
         self.assertEqual(len(cameras), 2)
         self.assertTrue(cameras[0]["stable_identity"])
         self.assertEqual(cameras[1]["id"], "csi-imx708-0")
+        self.assertIn(cameras[0]["hardware_tier"], MODULE.PIXEL_BUDGETS)
+        self.assertEqual(
+            cameras[0]["hardware_budget_pixels_per_second"],
+            MODULE.PIXEL_BUDGETS[cameras[0]["hardware_tier"]],
+        )
+        self.assertEqual(
+            cameras[1]["hardware_budget_pixels_per_second"],
+            cameras[0]["hardware_budget_pixels_per_second"],
+        )
 
     def test_invalid_capture_values_are_rejected(self):
         for mode in (
