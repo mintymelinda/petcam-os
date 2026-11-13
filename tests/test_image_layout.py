@@ -59,15 +59,18 @@ class ImageLayoutTests(unittest.TestCase):
         configure_script = CONFIGURE.read_text()
         packages = BASE_PACKAGES.read_text().splitlines()
         self.assertIn(
+            "USTREAMER_COMMIT=\"11fd828ab00c01a39bd0843ef442ef0b6d3cac41\"",
+            build_script,
+        )
+        self.assertIn(
             "git -C \"$SOURCE_DIR\" fetch --depth 1 "
-            "https://github.com/pikvm/ustreamer.git "
-            "11fd828ab00c01a39bd0843ef442ef0b6d3cac41",
+            "https://github.com/pikvm/ustreamer.git \"$USTREAMER_COMMIT\"",
             build_script,
         )
         self.assertIn('make -C "$SOURCE_DIR" -j"$(nproc)"', build_script)
         self.assertIn('PREFIX="/opt/petcam/ustreamer"', build_script)
-        self.assertIn("build-essential", packages)
-        self.assertIn("pkg-config", packages)
+        self.assertNotIn("build-essential", packages)
+        self.assertNotIn("pkg-config", packages)
         self.assertIn('cp -a /opt/petcam/ustreamer/.', configure_script)
         self.assertNotIn("git -C /opt/ustreamer fetch", configure_script)
         script = configure_script
