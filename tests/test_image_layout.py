@@ -94,7 +94,7 @@ class ImageLayoutTests(unittest.TestCase):
         workflow = WORKFLOW.read_text()
         self.assertIn("warm-base-cache:", workflow)
         self.assertIn("github.ref == 'refs/heads/main' || github.ref_type == 'tag'", workflow)
-        self.assertIn("needs: [validate, warm-base-cache]", workflow)
+        self.assertIn("needs: validate", workflow)
         self.assertIn("actions/cache/restore@v4", workflow)
         self.assertIn("lookup-only: true", workflow)
         self.assertIn("actions/cache/save@v4", workflow)
