@@ -18,11 +18,11 @@ The release workflow uses three layers of reusable build data:
 
 - Docker Buildx's GitHub Actions cache stores layers for the pinned pi-gen build-container image. This avoids rebuilding the builder container, but by itself does not cache the Raspberry Pi OS target filesystem.
 - `actions/cache` stores downloaded Debian `.deb` archives. The archive directory is bind-mounted into package-install chroots and detached before target-image cleanup, so `apt-get clean` cannot erase the shared cache. APT still verifies package hashes and signatures.
-- **The stage2 root filesystem is cached as a separate, ownership-preserving tar archive.** On a warm cache hit, pi-gen restores the completed upstream `stage2/rootfs` and marks `stage0`, `stage1`, and `stage2` as skipped. The PetCam stage then copies that clean base filesystem and applies the current PetCam packages, source, configuration, and services. This avoids repeating debootstrap and the standard Raspberry Pi OS package installation on every application release.
+- **The prepared package base root filesystem is cached as a separate, ownership-preserving tar archive.** A dedicated `stage-petcam-base` installs the stable PetCam build/runtime package list after upstream `stage2`. On a warm cache hit, pi-gen restores `stage-petcam-base/rootfs` and skips `stage0`, `stage1`, `stage2`, and `stage-petcam-base`. The frequently changing `stage-petcam` then copies that prepared base and applies the current application source, configuration, µStreamer build, and services. This avoids repeating debootstrap and both upstream and PetCam package installation on routine application releases.
 
-The base-rootfs cache key includes the runner OS, Raspberry Pi OS release, pinned pi-gen revision, build configuration, and upstream stage0–stage2/scripts/Dockerfile inputs. It intentionally does not include PetCam's custom stage, so changes to PetCam do not invalidate the reusable operating-system base. The archive preserves numeric ownership, ACLs, extended attributes, hard links, and special files. A cache miss or eviction simply causes pi-gen to rebuild the base stages normally.
+The base-rootfs cache key includes the runner OS, Raspberry Pi OS release, pinned pi-gen revision, build configuration, and upstream stage0–stage2/scripts/Dockerfile inputs and the stable `stage-petcam-base` package stage. It intentionally does not include PetCam's custom stage, so changes to PetCam do not invalidate the reusable operating-system base. The archive preserves numeric ownership, ACLs, extended attributes, hard links, and special files. A cache miss or eviction simply causes pi-gen to rebuild the base stages normally.
 
-**Refreshing base operating-system packages:** the cache is intentionally stable so routine PetCam releases do not silently upgrade Raspberry Pi OS packages. To deliberately refresh the base OS, bump the `pigen-base-rootfs-v1` cache epoch in `.github/workflows/build-image.yml` (for example, to `v2`) and merge that change. Review the resulting installed-package inventory before publishing. This gives us an explicit OS refresh boundary instead of accidentally mixing OS updates into every application release.
+**Refreshing base operating-system packages:** the cache is intentionally stable so routine PetCam releases do not silently upgrade Raspberry Pi OS packages. To deliberately refresh the base OS and stable package versions, bump the `pigen-base-rootfs-v1` cache epoch in `.github/workflows/build-image.yml` (for example, to `v2`) and merge that change. Review the resulting installed-package inventory before publishing. This gives us an explicit OS refresh boundary instead of accidentally mixing OS updates into every application release.
 
 To measure the effect for releases, manually run the workflow twice on `main` with the same configuration. GitHub Actions makes default-branch caches available to tag builds; a cache created only on a feature branch is not guaranteed to be available to a release tag. The first run warms the base-rootfs and APT caches; the second run should report **Base rootfs cache hit: true**. Compare **pi-gen build duration seconds** in each run's **Build PetCam OS image** job summary and the `pigen-build-diagnostics-*` artifact. The duration covers the pi-gen build, not cache restore or archive upload. GitHub may evict caches, so a cold build must always remain valid. Cache transfer and archive creation also take time; use the reported timings to decide whether the warm cache is worthwhile on the current runner.
 
@@ -38,7 +38,7 @@ PetCam currently builds on the standard `stage0`, `stage1`, and `stage2` stages.
 - Stage 2's `00-packages-nr` installs `rpicam-apps-lite` without recommended packages.
 - Stage 2's networking and cloud-init stages provide NetworkManager, Wi-Fi support, and the enabled cloud-init integration.
 
-The PetCam package list therefore avoids repeating `avahi-daemon`, `build-essential`, `pkg-config`, `v4l-utils`, `python3-minimal`, and `rpicam-apps-lite`. The custom stage still explicitly installs its own build dependencies and application dependencies, including Git, the µStreamer development libraries, OpenSSL, and Pillow.
+The PetCam package list therefore avoids repeating `avahi-daemon`, `build-essential`, `pkg-config`, `v4l-utils`, `python3-minimal`, and `rpicam-apps-lite`. The cached `stage-petcam-base` explicitly installs the build dependencies and application dependencies, including Git, the µStreamer development libraries, OpenSSL, and Pillow.
 
 `avahi-utils` is deliberately retained even though the current application does not invoke its command-line tools. It provides useful `avahi-browse` and `avahi-resolve` commands for future mDNS and service-discovery diagnostics.
 
@@ -53,9 +53,9 @@ git clone https://github.com/RPi-Distro/pi-gen.git
 git -C pi-gen checkout 6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78
 git clone https://github.com/mintymelinda/petcam-os.git
 cp petcam-os/config pi-gen/config
-cp -a petcam-os/stage-petcam pi-gen/stage-petcam
+cp -a petcam-os/stage-petcam-base pi-gen/stage-petcam-base\ncp -a petcam-os/stage-petcam pi-gen/stage-petcam
 touch pi-gen/stage2/SKIP_IMAGES
-chmod 0755 pi-gen/stage-petcam/prerun.sh
+chmod 0755 pi-gen/stage-petcam-base/prerun.sh\nchmod 0755 pi-gen/stage-petcam/prerun.sh
 chmod 0755 pi-gen/stage-petcam/00-install-files/00-run.sh
 
 cd petcam-os
