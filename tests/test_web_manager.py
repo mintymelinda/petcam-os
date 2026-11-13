@@ -26,6 +26,8 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn('id="panel-system"', MODULE.PAGE)
         self.assertIn("activateTab", MODULE.PAGE)
         self.assertIn("Apply selected camera and mode", MODULE.PAGE)
+        self.assertIn('" · Available: "+control.menu.map(option=>option.label).join(", ")', MODULE.PAGE)
+        self.assertIn('(control.min!==null&&control.max!==null?" · Range: "', MODULE.PAGE)
         self.assertIn("above device estimate", MODULE.PAGE)
         self.assertIn("Use this mode anyway?", MODULE.PAGE)
         self.assertIn("https://www.paypal.me/kimmynightmare", MODULE.PAGE)
