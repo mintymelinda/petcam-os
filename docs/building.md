@@ -30,7 +30,7 @@ The build no longer runs PiShrink or performs a second full-image decompression/
 
 ## pi-gen base package audit
 
-PetCam currently builds on the standard `stage0`, `stage1`, and `stage2` stages. The pinned upstream revision already supplies several packages that the custom stage used to repeat:
+PetCam's prepared package base starts with the standard `stage0`, `stage1`, and `stage2` stages, then installs its stable package set in `stage-petcam-base` before the application stage. The pinned upstream revision already supplies several packages that the custom stage used to repeat:
 
 - Stage 0 provides locale setup, Raspberry Pi firmware/kernel packages, and bootstrap certificates.
 - Stage 1 supplies Raspberry Pi configuration, network base data, and time synchronisation.
