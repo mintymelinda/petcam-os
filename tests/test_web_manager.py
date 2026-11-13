@@ -17,10 +17,11 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("Refresh cameras", MODULE.PAGE)
         self.assertIn("Live preview", MODULE.PAGE)
         self.assertIn('role="tablist"', MODULE.PAGE)
-        self.assertLess(MODULE.PAGE.index(">Live</button>"), MODULE.PAGE.index(">OBS</button>"))
-        self.assertLess(MODULE.PAGE.index(">OBS</button>"), MODULE.PAGE.index(">Camera Settings</button>"))
-        self.assertLess(MODULE.PAGE.index(">Camera Settings</button>"), MODULE.PAGE.index(">Streams</button>"))
-        self.assertLess(MODULE.PAGE.index(">Streams</button>"), MODULE.PAGE.index(">System</button>"))
+        self.assertLess(MODULE.PAGE.index(">Live</button>"), MODULE.PAGE.index(">Camera Settings</button>"))
+        self.assertLess(MODULE.PAGE.index(">Camera Settings</button>"), MODULE.PAGE.index(">System</button>"))
+        self.assertNotIn(">OBS</button>", MODULE.PAGE)
+        self.assertNotIn(">Streams</button>", MODULE.PAGE)
+        self.assertIn('id="copy-browser-source" type="button">URL Browser Source</button>', MODULE.PAGE)
         self.assertIn('id="panel-camera-settings"', MODULE.PAGE)
         self.assertIn('id="panel-system"', MODULE.PAGE)
         self.assertIn("activateTab", MODULE.PAGE)
@@ -37,12 +38,9 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("/api/update/check", MODULE.PAGE)
         self.assertIn("/api/update/install", MODULE.PAGE)
         self.assertIn("/api/update/status", MODULE.PAGE)
-        self.assertIn("Configure stream", MODULE.PAGE)
-        self.assertIn("Add independent stream", MODULE.PAGE)
-        self.assertIn("Camera streams", MODULE.PAGE)
-        self.assertIn("/api/streams/configure", MODULE.PAGE)
-        self.assertIn("/api/streams/remove", MODULE.PAGE)
-        self.assertIn("stream_path", MODULE.PAGE)
+        self.assertNotIn("/api/streams", MODULE.PAGE)
+        self.assertNotIn("stream_path", MODULE.PAGE)
+        self.assertNotIn("OBS browser source", MODULE.PAGE)
         self.assertIn("Network and OBS diagnostics", MODULE.PAGE)
         self.assertIn("/api/diagnostics", MODULE.PAGE)
         self.assertIn("/api/support-bundle", MODULE.PAGE)
@@ -350,11 +348,12 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("configured:", MODULE.PAGE)
         self.assertIn("actual ", MODULE.PAGE)
 
-    def test_camera_performance_warning_accounts_for_all_streams(self):
+    def test_camera_performance_warning_uses_single_capture_budget(self):
         self.assertIn("projectedPixelRate", MODULE.PAGE)
         self.assertIn("resourceBudget", MODULE.PAGE)
-        self.assertIn("aggregate pixels/second", MODULE.PAGE)
-        self.assertIn("primary_estimated_pixels_per_second", MODULE.PAGE)
+        self.assertIn("pixels/second", MODULE.PAGE)
+        self.assertNotIn("aggregate pixels/second", MODULE.PAGE)
+        self.assertNotIn("primary_estimated_pixels_per_second", MODULE.PAGE)
 
     def test_active_camera_config_returns_only_selection_fields(self):
         config = {
@@ -607,3 +606,19 @@ exposure_dynamic_framerate 0x009a0903 (bool) : default=0 value=1
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CameraIdentityTests(unittest.TestCase):
+    def test_usb_camera_identity_prefers_physical_path(self):
+        camera = {"kind": "usb", "device": "/dev/video4", "physical_path": "/sys/devices/usb1/1-1"}
+        identity = MODULE.camera_identity(camera)
+        self.assertTrue(identity["stable_identity"])
+        self.assertEqual(identity["id"], MODULE.camera_identity({
+            **camera, "device": "/dev/video7",
+        })["id"])
+
+    def test_csi_camera_identity_uses_device_tree_path_when_available(self):
+        camera = {"kind": "csi", "camera": 0, "sensor": "IMX219", "device_path": "/sys/firmware/devicetree/base/cam0"}
+        identity = MODULE.camera_identity(camera)
+        self.assertTrue(identity["stable_identity"])
+        self.assertTrue(identity["id"].startswith("csi-"))
