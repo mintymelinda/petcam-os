@@ -362,7 +362,7 @@ exposure_dynamic_framerate 0x009a0903 (bool) : default=0 value=1
             "DEVICE": "",
             "USB_PHYSICAL_PATH": "/sys/devices/usb1/1-1.2",
         }
-        with mock.patch.object(MODULE, "active_camera_config", return_value=config), \\
+        with mock.patch.object(MODULE, "active_camera_config", return_value=config), \
                 mock.patch.object(MODULE, "camera_inventory", return_value=[camera]):
             self.assertEqual(MODULE.active_usb_camera(), camera)
 
@@ -396,8 +396,8 @@ exposure_dynamic_framerate 0x009a0903 (bool) : default=0 value=1
         }
         snapshot = {"supported": True, "controls": [control]}
         completed = mock.Mock(returncode=0, stdout="", stderr="")
-        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \\
-                mock.patch.object(MODULE, "read_camera_controls", side_effect=[snapshot, snapshot]), \\
+        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \
+                mock.patch.object(MODULE, "read_camera_controls", side_effect=[snapshot, snapshot]), \
                 mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run:
             result = MODULE.set_camera_control({"name": "brightness", "value": 200})
         self.assertEqual(result, snapshot)
@@ -413,8 +413,8 @@ exposure_dynamic_framerate 0x009a0903 (bool) : default=0 value=1
         }
         snapshot = {"supported": True, "controls": [control]}
         completed = mock.Mock(returncode=0, stdout="", stderr="")
-        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \\
-                mock.patch.object(MODULE, "read_camera_controls", side_effect=[snapshot, snapshot]), \\
+        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \
+                mock.patch.object(MODULE, "read_camera_controls", side_effect=[snapshot, snapshot]), \
                 mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run:
             MODULE.set_camera_control({"name": "exposure_dynamic_framerate", "value": False})
         self.assertTrue(run.call_args.args[0][-1].endswith("=0"))
@@ -425,10 +425,10 @@ exposure_dynamic_framerate 0x009a0903 (bool) : default=0 value=1
             "name": "power_line_frequency", "type": "menu", "min": 0, "max": 2,
             "step": 1, "menu": [{"value": 0, "label": "Disabled"}], "writable": True,
         }
-        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \\
+        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \
                 mock.patch.object(MODULE, "read_camera_controls", return_value={
                     "supported": True, "controls": [control],
-                }), \\
+                }), \
                 mock.patch.object(MODULE.subprocess, "run") as run:
             with self.assertRaisesRegex(ValueError, "not an advertised menu option"):
                 MODULE.set_camera_control({"name": "power_line_frequency", "value": 2})
@@ -440,19 +440,19 @@ exposure_dynamic_framerate 0x009a0903 (bool) : default=0 value=1
             "name": "brightness", "type": "int", "min": 0, "max": 255,
             "step": 1, "menu": [], "writable": True,
         }
-        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \\
+        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \
                 mock.patch.object(MODULE, "read_camera_controls", return_value={
                     "supported": True, "controls": [control],
-                }), \\
+                }), \
                 mock.patch.object(MODULE.subprocess, "run") as run:
             with self.assertRaisesRegex(ValueError, "above the supported maximum"):
                 MODULE.set_camera_control({"name": "brightness", "value": 300})
         run.assert_not_called()
         control["writable"] = False
-        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \\
+        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \
                 mock.patch.object(MODULE, "read_camera_controls", return_value={
                     "supported": True, "controls": [control],
-                }), \\
+                }), \
                 mock.patch.object(MODULE.subprocess, "run") as run:
             with self.assertRaisesRegex(ValueError, "inactive or read-only"):
                 MODULE.set_camera_control({"name": "brightness", "value": 100})
@@ -462,7 +462,7 @@ exposure_dynamic_framerate 0x009a0903 (bool) : default=0 value=1
         self.assertIn('id="camera-controls-list"', MODULE.PAGE)
         self.assertIn("/api/camera-controls", MODULE.PAGE)
         self.assertIn("Dynamic framerate", MODULE.PAGE)
-        self.assertIn("actual captured frame rate", MODULE.PAGE)
+        self.assertIn("actual captured FPS", MODULE.PAGE)
 
 
 if __name__ == "__main__":
