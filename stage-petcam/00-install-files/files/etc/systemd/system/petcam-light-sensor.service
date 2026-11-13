@@ -1,0 +1,28 @@
+[Unit]
+Description=PetCam TSL2591 ambient light sensor
+After=local-fs.target
+
+[Service]
+Type=simple
+User=petcam
+Group=petcam
+SupplementaryGroups=i2c
+StateDirectory=petcam
+StateDirectoryMode=0750
+ExecStart=/usr/bin/python3 /opt/petcam/current/lib/light_sensor.py
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/petcam
+RestrictAddressFamilies=AF_UNIX
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
