@@ -67,12 +67,12 @@ class BuildCacheContractTests(unittest.TestCase):
         self.assertIn("pigen-build-diagnostics-", workflow)
 
     def test_shared_apt_archive_cache_is_detached_before_target_cleanup(self):
-        cleanup = (ROOT / "stage-petcam/02-configure-petcam/00-run-chroot.sh").read_text(encoding="utf-8")
+        cleanup = (ROOT / "stage-petcam-base/02-build-ustreamer/00-run-chroot.sh").read_text(encoding="utf-8")
         self.assertIn("umount /var/cache/apt/archives", cleanup)
         self.assertLess(cleanup.index("umount /var/cache/apt/archives"), cleanup.index("apt-get clean"))
 
     def test_runtime_library_cleanup_resolves_symlinks_and_fails_closed(self):
-        cleanup = (ROOT / "stage-petcam/02-configure-petcam/00-run-chroot.sh").read_text(encoding="utf-8")
+        cleanup = (ROOT / "stage-petcam-base/02-build-ustreamer/00-run-chroot.sh").read_text(encoding="utf-8")
         self.assertIn('readlink -f "$library"', cleanup)
         self.assertIn("Unable to identify the Debian package owning runtime library", cleanup)
         self.assertIn('apt-mark manual "$package"', cleanup)
