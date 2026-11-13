@@ -6,3 +6,4 @@ libbsd-dev
 libv4l-dev
 openssl
 python3-pil
+i2c-tools

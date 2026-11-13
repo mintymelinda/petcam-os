@@ -21,6 +21,7 @@ from camera import PIXEL_BUDGETS, USTREAMER_FORMATS, camera_identity, mode_suppo
 from network_diagnostics import collect_diagnostics, create_support_bundle
 from timelapse import load_config as load_timelapse_config, save_config as save_timelapse_config, state_snapshot as timelapse_snapshot
 from motion_detection import load_config as load_motion_config, save_config as save_motion_config, state_snapshot as motion_snapshot, FRAMES as MOTION_FRAMES
+from light_sensor import load_config as load_light_config, save_config as save_light_config, read_status as light_sensor_status
 from web_auth import SESSION_TTL, get_session, initialize_password, invalidate_session, is_configured, new_session, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
@@ -96,6 +97,13 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <p class="muted">Motion samples reuse the active camera MJPEG stream. Frames are reduced to 160×120 grayscale for comparison; no second camera process or continuous video recording is used. The worker runs with a strict CPU and memory limit. Disabled by default.</p>
 <div class="row"><button id="save-motion">Save motion settings</button></div>
 <h3>Recent motion events</h3><div id="motion-events" class="muted">No motion events recorded.</div></section>
+<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Ambient light sensor</h2><button id="refresh-light-sensor" type="button">Refresh status</button></div>
+<p id="light-sensor-status" role="status">Loading light sensor status…</p>
+<label style="display:flex;gap:.5rem;align-items:center"><input id="light-sensor-enabled" type="checkbox"> Enable TSL2591 light sensor</label>
+<label for="light-bright-threshold">Bright threshold (lux)</label><input id="light-bright-threshold" type="number" min="0.01" max="100000" step="0.1" value="100">
+<label for="light-dark-threshold">Dark threshold (lux)</label><input id="light-dark-threshold" type="number" min="0" max="99999" step="0.1" value="30">
+<p class="muted">Connect over I²C using SDA, SCL, 3.3V and GND. Bright is reached at or above its threshold; dark is reached at or below its threshold. Between thresholds, the previous state is retained to prevent flicker.</p>
+<div class="row"><button id="save-light-sensor" type="button">Save light sensor settings</button></div></section>
 </div>
 <div id="panel-system" class="tab-panel" role="tabpanel" aria-labelledby="tab-system" tabindex="0" hidden>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Network and OBS diagnostics</h2><button id="refresh-diagnostics">Run checks</button></div><p id="diagnostic-summary" role="status">Diagnostics have not been run yet.</p><p id="diagnostic-details" class="muted"></p><div class="row"><button id="download-support-bundle">Download redacted support bundle</button></div></section>
@@ -204,6 +212,11 @@ for(const event of s.events){const row=document.createElement("div"),img=documen
 $("refresh-motion").onclick=refreshMotion;
 $("save-motion").onclick=async()=>{const b=$("save-motion");b.disabled=true;try{await request("/api/motion",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:$("motion-enabled").checked,sensitivity:Number($("motion-sensitivity").value),minimum_changed_percent:Number($("motion-min-change").value),sample_interval_seconds:Number($("motion-sample").value),confirm_samples:Number($("motion-confirm").value),min_event_interval_seconds:Number($("motion-cooldown").value),quiet_hours_enabled:$("motion-quiet-enabled").checked,quiet_hours_start:$("motion-quiet-start").value,quiet_hours_end:$("motion-quiet-end").value,retention_days:Number($("motion-retention").value),max_storage_mb:Number($("motion-storage").value),min_free_mb:Number($("motion-free").value)})});await refreshMotion()}catch(e){$("motion-status").textContent=e.message}finally{b.disabled=false}};
 refreshMotion();setInterval(refreshMotion,15000);
+async function refreshLightSensor(){try{const d=await request("/api/light-sensor"),c=d.config,s=d.status;$("light-sensor-enabled").checked=c.ENABLED;$("light-bright-threshold").value=c.BRIGHT_THRESHOLD_LUX;$("light-dark-threshold").value=c.DARK_THRESHOLD_LUX;const reading=s.illuminance_lux===undefined?"No lux reading":s.illuminance_lux+" lx";$("light-sensor-status").textContent="Status: "+s.state+" · "+reading+(s.error?" · "+s.error:"")}catch(e){$("light-sensor-status").textContent="Light sensor status unavailable: "+e.message}}
+$("refresh-light-sensor").onclick=refreshLightSensor;
+$("save-light-sensor").onclick=async()=>{const b=$("save-light-sensor");b.disabled=true;try{await request("/api/light-sensor",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ENABLED:$("light-sensor-enabled").checked,BRIGHT_THRESHOLD_LUX:Number($("light-bright-threshold").value),DARK_THRESHOLD_LUX:Number($("light-dark-threshold").value)})});await refreshLightSensor()}catch(e){$("light-sensor-status").textContent=e.message}finally{b.disabled=false}};
+refreshLightSensor();setInterval(refreshLightSensor,10000);
+
 
 async function refreshDiagnostics(){try{const d=await request("/api/diagnostics");const layers=d.layers||{};const failed=Object.entries(layers).filter(([k,v])=>v&&(v.healthy===false||v.reachable===false||v.resolved===false||v.available===false));$("diagnostic-summary").textContent=failed.length?failed.map(([k])=>k.replaceAll("_"," ")+": attention needed").join(" · "):"Local camera, listener, and network checks look healthy.";const urls=(d.obs_browser_source_urls||[]).join("\n");$("diagnostic-details").textContent="OBS URL(s): "+urls+"\n"+(d.problems||[]).join("\n")+"\n"+d.remote_client_note}catch(e){$("diagnostic-summary").textContent="Diagnostics unavailable: "+e.message}}$("refresh-diagnostics").onclick=refreshDiagnostics;refreshDiagnostics();
 $("download-support-bundle").onclick=async()=>{const b=$("download-support-bundle");b.disabled=true;try{let r=await fetch("/api/support-bundle");if(r.status===401){await login();r=await fetch("/api/support-bundle")}if(!r.ok)throw Error("Support bundle request failed ("+r.status+")");const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="petcam-support.tar.gz";document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url)}catch(e){$("diagnostic-summary").textContent="Support bundle failed: "+e.message}finally{b.disabled=false}};
@@ -693,6 +706,12 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as error:
                 self.send_json(503, {"error": str(error)})
             return
+        if path == "/api/light-sensor":
+            try:
+                self.send_json(200, {"config": load_light_config(), "status": light_sensor_status()})
+            except Exception as error:
+                self.send_json(503, {"error": str(error)})
+            return
         if path.startswith("/api/motion/events/"):
             filename = path.rsplit("/", 1)[-1]
             if not re.fullmatch(r"[0-9]{8}T[0-9]{6}\.[0-9]{6}Z(?:-[0-9]{3})?\.jpg", filename):
@@ -840,6 +859,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/motion":
                 current = load_motion_config()
                 updated = save_motion_config({**current, **data})
+                self.send_json(200, {"ok": True, "config": updated})
+                return
+            if path == "/api/light-sensor":
+                updated = save_light_config(data)
                 self.send_json(200, {"ok": True, "config": updated})
                 return
             if path == "/api/logout":

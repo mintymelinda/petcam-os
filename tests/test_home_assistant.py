@@ -191,6 +191,15 @@ class HomeAssistantMQTTTests(unittest.TestCase):
         self.assertEqual(snapshot["active_mode"], "1280x720 @ 30 fps · MJPG")
         self.assertEqual(snapshot["stream_url"], "http://petcam.local:8080/stream")
 
+    def test_snapshot_publishes_tsl2591_state_and_illuminance(self):
+        config = {"SOURCE": "usb", "RESOLUTION": "auto", "FPS": "auto", "FORMAT": "auto"}
+        with mock.patch.object(MODULE.subprocess, "run", return_value=mock.Mock(returncode=0, stdout="active\\n")):
+            with mock.patch.object(MODULE, "_read_json", return_value={"state": "bright", "available": True, "illuminance_lux": 143.5}):
+                snapshot = MODULE.collect_snapshot(config, {"state": "healthy"})
+        self.assertEqual(snapshot["ambient_light"], "BRIGHT")
+        self.assertEqual(snapshot["illuminance"], "143.5")
+        self.assertTrue(any(entity["object_id"] == "ambient_light" for entity in MODULE.ENTITIES))
+        self.assertTrue(any(entity["object_id"] == "illuminance" and entity.get("unit_of_measurement") == "lx" for entity in MODULE.ENTITIES))
     def test_disconnected_camera_remains_available_but_stream_is_not_ready(self):
         config = {"SOURCE": "usb", "RESOLUTION": "auto", "FPS": "auto", "FORMAT": "auto"}
         with mock.patch.object(MODULE.subprocess, "run", return_value=mock.Mock(returncode=0, stdout="active\n")):
