@@ -222,7 +222,7 @@ jobs:
           # Cache the prepared OS and stable package rootfs for subsequent builds. Tar preserves
           # numeric ownership, ACLs, xattrs, hardlinks, and device metadata.
           if [[ "${{ steps.base-rootfs-cache.outputs.cache-hit }}" != "true" ]]; then
-            sudo tar --numeric-owner --xattrs --acls -cpf "${RUNNER_TEMP}/pigen-base-rootfs.tar" -C "${RUNNER_TEMP}/pigen-work" stage-petcam-base/rootfs
+            sudo tar --numeric-owner --xattrs --acls -cpf "${RUNNER_TEMP}/pigen-base-rootfs.tar" -C "${RUNNER_TEMP}/pigen-work" PetCamOS/stage-petcam-base/rootfs
             sudo chown "$(id -u):$(id -g)" "${RUNNER_TEMP}/pigen-base-rootfs.tar"
             chmod 0644 "${RUNNER_TEMP}/pigen-base-rootfs.tar"
           fi
