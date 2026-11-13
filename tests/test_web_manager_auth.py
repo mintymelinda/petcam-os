@@ -91,6 +91,12 @@ class WebManagerRouteAuthenticationTests(unittest.TestCase):
         csrf = json.loads(payload)["csrf_token"]
         return cookie, csrf
 
+    def test_post_update_login_field_is_explicitly_masked(self):
+        page = MANAGER.PAGE
+        self.assertIn('id="login-password" type="password"', page)
+        self.assertIn("#login-password{-webkit-text-security:disc!important}", page)
+        self.assertIn('password.setAttribute("type","password");password.type="password"', page)
+
     def test_management_api_rejects_unauthenticated_clients(self):
         status, _, payload = self.request("GET", "/api/cameras")
         self.assertEqual(status, 401)
