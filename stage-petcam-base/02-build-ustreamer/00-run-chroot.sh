@@ -37,7 +37,7 @@ index 0000000..0000000 100644
 -	TPF(denominator) = -1; // Request maximum possible FPS
 +	TPF(denominator) = cap->hw_fps > 0 ? cap->hw_fps : (uint)-1;
 +	// A zero hw_fps preserves the upstream maximum-FPS behavior.
-
+ 
  	if (us_xioctl(run->fd, VIDIOC_S_PARM, &setfps) < 0) {
  		_LOG_PERROR("Can't set HW FPS");
 
@@ -53,12 +53,14 @@ index 0000000..0000000 100644
  	_O_FORMAT_SWAP_RGB,
  	_O_M2M_DEVICE,
  	_O_MEDIA_DEVICE,
+ 	_O_MEDIA_ENTITY_NAME,
 @@ -139,3 +140,4 @@ static const struct option _LONG_OPTS[] = {
  	{"io-method",				required_argument,	NULL,	_O_IO_METHOD},
  	{"desired-fps",				required_argument,	NULL,	_O_DESIRED_FPS},
 +	{"hw-fps",				required_argument,	NULL,	_O_HW_FPS},
  	{"min-frame-size",			required_argument,	NULL,	_O_MIN_FRAME_SIZE},
-@@ -451,3 +453,4 @@ 			case _O_IO_METHOD:			OPT_PARSE_ENUM("IO method", cap->io_method, us_capture_parse_io_method, US_IO_METHODS_STR);
+@@ -451,4 +453,5 @@ 			case _O_IO_METHOD:			OPT_PARSE_ENUM("IO method", cap->io_method, us_capture_parse_io_method, US_IO_METHODS_STR);
+ 			case _O_IO_METHOD:			OPT_PARSE_ENUM("IO method", cap->io_method, us_capture_parse_io_method, US_IO_METHODS_STR);
  			case _O_DESIRED_FPS:		OPT_NUMBER("--desired-fps", stream->desired_fps, 0, US_VIDEO_MAX_FPS, 0);
 +			case _O_HW_FPS:			OPT_NUMBER("--hw-fps", cap->hw_fps, 0, US_VIDEO_MAX_FPS, 0);
  			case _O_MIN_FRAME_SIZE:		OPT_NUMBER("--min-frame-size", cap->min_frame_size, 1, 8192, 0);
