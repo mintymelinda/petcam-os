@@ -210,7 +210,7 @@ def current_version() -> str | None:
     return value
 
 
-def release_manifest_candidates(manifest_url: str) -> list[dict[str, object]]:
+def release_manifest_candidates(manifest_url: str, key_path: Path) -> list[dict[str, object]]:
     """Find independently verifiable manifests in recent published GitHub releases."""
     parsed = urllib.parse.urlparse(manifest_url)
     match = re.fullmatch(
