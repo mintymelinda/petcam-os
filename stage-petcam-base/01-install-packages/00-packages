@@ -1,5 +1,7 @@
 avahi-utils
+build-essential
 git
+pkg-config
 libevent-dev
 libjpeg-dev
 libbsd-dev
