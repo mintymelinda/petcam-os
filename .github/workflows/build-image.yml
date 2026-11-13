@@ -65,7 +65,7 @@ jobs:
         run: python3 -m unittest discover -s tests -v
 
   release:
-    name: Build and publish release image
+    name: Build Raspberry Pi OS image
     if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.build_image)
     needs: validate
     runs-on: ubuntu-24.04
