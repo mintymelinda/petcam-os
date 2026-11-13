@@ -43,7 +43,7 @@ USB modes are discovered through V4L2. CSI cameras and advertised sensor modes a
 
 PetCam uses the official [Raspberry Pi pi-gen](https://github.com/RPi-Distro/pi-gen) build system. Docker is used on the build host; Docker is not installed on the Pi.
 
-The GitHub Actions workflow validates Python and shell syntax and runs the unit test suite for pull requests, pushes to `main`, and manual workflow dispatches. A full image build and publication happens for version tags matching `vMAJOR.MINOR.PATCH`. Tagged builds remove build-only packages and caches, shrink the root filesystem and partition, and recompress the image while retaining first-boot expansion. Releases publish that optimized image, the generated Raspberry Pi Imager OS sublist, and signed application-update assets. See [docs/building.md](docs/building.md) for the exact workflow and local build instructions.
+The GitHub Actions workflow validates Python and shell syntax and runs the unit test suite for pull requests, pushes to `main`, and manual workflow dispatches. A full image build and publication happens for version tags matching `vMAJOR.MINOR.PATCH`. Tagged builds remove build-only packages and caches, then publish pi-gen's compressed image directly with first-boot root-filesystem expansion retained. Releases publish that optimized image, the generated Raspberry Pi Imager OS sublist, and signed application-update assets. See [docs/building.md](docs/building.md) for the exact workflow and local build instructions.
 
 The image installs PetCam application files into versioned releases under `/opt/petcam/releases/`, with `/opt/petcam/current` selecting the active release. Device configuration and runtime data live outside that versioned tree.
 
