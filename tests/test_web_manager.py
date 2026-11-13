@@ -350,7 +350,8 @@ class WebManagerTests(unittest.TestCase):
 
     def test_camera_performance_warning_uses_single_capture_budget(self):
         self.assertIn("projectedPixelRate", MODULE.PAGE)
-        self.assertIn("resourceBudget", MODULE.PAGE)
+        self.assertIn("hardware_budget_pixels_per_second", MODULE.PAGE)
+        self.assertIn("exceedsPerformanceBudget", MODULE.PAGE)
         self.assertIn("pixels/second", MODULE.PAGE)
         self.assertNotIn("aggregate pixels/second", MODULE.PAGE)
         self.assertNotIn("primary_estimated_pixels_per_second", MODULE.PAGE)
@@ -604,10 +605,6 @@ exposure_dynamic_framerate 0x009a0903 (bool) : default=0 value=1
         self.assertIn('document.createElement("select")', MODULE.PAGE)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class CameraIdentityTests(unittest.TestCase):
     def test_usb_camera_identity_prefers_physical_path(self):
         camera = {"kind": "usb", "device": "/dev/video4", "physical_path": "/sys/devices/usb1/1-1"}
@@ -622,3 +619,7 @@ class CameraIdentityTests(unittest.TestCase):
         identity = MODULE.camera_identity(camera)
         self.assertTrue(identity["stable_identity"])
         self.assertTrue(identity["id"].startswith("csi-"))
+
+
+if __name__ == "__main__":
+    unittest.main()
