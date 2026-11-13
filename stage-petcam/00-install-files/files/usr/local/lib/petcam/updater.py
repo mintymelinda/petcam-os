@@ -230,7 +230,10 @@ def release_manifest_candidates(manifest_url: str, key_path: Path) -> list[dict[
         f"https://api.github.com/repos/{owner}/{repository}/releases"
         f"?per_page={MAX_RECENT_RELEASES}"
     )
-    releases = json.loads(fetch(api_url, 2 * 1024 * 1024))
+    try:
+        releases = json.loads(fetch(api_url, 2 * 1024 * 1024))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise UpdateError("GitHub Releases API returned invalid JSON") from exc
     if not isinstance(releases, list):
         raise UpdateError("GitHub Releases API returned an invalid response")
 
