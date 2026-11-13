@@ -136,7 +136,7 @@ jobs:
           		# APT normally removes downloaded archives after installation.
           		# Keep them in the shared runner cache so later builds can reuse them.
           		mkdir -p "${ROOTFS_DIR}/etc/apt/apt.conf.d"
-          		printf '%s\\n' 'APT::Keep-Downloaded-Packages "true";' > "${ROOTFS_DIR}/etc/apt/apt.conf.d/99-pigen-archive-cache"
+          		printf '%s\n' 'APT::Keep-Downloaded-Packages "true";' > "${ROOTFS_DIR}/etc/apt/apt.conf.d/99-pigen-archive-cache"
           		if ! mount | grep -q " ${ROOTFS_DIR}/var/cache/apt/archives "; then
           			mkdir -p "${ROOTFS_DIR}/var/cache/apt/archives"
           			mount --bind "${APT_ARCHIVE_CACHE}" "${ROOTFS_DIR}/var/cache/apt/archives"
@@ -157,8 +157,8 @@ jobs:
           # whenever the external cache is enabled.
           export_cleanup = Path("pi-gen/export-image/02-set-sources/01-run.sh")
           content = export_cleanup.read_text(encoding="utf-8")
-          clean_command = "apt-get clean\\n"
-          guarded_clean = 'if [ -z "${APT_ARCHIVE_CACHE:-}" ]; then\\n\\tapt-get clean\\nfi\\n'
+          clean_command = "apt-get clean\n"
+          guarded_clean = 'if [ -z "${APT_ARCHIVE_CACHE:-}" ]; then\n\tapt-get clean\nfi\n'
           if content.count(clean_command) != 1:
               raise SystemExit("Pinned pi-gen export cleanup no longer has the expected apt-get clean command")
           export_cleanup.write_text(content.replace(clean_command, guarded_clean, 1), encoding="utf-8")
