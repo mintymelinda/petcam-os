@@ -81,8 +81,8 @@ class ImageLayoutTests(unittest.TestCase):
         template_at = script.index('cat > /etc/systemd/system/petcam-stream@.service')
         self.assertGreater(script.index("systemctl daemon-reload", template_at), template_at)
         self.assertIn("install -d -o petcam -g petcam -m 0750 /etc/petcam/cameras.d", script)
-        self.assertIn('case "$action" in\\n    start|restart|enable)', script)
-        self.assertNotIn(r"\\nchmod", script)
+        self.assertIn('case "$action" in\n    start|restart|enable)', script)
+        self.assertNotIn(r"\nchmod", script)
 
     def test_main_branch_seeds_cache_shared_by_release_tags(self):
         workflow = WORKFLOW.read_text()
