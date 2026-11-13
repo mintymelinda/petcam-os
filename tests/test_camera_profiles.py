@@ -197,6 +197,24 @@ class CameraProfileTests(unittest.TestCase):
             with self.assertRaisesRegex(MODULE.ProfileError, "already assigned to the primary"):
                 MODULE.create_profile(self.camera(), self.mode())
 
+    def test_high_performance_profile_requires_confirmation_then_starts(self):
+        camera = self.camera()
+        camera["modes"] = [{"format": "MJPG", "width": 1920, "height": 1080, "fps": [60]}]
+        mode = {"format": "MJPG", "width": 1920, "height": 1080, "fps": 60}
+        discovered = [{"device": camera["device"], "modes": camera["modes"]}]
+        with mock.patch.object(MODULE, "discover_devices", return_value=discovered):
+            with self.assertRaisesRegex(MODULE.ProfileError, "exceeds the estimated performance budget"):
+                MODULE.create_profile(camera, mode, restart_service=mock.Mock(), ready=mock.Mock(return_value=True))
+            profile = MODULE.create_profile(
+                camera, mode, restart_service=mock.Mock(), ready=mock.Mock(return_value=True),
+                allow_performance_override=True,
+            )
+        self.assertEqual(profile["resolution"], "1920x1080")
+        self.assertGreater(
+            profile["resource_budget"]["estimated_total_pixels_per_second"],
+            profile["resource_budget"]["pixel_budget_pixels_per_second"],
+        )
+
     def test_failed_stream_start_removes_partial_profile(self):
         restart = mock.Mock()
         with mock.patch.object(MODULE, "discover_devices", return_value=[
