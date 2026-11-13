@@ -339,6 +339,24 @@ def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc
         raise UpdateError("The PetCam system group is missing; cannot secure Home Assistant configuration.") from error
 
 
+
+def repair_config_directory_permissions(directory: Path = Path("/etc/petcam")) -> None:
+    """Restore the writable, group-restricted config directory used by the web manager."""
+    try:
+        if directory.is_symlink():
+            raise UpdateError(f"Refusing to repair a symlinked PetCam configuration directory: {directory}")
+        directory.mkdir(parents=True, exist_ok=True)
+        group_id = grp.getgrnam("petcam").gr_gid
+        os.chown(directory, 0, group_id)
+        os.chmod(directory, 0o1770)
+    except UpdateError:
+        raise
+    except (OSError, KeyError) as error:
+        raise UpdateError(
+            f"Unable to secure PetCam configuration directory {directory}: {error}"
+        ) from error
+
+
 def atomic_activate(release: Path) -> str | None:
     previous = current_version()
     temporary = ROOT / ".current.new"
@@ -459,6 +477,7 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
     try:
         atomic_activate(final)
         switched = True
+        repair_config_directory_permissions()
         install_runtime_integration_files(final)
         subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
         subprocess.run(["systemctl", "enable", "--now", "petcam-timelapse.service"], check=True, capture_output=True)
