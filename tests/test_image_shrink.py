@@ -57,7 +57,7 @@ class BuildCacheContractTests(unittest.TestCase):
         self.assertIn("--cache-from type=gha", workflow)
         self.assertIn("--cache-to type=gha,mode=max", workflow)
         self.assertIn("uses: actions/cache@v4", workflow)
-        self.assertIn("pigen-apt-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-", workflow)
+        self.assertIn("pigen-apt-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-", workflow)
         self.assertIn("APT_ARCHIVE_CACHE=/apt-cache", workflow)
         self.assertIn("--mount type=bind", workflow)
 
