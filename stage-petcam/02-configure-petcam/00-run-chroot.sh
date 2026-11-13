@@ -353,4 +353,5 @@ systemctl enable petcam-motion.service
 chown root:petcam /etc/petcam/light-sensor.conf
 chmod 0640 /etc/petcam/light-sensor.conf
 install -d -o petcam -g petcam -m 0750 /var/lib/petcam
+getent group i2c >/dev/null 2>&1 || groupadd --system i2c
 systemctl enable petcam-light-sensor.service
