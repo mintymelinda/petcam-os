@@ -42,6 +42,13 @@ class WebManagerTests(unittest.TestCase):
         self.assertNotIn("change-password", MODULE.PAGE)
         self.assertNotIn("/api/password", MODULE.PAGE)
 
+    def test_admin_reauthentication_uses_masked_password_dialog_not_prompt(self):
+        self.assertIn('<dialog id="login-dialog"', MODULE.PAGE)
+        self.assertIn('id="login-password" type="password"', MODULE.PAGE)
+        self.assertIn('autocomplete="current-password"', MODULE.PAGE)
+        self.assertIn('dialog.showModal()', MODULE.PAGE)
+        self.assertNotIn('window.prompt("Enter your PetCam manager password")', MODULE.PAGE)
+
     def test_first_run_admin_setup_is_available_in_the_browser(self):
         self.assertIn('id="first-run-form"', MODULE.PAGE)
         self.assertIn('id="setup-password"', MODULE.PAGE)
