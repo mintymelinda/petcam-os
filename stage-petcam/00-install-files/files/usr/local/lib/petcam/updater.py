@@ -29,6 +29,8 @@ STATE = Path("/var/lib/petcam/update")
 CONFIG = Path("/etc/petcam/update.conf")
 PUBLIC_KEY = Path("/etc/petcam/update-signing.pub")
 MAX_MANIFEST = 64 * 1024
+MAX_RECENT_RELEASES = 30
+MAX_VALID_RELEASES = 10
 MAX_ARCHIVE = 300 * 1024 * 1024
 MAX_EXPANDED_ARCHIVE = 512 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 10000
@@ -208,23 +210,99 @@ def current_version() -> str | None:
     return value
 
 
+def release_manifest_candidates(manifest_url: str) -> list[dict[str, object]]:
+    """Find independently verifiable manifests in recent published GitHub releases."""
+    parsed = urllib.parse.urlparse(manifest_url)
+    match = re.fullmatch(
+        r"/([^/]+)/([^/]+)/releases/latest/download/([^/]+)",
+        parsed.path,
+    )
+    if parsed.netloc.lower() != "github.com" or not match:
+        # Retain compatibility with explicitly configured signed manifest URLs.
+        raw = fetch(manifest_url, MAX_MANIFEST)
+        signature = fetch(manifest_url + ".sig", 4096)
+        verify_signature(raw, signature, Path(key_path))
+        manifest = parse_manifest(raw)
+        return [{"manifest": manifest, "manifest_url": manifest_url, "tag_name": ""}]
+
+    owner, repository, manifest_name = match.groups()
+    api_url = (
+        f"https://api.github.com/repos/{owner}/{repository}/releases"
+        f"?per_page={MAX_RECENT_RELEASES}"
+    )
+    releases = json.loads(fetch(api_url, 2 * 1024 * 1024))
+    if not isinstance(releases, list):
+        raise UpdateError("GitHub Releases API returned an invalid response")
+
+    valid: list[dict[str, object]] = []
+    for release in releases:
+        if not isinstance(release, dict) or release.get("draft") or release.get("prerelease"):
+            continue
+        assets = release.get("assets")
+        if not isinstance(assets, list):
+            continue
+        asset_urls = {
+            asset.get("name"): asset.get("browser_download_url")
+            for asset in assets if isinstance(asset, dict)
+        }
+        candidate_url = asset_urls.get(manifest_name)
+        signature_url = asset_urls.get(manifest_name + ".sig")
+        if not isinstance(candidate_url, str) or not isinstance(signature_url, str):
+            continue
+        try:
+            raw = fetch(candidate_url, MAX_MANIFEST)
+            signature = fetch(signature_url, 4096)
+            verify_signature(raw, signature, Path(key_path))
+            manifest = parse_manifest(raw)
+            version = str(manifest["version"])
+            if release.get("tag_name") not in (None, "", "v" + version, version):
+                raise UpdateError("Release tag does not match its signed manifest version")
+            valid.append({
+                "manifest": manifest,
+                "manifest_url": candidate_url,
+                "tag_name": str(release.get("tag_name", "")),
+                "published_at": str(release.get("published_at", "")),
+            })
+        except (UpdateError, ValueError, TypeError):
+            # A broken or unsigned release must not prevent checking older releases.
+            continue
+
+    valid.sort(key=lambda item: version_tuple(str(item["manifest"]["version"])), reverse=True)
+    return valid[:MAX_VALID_RELEASES]
+
+
 def check_update(config: dict[str, str]) -> dict[str, object]:
-    manifest_url = config["MANIFEST_URL"]
-    raw = fetch(manifest_url, MAX_MANIFEST)
-    signature = fetch(manifest_url + ".sig", 4096)
-    verify_signature(raw, signature, Path(config.get("PUBLIC_KEY", str(PUBLIC_KEY))))
-    manifest = parse_manifest(raw)
     machine = platform.machine().lower()
     if machine not in ("armv6l", "armv7l", "armhf"):
         raise UpdateError(f"Updater requires a 32-bit ARM PetCam image (machine={machine})")
+    key_path = Path(config.get("PUBLIC_KEY", str(PUBLIC_KEY)))
+    manifest_url = config["MANIFEST_URL"]
+    candidates = release_manifest_candidates(manifest_url, key_path)
+    if not candidates:
+        raise UpdateError("No valid signed PetCam releases were found in recent GitHub releases")
+
     installed = current_version()
-    available = str(manifest["version"])
+    releases = []
+    for candidate in candidates:
+        manifest = candidate["manifest"]
+        version = str(manifest["version"])
+        releases.append({
+            "version": version,
+            "update_available": installed is None or version_tuple(version) > version_tuple(installed),
+            "release_notes": str(manifest.get("release_notes", "")),
+            "archive_size": manifest["archive_size"],
+            "published_at": candidate.get("published_at", ""),
+            "tag_name": candidate.get("tag_name", ""),
+            "manifest_url": candidate["manifest_url"],
+        })
+    newest = releases[0]
     return {
         "installed_version": installed,
-        "available_version": available,
-        "update_available": installed is None or version_tuple(available) > version_tuple(installed),
-        "release_notes": str(manifest.get("release_notes", "")),
-        "archive_size": manifest["archive_size"],
+        "available_version": newest["version"],
+        "update_available": bool(newest["update_available"]),
+        "release_notes": newest["release_notes"],
+        "archive_size": newest["archive_size"],
+        "releases": releases,
     }
 
 
@@ -449,7 +527,8 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
     if not status["update_available"]:
         return {"status": "up-to-date", **status}
 
-    manifest_url = config["MANIFEST_URL"]
+    selected = status["releases"][0]
+    manifest_url = str(selected["manifest_url"])
     raw_manifest = fetch(manifest_url, MAX_MANIFEST)
     signature = fetch(manifest_url + ".sig", 4096)
     verify_signature(raw_manifest, signature, Path(config.get("PUBLIC_KEY", str(PUBLIC_KEY))))
