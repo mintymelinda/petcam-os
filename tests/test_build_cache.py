@@ -47,7 +47,7 @@ class BuildCacheContractTests(unittest.TestCase):
         self.assertIn("--cache-to type=gha,mode=max", workflow)
         self.assertIn("uses: actions/cache@v4", workflow)
         self.assertIn("APT_ARCHIVE_CACHE=/apt-cache", workflow)
-        self.assertIn("hashFiles('config', 'stage-petcam/**', 'stage-petcam-base/**')", workflow)
+        self.assertIn("hashFiles('config', 'stage-petcam-base/**')", workflow)
         self.assertIn("--mount type=bind", workflow)
 
     def test_manual_image_build_remains_non_publishing_and_emits_timing_metrics(self):
