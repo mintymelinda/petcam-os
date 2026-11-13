@@ -16,6 +16,14 @@ class WebManagerTests(unittest.TestCase):
     def test_management_page_is_dependency_free_and_has_camera_controls(self):
         self.assertIn("Refresh cameras", MODULE.PAGE)
         self.assertIn("Live preview", MODULE.PAGE)
+        self.assertIn('role="tablist"', MODULE.PAGE)
+        self.assertLess(MODULE.PAGE.index(">Live</button>"), MODULE.PAGE.index(">OBS</button>"))
+        self.assertLess(MODULE.PAGE.index(">OBS</button>"), MODULE.PAGE.index(">Camera Settings</button>"))
+        self.assertLess(MODULE.PAGE.index(">Camera Settings</button>"), MODULE.PAGE.index(">Streams</button>"))
+        self.assertLess(MODULE.PAGE.index(">Streams</button>"), MODULE.PAGE.index(">System</button>"))
+        self.assertIn('id="panel-camera-settings"', MODULE.PAGE)
+        self.assertIn('id="panel-system"', MODULE.PAGE)
+        self.assertIn("activateTab", MODULE.PAGE)
         self.assertIn("Apply selected camera and mode", MODULE.PAGE)
         self.assertIn("above device estimate", MODULE.PAGE)
         self.assertIn("Use this mode anyway?", MODULE.PAGE)
@@ -361,22 +369,79 @@ class WebManagerTests(unittest.TestCase):
         self.assertNotIn("PORT", active)
         self.assertNotIn("CSI_QUALITY", active)
 
-    def test_live_capture_status_reports_measured_fps(self):
-        status = {
-            "latest_captured_fps": 15,
-            "active_resolution": "1280x720",
-            "active_capture_format": "MJPEG",
-            "hostname": "kittycam",
+    def test_live_capture_status_reads_ustreamer_metrics_directly(self):
+        payload = {
+            "ok": True,
+            "result": {
+                "source": {
+                    "captured_fps": 15,
+                    "resolution": {"width": 1280, "height": 720},
+                },
+                "encoder": {"type": "HW"},
+            },
         }
-        result = mock.Mock(returncode=0, stdout=json.dumps(status))
-        with mock.patch.object(MODULE.subprocess, "run", return_value=result) as run:
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps(payload).encode()
+
+        with mock.patch.object(MODULE, "parse_config", return_value={"PORT": "8081"}), \\
+                mock.patch.object(MODULE.urllib.request, "urlopen", return_value=Response()) as open_url, \\
+                mock.patch.object(MODULE.subprocess, "run") as run:
             actual = MODULE.live_capture_status()
-        run.assert_called_once()
+
+        open_url.assert_called_once_with("http://127.0.0.1:8081/state", timeout=2)
+        run.assert_not_called()
         self.assertEqual(actual, {
             "latest_captured_fps": 15,
             "active_resolution": "1280x720",
             "active_capture_format": "MJPEG",
         })
+
+    def test_live_capture_status_falls_back_to_csi_metrics(self):
+        payload = {
+            "backend": "csi",
+            "captured_fps_average": 29.5,
+        }
+
+        class Response:
+            def __init__(self, body):
+                self.body = body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps(self.body).encode()
+
+        with mock.patch.object(MODULE, "parse_config", return_value={"PORT": "8081", "RESOLUTION": "1920x1080"}), \\
+                mock.patch.object(
+                    MODULE.urllib.request,
+                    "urlopen",
+                    side_effect=[Response({"ok": False}), Response(payload)],
+                ) as open_url:
+            actual = MODULE.live_capture_status()
+
+        self.assertEqual(open_url.call_count, 2)
+        self.assertEqual(actual, {
+            "latest_captured_fps": 29.5,
+            "active_resolution": "1920x1080",
+            "active_capture_format": "MJPEG",
+        })
+
+    def test_live_capture_status_returns_empty_when_backend_metrics_are_unavailable(self):
+        with mock.patch.object(MODULE, "parse_config", return_value={"PORT": "8081"}), \\
+                mock.patch.object(MODULE.urllib.request, "urlopen", side_effect=OSError("offline")):
+            self.assertEqual(MODULE.live_capture_status(), {})
 
     def test_invalid_capture_values_are_rejected(self):
         for mode in (
