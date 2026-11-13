@@ -50,7 +50,14 @@ def camera_identity(camera):
         stable = device.startswith("/dev/v4l/by-id/") or bool(physical_path)
         source = device if device.startswith("/dev/v4l/by-id/") else physical_path or device
         digest = hashlib.sha256(source.encode("utf-8")).hexdigest()[:12]
-        return {"id": f"usb-{digest}", "kind": "usb", "device": device, "physical_path": physical_path, "stable_identity": stable, "label": camera.get("label") or f"USB camera · {device}"}
+        return {
+            "id": f"usb-{digest}",
+            "kind": "usb",
+            "device": device,
+            "physical_path": physical_path,
+            "stable_identity": stable,
+            "label": camera.get("label") or f"USB camera · {device}",
+        }
     if kind == "csi":
         sensor = _camera_slug(str(camera.get("sensor", "csi")))
         index = camera.get("camera")
@@ -58,7 +65,15 @@ def camera_identity(camera):
         if not isinstance(index, int) or index < 0:
             raise ValueError("CSI camera index is invalid.")
         digest = hashlib.sha256(f"{sensor}|{device_path}".encode("utf-8")).hexdigest()[:12]
-        return {"id": f"csi-{digest}" if device_path else f"csi-{sensor}-{index}", "kind": "csi", "camera": index, "sensor": sensor, "device_path": device_path, "stable_identity": bool(device_path), "label": camera.get("label") or f"CSI {sensor} · camera {index}"}
+        return {
+            "id": f"csi-{digest}" if device_path else f"csi-{sensor}-{index}",
+            "kind": "csi",
+            "camera": index,
+            "sensor": sensor,
+            "device_path": device_path,
+            "stable_identity": bool(device_path),
+            "label": camera.get("label") or f"CSI {sensor} · camera {index}",
+        }
     raise ValueError("Camera type must be usb or csi.")
 
 
