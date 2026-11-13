@@ -274,6 +274,18 @@ class CameraProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.ProfileError, "USB 2.0 budget"):
             MODULE._check_resource_budget(candidate, [])
 
+    def test_resource_budget_report_exposes_primary_and_additional_stream_rates(self):
+        primary = {"estimated_pixels_per_second": 80_000_000}
+        profiles = [{"estimated_pixels_per_second": 20_000_000}]
+        with mock.patch.object(MODULE, "_default_stream_estimate", return_value=primary), \
+                mock.patch.object(MODULE, "_load_profiles", return_value=profiles), \
+                mock.patch.object(MODULE, "read_model", return_value="Raspberry Pi 4 Model B"):
+            report = MODULE.resource_budget_report()
+        self.assertEqual(report["primary_estimated_pixels_per_second"], 80_000_000)
+        self.assertEqual(report["additional_streams_estimated_pixels_per_second"], 20_000_000)
+        self.assertEqual(report["estimated_total_pixels_per_second"], 100_000_000)
+        self.assertEqual(report["pixel_budget_pixels_per_second"], MODULE.PIXEL_BUDGETS["pi4"])
+
     def test_configure_restarts_only_the_selected_camera_instance(self):
         profile = {
             "id": MODULE.camera_identity(self.camera())["id"],
