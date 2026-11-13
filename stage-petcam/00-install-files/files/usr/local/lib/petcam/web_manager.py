@@ -184,7 +184,10 @@ def camera_inventory():
                   "device_path": item.get("device_path", ""), "label": f'CSI · {item["sensor"]} (camera {item["index"]})',
                   "modes": item["modes"]}
         identity = camera_identity(camera)
-        result.append({**camera, "id": identity["id"], "stable_identity": identity["stable_identity"]})
+        result.append({
+            **camera, "id": identity["id"], "stable_identity": identity["stable_identity"],
+            "hardware_tier": tier, "hardware_budget_pixels_per_second": performance_budget,
+        })
     return result
 
 
