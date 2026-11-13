@@ -218,6 +218,35 @@ class CameraProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.ProfileError, "aggregate capture budget"):
             MODULE._check_resource_budget(candidate, [])
 
+    def test_explicit_performance_override_allows_pixel_budget_but_keeps_other_limits(self):
+        candidate = {
+            "estimated_pixels_per_second": 200_000_000,
+            "buffer_memory_bytes": 1_000_000,
+            "usb_raw_mbps": 0,
+        }
+        budget = MODULE._check_resource_budget(candidate, [], allow_performance_override=True)
+        self.assertEqual(budget["estimated_total_pixels_per_second"], 209_216_000)
+        with self.assertRaisesRegex(MODULE.ProfileError, "USB 2.0 budget"):
+            MODULE._check_resource_budget(
+                {**candidate, "usb_raw_mbps": 250}, [], allow_performance_override=True
+            )
+
+    def test_primary_mode_requires_and_accepts_explicit_performance_override(self):
+        primary = {
+            "estimated_pixels_per_second": 130_000_000,
+            "buffer_memory_bytes": 1_000_000,
+            "usb_raw_mbps": 0.0,
+        }
+        with mock.patch.object(MODULE, "validate_config", return_value={"SOURCE": "usb"}), \
+                mock.patch.object(MODULE, "_default_stream_estimate", return_value=primary), \
+                mock.patch.object(MODULE, "_load_profiles", return_value=[]):
+            with self.assertRaisesRegex(MODULE.ProfileError, "exceeds the estimated performance budget"):
+                MODULE.validate_primary_change({"SOURCE": "usb"})
+            result = MODULE.validate_primary_change(
+                {"SOURCE": "usb"}, allow_performance_override=True
+            )
+        self.assertEqual(result["estimated_total_pixels_per_second"], 130_000_000)
+
     def test_rejects_raw_usb_bandwidth_overrun(self):
         candidate = {
             "estimated_pixels_per_second": 1,
