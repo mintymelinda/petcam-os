@@ -37,8 +37,8 @@ fi
 before_bytes="$(stat -c '%s' "$image")"
 after_bytes="$(stat -c '%s' "$raw_image.xz")"
 if (( after_bytes >= before_bytes )); then
-    echo "Shrinking did not reduce the compressed image size ($before_bytes -> $after_bytes bytes)." >&2
-    exit 1
+    echo "PiShrink output is not smaller ($before_bytes -> $after_bytes bytes); retaining the original compressed image."
+    exit 0
 fi
 
 replacement="${image}.shrunk"
