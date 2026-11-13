@@ -12,12 +12,13 @@ class BuildCacheContractTests(unittest.TestCase):
         self.assertNotIn("tools/shrink_image.sh", workflow)
         self.assertFalse((ROOT / "tools/shrink_image.sh").exists())
 
-    def test_upstream_stage2_rootfs_is_cached_with_a_stable_explicit_epoch(self):
+    def test_prepared_package_rootfs_is_cached_with_a_stable_explicit_epoch(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
         self.assertIn("id: base-rootfs-cache", workflow)
         self.assertIn("pigen-base-rootfs-v1-", workflow)
         self.assertIn("hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile')", workflow)
         self.assertIn("pigen-base-rootfs.tar", workflow)
+        self.assertIn("stage-petcam-base/**", workflow)
         self.assertIn("sudo tar --numeric-owner --xattrs --acls -xpf", workflow)
         self.assertIn("sudo tar --numeric-owner --xattrs --acls -cpf", workflow)
         self.assertIn("touch pi-gen/stage0/SKIP pi-gen/stage1/SKIP pi-gen/stage2/SKIP pi-gen/stage-petcam-base/SKIP", workflow)
@@ -29,6 +30,7 @@ class BuildCacheContractTests(unittest.TestCase):
         self.assertIn("stage-petcam-base/rootfs", workflow)
         self.assertIn("Base rootfs cache hit:", workflow)
         self.assertIn("Base rootfs cache archive bytes:", workflow)
+        self.assertIn("bash -n stage-petcam-base/prerun.sh", workflow)
 
     def test_stable_packages_live_in_the_cached_stage_before_application_changes(self):
         config = (ROOT / "config").read_text(encoding="utf-8")
