@@ -63,8 +63,24 @@ class BuildCacheContractTests(unittest.TestCase):
 
     def test_manual_image_build_is_non_publishing_and_emits_timing_metrics(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
-        self.assertIn("build_image:", workflow)
-        self.assertIn("if: github.ref_type == 'tag'", workflow)
+
+        # Manual dispatch starts a build directly; it must not require the
+        # removed build_image opt-in checkbox.
+        self.assertNotIn("build_image:", workflow)
+        self.assertIn("if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'", workflow)
+
+        # Release preparation, image shrinking, and signed updater publication
+        # are tag-only. A manual build produces diagnostics but publishes no release.
+        for step in (
+            "name: Prepare release",
+            "name: Shrink and recompress the release image",
+            "name: Prepare and publish signed application update",
+        ):
+            start = workflow.index(step)
+            following = workflow.find("\\n      - name:", start + len(step))
+            block = workflow[start:] if following < 0 else workflow[start:following]
+            self.assertIn("if: github.ref_type == 'tag'", block)
+
         self.assertIn("pi-gen build duration seconds:", workflow)
         self.assertIn("actions/upload-artifact@v4", workflow)
         self.assertIn("pigen-build-diagnostics-", workflow)
