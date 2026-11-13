@@ -45,6 +45,7 @@ class SignedReleasePublisherTests(unittest.TestCase):
             "lib/health_monitor.py": b"# health monitor\n",
             "lib/config.py": b"# config\n",
             "lib/network_diagnostics.py": b"# network diagnostics\n",
+            "lib/camera_profiles.py": b'"""Compatibility marker for pre-0.2.3 updaters."""\n',
             "lib/factory_reset.py": b"# factory reset\n",
             "lib/home_assistant.py": b"# Home Assistant MQTT\n",
             "lib/timelapse.py": b"# timelapse\n",
