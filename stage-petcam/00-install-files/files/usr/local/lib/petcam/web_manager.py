@@ -17,12 +17,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import ensure_config_lock, parse_config
-from camera import PIXEL_BUDGETS, mode_supports_fps, model_tier, read_model
+from camera import PIXEL_BUDGETS, USTREAMER_FORMATS, camera_identity, mode_supports_fps, model_tier, read_model
 from network_diagnostics import collect_diagnostics, create_support_bundle
-from camera_profiles import (
-    USTREAMER_FORMATS, apply_primary_config, camera_identity, configure_profile, create_profile, list_profiles,
-    remove_profile, resource_budget_report, stream_port,
-)
 from timelapse import load_config as load_timelapse_config, save_config as save_timelapse_config, state_snapshot as timelapse_snapshot
 from motion_detection import load_config as load_motion_config, save_config as save_motion_config, state_snapshot as motion_snapshot, FRAMES as MOTION_FRAMES
 from web_auth import SESSION_TTL, get_session, initialize_password, invalidate_session, is_configured, new_session, verify_password
@@ -59,26 +55,20 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <dialog id="login-dialog" aria-labelledby="login-title"><form id="login-form"><h2 id="login-title">Sign in to PetCam</h2><label for="login-password">Administrator password</label><input id="login-password" type="password" autocomplete="current-password" required><p id="login-message" role="alert" aria-live="polite"></p><button id="login-submit" type="submit">Sign in</button></form></dialog>
 <nav id="manager-tabs" class="tab-nav" role="tablist" aria-label="PetCam sections">
 <button id="tab-live" type="button" role="tab" aria-controls="panel-live" aria-selected="true" tabindex="0" data-tab="live">Live</button>
-<button id="tab-obs" type="button" role="tab" aria-controls="panel-obs" aria-selected="false" tabindex="-1" data-tab="obs">OBS</button>
 <button id="tab-camera-settings" type="button" role="tab" aria-controls="panel-camera-settings" aria-selected="false" tabindex="-1" data-tab="camera-settings">Camera Settings</button>
-<button id="tab-streams" type="button" role="tab" aria-controls="panel-streams" aria-selected="false" tabindex="-1" data-tab="streams">Streams</button>
 <button id="tab-system" type="button" role="tab" aria-controls="panel-system" aria-selected="false" tabindex="-1" data-tab="system">System</button>
 </nav>
 <main id="tab-panels">
 <div id="panel-live" class="tab-panel active" role="tabpanel" aria-labelledby="tab-live" tabindex="0">
-<section><h2>Live preview</h2><img id="live-preview" src="/stream" alt="Live camera preview"><p id="capture-rate" class="muted">Checking actual capture rate…</p><p class="muted">The preview uses the same stream OBS receives.</p></section>
-</div>
-<div id="panel-obs" class="tab-panel" role="tabpanel" aria-labelledby="tab-obs" tabindex="0" hidden>
-<section><h2>OBS browser source</h2><p class="muted">Add this URL as a Browser Source in OBS on a computer on the same network.</p><div class="row" style="align-items:center"><code id="browser-source-url" style="flex:1;overflow-wrap:anywhere">Loading…</code><button id="copy-browser-source">Copy URL</button></div><p id="copy-message" class="muted" role="status" aria-live="polite"></p></section>
+<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Live preview</h2><button id="copy-browser-source" type="button">URL Browser Source</button></div><img id="live-preview" src="/stream" alt="Live camera preview"><p id="capture-rate" class="muted">Checking actual capture rate…</p><p class="muted">The preview uses the same stream OBS receives.</p></section>
 </div>
 <div id="panel-camera-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-camera-settings" tabindex="0" hidden>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera selection</h2><button id="refresh">Refresh cameras</button></div>
 <p id="message" role="status">Discovering cameras…</p>
 <label for="camera">Camera</label><select id="camera"></select>
 <label for="mode">Capture mode</label><select id="mode"></select>
-<label for="stream-target">Configure stream</label><select id="stream-target"><option value="default">Primary stream (existing /stream)</option></select>
-<div class="row" style="margin-top:1rem"><button id="apply">Apply selected camera and mode</button><button id="add-stream">Add independent stream</button></div>
-<p class="muted">Only advertised modes are offered. Applying to the primary stream preserves the existing /stream URL. Independent streams receive their own configuration, service, and OBS URL.</p></section>
+<div class="row" style="margin-top:1rem"><button id="apply">Apply selected camera and mode</button></div>
+<p class="muted">Only advertised camera modes are offered.</p></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera controls</h2><button id="refresh-camera-controls" type="button">Refresh controls</button></div>
 <p id="camera-controls-status" class="muted" role="status">Controls for the active camera will appear here.</p>
 <p class="muted">Controls are discovered from the connected camera. Some settings may be unavailable while automatic modes are active. Dynamic framerate can reduce the actual captured FPS when enabled.</p>
@@ -115,9 +105,6 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <div class="row"><button id="save-motion">Save motion settings</button></div>
 <h3>Recent motion events</h3><div id="motion-events" class="muted">No motion events recorded.</div></section>
 </div>
-<div id="panel-streams" class="tab-panel" role="tabpanel" aria-labelledby="tab-streams" tabindex="0" hidden>
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera streams</h2><button id="refresh-streams">Refresh streams</button></div><div id="stream-profiles" class="muted">Loading streams…</div></section>
-</div>
 <div id="panel-system" class="tab-panel" role="tabpanel" aria-labelledby="tab-system" tabindex="0" hidden>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Network and OBS diagnostics</h2><button id="refresh-diagnostics">Run checks</button></div><p id="diagnostic-summary" role="status">Diagnostics have not been run yet.</p><p id="diagnostic-details" class="muted"></p><div class="row"><button id="download-support-bundle">Download redacted support bundle</button></div></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Stream health</h2><button id="refresh-health">Refresh</button></div><p id="health-state" role="status">Checking stream health…</p><p id="health-reason" class="muted"></p><small id="health-details" class="muted"></small></section>
@@ -133,7 +120,7 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 </main>
 <footer style="text-align:center;padding:1rem 0 2rem"><small>Enjoying PetCam? <a href="https://www.paypal.me/kimmynightmare" target="_blank" rel="noopener noreferrer" style="color:#b9d8ff">Support development with PayPal</a></small></footer>
 <script>
-const $=id=>document.getElementById(id);let inventory=[],streams=[],activeConfig=null,captureStatus={},resourceBudget=null;
+const $=id=>document.getElementById(id);let inventory=[],activeConfig=null,captureStatus={};
 const browserSourceUrl="http://"+window.location.hostname+":8080/stream";
 $("first-run-form").onsubmit=async event=>{event.preventDefault();const password=$("setup-password").value,confirmation=$("setup-password-confirm").value,message=$("setup-message"),button=$("setup-submit");if(password!==confirmation){message.textContent="The passwords do not match.";return}button.disabled=true;message.textContent="Creating administrator account…";try{const response=await fetch("/api/setup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password,password_confirmation:confirmation})});const data=await response.json();if(!response.ok)throw Error(data.error||"Initial setup failed");message.textContent="Administrator account created. Opening PetCam…";location.reload()}catch(error){message.textContent=error.message;button.disabled=false}};
 $("browser-source-url").textContent=browserSourceUrl;
