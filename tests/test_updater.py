@@ -378,7 +378,7 @@ class RecentReleaseDiscoveryTests(unittest.TestCase):
 
         self.assertEqual([item["manifest"]["version"] for item in found], ["1.4.0", "1.3.0"])
         self.assertEqual(found[0]["manifest_url"], "https://assets/good/manifest")
-        self.assertEqual(verify.call_count, 2)
+        self.assertEqual(verify.call_count, 3)
 
     def test_ignores_drafts_and_prereleases(self):
         api_url = "https://api.github.com/repos/mintymelinda/petcam-os/releases?per_page=30"
