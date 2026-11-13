@@ -370,8 +370,7 @@ class RecentReleaseDiscoveryTests(unittest.TestCase):
                 raise AssertionError(f"Unexpected URL: {url}")
             return payloads[url]
 
-        with mock.patch("updater.fetch", side_effect=fake_fetch), \\
-                mock.patch("updater.verify_signature") as verify:
+        with mock.patch("updater.fetch", side_effect=fake_fetch), mock.patch("updater.verify_signature") as verify:
             found = release_manifest_candidates(
                 "https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json",
                 Path("/trusted/key.pem"),
