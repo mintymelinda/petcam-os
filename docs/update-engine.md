@@ -10,7 +10,7 @@ Newly built images pin the project's Ed25519 public key at `/etc/petcam/update-s
 https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json
 ```
 
-The detached signature is downloaded from the same URL with `.sig` appended. The endpoint resolves to the latest GitHub Release and is independent of Raspberry Pi Imager's catalogue.
+The updater uses this stable URL to identify the manifest asset, then queries the GitHub Releases API for the 30 most recent published releases. Drafts and prereleases are ignored. Each release is checked independently: its manifest and detached `.sig` asset must both exist, the signature must verify against the pinned Ed25519 key, and the manifest must pass schema, architecture, version, and archive metadata validation. Invalid or incomplete releases are skipped rather than blocking discovery of older valid releases. The check result and web manager list up to 10 valid releases, newest semantic version first. The endpoint remains independent of Raspberry Pi Imager's catalogue.
 
 The matching private key is held in the GitHub Actions secret `PETCAM_UPDATE_SIGNING_PRIVATE_KEY`. The tagged-release workflow fails closed if the secret is missing or if its derived public key does not match the public key pinned in the image. The signing private key must never be committed to the repository, copied to a Pi, or included in an image.
 
@@ -72,7 +72,7 @@ Never copy the signing private key to the device.
 
 ## Operations
 
-Check signed release metadata without installing:
+Check signed release metadata without installing. The result includes the recent verified release list; installation selects its newest valid version:
 
 ```sh
 sudo /usr/local/bin/petcam-update check
