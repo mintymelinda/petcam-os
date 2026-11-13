@@ -332,8 +332,10 @@ def live_capture_status():
     capture-rate data. These two local endpoints expose only the live metrics.
     """
     try:
-        port = int(parse_config(CONFIG)["PORT"])
+        config = parse_config(CONFIG)
+        port = int(config["PORT"])
     except Exception:
+        config = {}
         port = 8081
 
     try:
@@ -353,7 +355,7 @@ def live_capture_status():
                     "MJPEG" if (state.get("encoder") or {}).get("type") == "HW" else None
                 ),
             }
-    except (OSError, urllib.error.URLError, subprocess.TimeoutExpired, ValueError, TypeError, KeyError):
+    except (OSError, urllib.error.URLError, subprocess.TimeoutExpired, ValueError, TypeError, KeyError, AttributeError):
         pass
 
     try:
@@ -362,7 +364,7 @@ def live_capture_status():
         if isinstance(payload, dict) and payload.get("backend") == "csi":
             return {
                 "latest_captured_fps": payload.get("captured_fps_average"),
-                "active_resolution": parse_config(CONFIG).get("RESOLUTION"),
+                "active_resolution": config.get("RESOLUTION"),
                 "active_capture_format": "MJPEG",
             }
     except (OSError, urllib.error.URLError, subprocess.TimeoutExpired, ValueError, TypeError):
