@@ -76,8 +76,9 @@ jobs:
       - name: Check out PetCam OS
         uses: actions/checkout@v7
 
-      # Draft releases stay hidden from releases/latest while the image builds.
-      - name: Prepare draft release
+      # Reuse an existing release regardless of draft state. Assets are uploaded
+      # after the image and signed updater package have been built and verified.
+      - name: Prepare release
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -86,11 +87,7 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
           if gh release view "${TAG}" >/dev/null 2>&1; then
-            IS_DRAFT="$(gh release view "${TAG}" --json isDraft --jq '.isDraft')"
-            if [[ "${IS_DRAFT}" != "true" ]]; then
-              echo "Release ${TAG} is already published. Refusing to modify it; convert it to a draft manually before rerunning." >&2
-              exit 1
-            fi
+            echo "Reusing existing release ${TAG}."
           else
             gh release create "${TAG}" --draft --verify-tag \
               --title "PetCam OS ${VERSION}" --generate-notes
