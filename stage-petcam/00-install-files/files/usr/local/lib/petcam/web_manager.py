@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Small, dependency-free PetCam camera management HTTP interface."""
+import copy
 import json
 import os
 import re
@@ -234,6 +235,28 @@ def camera_inventory():
     return result
 
 
+_CAMERA_INVENTORY_CACHE_SECONDS = 3.0
+_camera_inventory_cache = None
+_camera_inventory_cache_at = 0.0
+_camera_inventory_cache_lock = threading.Lock()
+
+
+def cached_camera_inventory():
+    """Reuse a very recent discovery result for related manager API requests."""
+    global _camera_inventory_cache, _camera_inventory_cache_at
+    with _camera_inventory_cache_lock:
+        now = time.monotonic()
+        if (
+            _camera_inventory_cache is not None
+            and now - _camera_inventory_cache_at < _CAMERA_INVENTORY_CACHE_SECONDS
+        ):
+            return copy.deepcopy(_camera_inventory_cache)
+        inventory = camera_inventory()
+        _camera_inventory_cache = copy.deepcopy(inventory)
+        _camera_inventory_cache_at = time.monotonic()
+        return copy.deepcopy(inventory)
+
+
 def active_camera_config():
     try:
         config = parse_config(CONFIG, check_hardware=False)
@@ -329,7 +352,7 @@ def active_usb_camera():
         return None
     physical_path = config.get("USB_PHYSICAL_PATH", "")
     device = config.get("DEVICE", "")
-    for camera in camera_inventory():
+    for camera in cached_camera_inventory():
         if camera.get("kind") != "usb":
             continue
         if physical_path and camera.get("physical_path") == physical_path:
@@ -489,9 +512,12 @@ def proxy_stream(handler, port):
             handler.send_header("Content-Type", upstream.headers.get("Content-Type", "multipart/x-mixed-replace"))
             handler.send_header("Cache-Control", "no-store")
             handler.end_headers()
-            while chunk := upstream.read(65536):
+            read_chunk = getattr(upstream, "read1", upstream.read)
+            while chunk := read_chunk(65536):
+                # BufferedWriter flushes large writes itself. Avoid an extra flush
+                # call for every MJPEG chunk, and read only currently available
+                # socket data so low-bitrate streams are not held for a full buffer.
                 handler.wfile.write(chunk)
-                handler.wfile.flush()
     except (OSError, urllib.error.URLError, BrokenPipeError, TimeoutError):
         pass
 
