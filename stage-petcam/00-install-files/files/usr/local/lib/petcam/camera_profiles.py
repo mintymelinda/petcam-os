@@ -449,7 +449,7 @@ def validate_primary_change(
     }
     return _check_resource_budget(
         empty_candidate, _load_profiles(), primary=primary,
-        allow_performance_override=performance_exceeded and allow_performance_override,
+        allow_performance_override=allow_performance_override,
     )
 
 
@@ -504,7 +504,7 @@ def create_profile(
         )
     budget = _check_resource_budget(
         candidate, profiles,
-        allow_performance_override=performance_exceeded and allow_performance_override,
+        allow_performance_override=allow_performance_override,
     )
     validated = validate_config({**values, "PORT": str(port)}, check_hardware=True)
     path = _profile_config_path(candidate["id"])
@@ -560,7 +560,7 @@ def configure_profile(
         )
     budget = _check_resource_budget(
         candidate, others,
-        allow_performance_override=performance_exceeded and allow_performance_override,
+        allow_performance_override=allow_performance_override,
     )
     validated = validate_config({**values, "PORT": str(candidate["port"])}, check_hardware=True)
     path = _profile_config_path(profile_id)
@@ -659,13 +659,14 @@ def resource_budget_report() -> dict[str, Any]:
     primary = _default_stream_estimate()
     model = read_model()
     tier = model_tier(model)
-    total_pixel_rate = int(primary["estimated_pixels_per_second"]) + sum(
-        int(item.get("estimated_pixels_per_second", 0)) for item in profiles
-    )
+    primary_pixel_rate = int(primary["estimated_pixels_per_second"])
+    additional_pixel_rate = sum(int(item.get("estimated_pixels_per_second", 0)) for item in profiles)
     return {
         "hardware_model": model,
         "hardware_tier": tier,
-        "estimated_total_pixels_per_second": total_pixel_rate,
+        "primary_estimated_pixels_per_second": primary_pixel_rate,
+        "additional_streams_estimated_pixels_per_second": additional_pixel_rate,
+        "estimated_total_pixels_per_second": primary_pixel_rate + additional_pixel_rate,
         "pixel_budget_pixels_per_second": PIXEL_BUDGETS[tier],
         "additional_stream_count": len(profiles),
     }

@@ -247,6 +247,55 @@ class WebManagerTests(unittest.TestCase):
             cameras[0]["hardware_budget_pixels_per_second"],
         )
 
+    def test_camera_page_restores_saved_camera_and_mode_and_refreshes_preview(self):
+        self.assertIn("activeCameraMatches", MODULE.PAGE)
+        self.assertIn("activeConfig", MODULE.PAGE)
+        self.assertIn("refreshLivePreview", MODULE.PAGE)
+        self.assertIn('id="live-preview"', MODULE.PAGE)
+        self.assertIn("saved camera settings are selected", MODULE.PAGE)
+
+    def test_camera_page_displays_measured_capture_rate_separately_from_configured_fps(self):
+        self.assertIn("Actual captured rate:", MODULE.PAGE)
+        self.assertIn("latest_captured_fps", MODULE.PAGE)
+        self.assertIn("configured:", MODULE.PAGE)
+        self.assertIn("actual ", MODULE.PAGE)
+
+    def test_camera_performance_warning_accounts_for_all_streams(self):
+        self.assertIn("projectedPixelRate", MODULE.PAGE)
+        self.assertIn("resourceBudget", MODULE.PAGE)
+        self.assertIn("aggregate pixels/second", MODULE.PAGE)
+        self.assertIn("primary_estimated_pixels_per_second", MODULE.PAGE)
+
+    def test_active_camera_config_returns_only_selection_fields(self):
+        config = {
+            "SOURCE": "usb", "DEVICE": "", "USB_PHYSICAL_PATH": "/sys/devices/usb1/1-1",
+            "CSI_DEVICE_PATH": "", "CAMERA": "auto", "FORMAT": "MJPG",
+            "RESOLUTION": "1280x720", "FPS": "30", "PORT": "8081", "CSI_QUALITY": "70",
+        }
+        with mock.patch.object(MODULE, "parse_config", return_value=config):
+            active = MODULE.active_camera_config()
+        self.assertEqual(active["RESOLUTION"], "1280x720")
+        self.assertEqual(active["FPS"], "30")
+        self.assertNotIn("PORT", active)
+        self.assertNotIn("CSI_QUALITY", active)
+
+    def test_live_capture_status_reports_measured_fps(self):
+        status = {
+            "latest_captured_fps": 15,
+            "active_resolution": "1280x720",
+            "active_capture_format": "MJPEG",
+            "hostname": "kittycam",
+        }
+        result = mock.Mock(returncode=0, stdout=json.dumps(status))
+        with mock.patch.object(MODULE.subprocess, "run", return_value=result) as run:
+            actual = MODULE.live_capture_status()
+        run.assert_called_once()
+        self.assertEqual(actual, {
+            "latest_captured_fps": 15,
+            "active_resolution": "1280x720",
+            "active_capture_format": "MJPEG",
+        })
+
     def test_invalid_capture_values_are_rejected(self):
         for mode in (
             {"width": 0, "height": 480, "fps": 30},
