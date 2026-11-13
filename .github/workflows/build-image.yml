@@ -3,11 +3,6 @@ name: Build PetCam OS image
 on:
   workflow_dispatch:
     inputs:
-      build_image:
-        description: Build a non-publishing image for cache benchmarking
-        required: false
-        default: false
-        type: boolean
       release_version:
         description: Application version to embed in a manual benchmark image
         required: false
@@ -66,7 +61,7 @@ jobs:
 
   release:
     name: Build Raspberry Pi OS image
-    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.build_image)
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 180
