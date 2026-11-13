@@ -26,6 +26,31 @@ class UStreamerHardwareFpsTests(unittest.TestCase):
         )
         self.assertIn('TPF(denominator) = cap->hw_fps > 0 ? cap->hw_fps : (uint)-1;', build)
 
+    def test_embedded_upstream_patch_has_valid_unified_diff_hunk_lengths(self):
+        build = (
+            ROOT / "stage-petcam-base/02-build-ustreamer/00-run-chroot.sh"
+        ).read_text(encoding="utf-8")
+        patch = build.split("<<'PATCH'\\n", 1)[1].split("\\nPATCH\\n", 1)[0]
+        lines = patch.splitlines()
+
+        for index, line in enumerate(lines):
+            if not line.startswith("@@ "):
+                continue
+            header = re.match(r"^@@ -\\d+,(\\d+) \\+\\d+,(\\d+) @@", line)
+            self.assertIsNotNone(header, line)
+            old_expected, new_expected = map(int, header.groups())
+            old_actual = 0
+            new_actual = 0
+            for patch_line in lines[index + 1:]:
+                if patch_line.startswith("@@ ") or patch_line.startswith("diff --git "):
+                    break
+                if patch_line.startswith((" ", "-")):
+                    old_actual += 1
+                if patch_line.startswith((" ", "+")):
+                    new_actual += 1
+            self.assertEqual(old_expected, old_actual, line)
+            self.assertEqual(new_expected, new_actual, line)
+
     def test_usb_startup_sets_hardware_rate_and_keeps_output_pacing(self):
         startup = (
             ROOT / "stage-petcam/02-configure-petcam/00-run-chroot.sh"
