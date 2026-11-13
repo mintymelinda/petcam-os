@@ -77,7 +77,7 @@ class BuildCacheContractTests(unittest.TestCase):
             "name: Prepare and publish signed application update",
         ):
             start = workflow.index(step)
-            following = workflow.find("\\n      - name:", start + len(step))
+            following = workflow.find("\n      - name:", start + len(step))
             block = workflow[start:] if following < 0 else workflow[start:following]
             self.assertIn("if: github.ref_type == 'tag'", block)
 
