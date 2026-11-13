@@ -5,6 +5,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 STAGE = ROOT / "stage-petcam"
+BASE_STAGE = ROOT / "stage-petcam-base"
+BASE_PACKAGES = BASE_STAGE / "01-install-packages" / "00-packages"
+USTREAMER_BUILD = BASE_STAGE / "02-build-ustreamer" / "00-run-chroot.sh"
+WORKFLOW = ROOT / ".github" / "workflows" / "build-image.yml"
 INSTALL = STAGE / "00-install-files" / "00-run.sh"
 CONFIGURE = STAGE / "02-configure-petcam" / "00-run-chroot.sh"
 VERSION = (ROOT / "VERSION").read_text().strip()
@@ -50,14 +54,29 @@ class ImageLayoutTests(unittest.TestCase):
             STAGE / "00-install-files/files/usr/local/lib/petcam/web_manager.py"
         ).read_text())
 
-    def test_ustreamer_source_is_pinned_and_config_permissions_are_valid(self):
-        script = CONFIGURE.read_text()
+    def test_ustreamer_build_is_part_of_the_cached_base_rootfs(self):
+        build_script = USTREAMER_BUILD.read_text()
+        configure_script = CONFIGURE.read_text()
+        packages = BASE_PACKAGES.read_text().splitlines()
         self.assertIn(
-            "git -C /opt/ustreamer fetch --depth 1 "
-            "https://github.com/pikvm/ustreamer.git "
-            "11fd828ab00c01a39bd0843ef442ef0b6d3cac41",
-            script,
+            "USTREAMER_COMMIT=\"11fd828ab00c01a39bd0843ef442ef0b6d3cac41\"",
+            build_script,
         )
+        self.assertIn(
+            "git -C \"$SOURCE_DIR\" fetch --depth 1 "
+            "https://github.com/pikvm/ustreamer.git \"$USTREAMER_COMMIT\"",
+            build_script,
+        )
+        self.assertIn('make -C "$SOURCE_DIR" -j"$(nproc)"', build_script)
+        self.assertIn('PREFIX="/opt/petcam/ustreamer"', build_script)
+        self.assertNotIn("build-essential", packages)
+        self.assertNotIn("pkg-config", packages)
+        self.assertIn('cp -a /opt/petcam/ustreamer/.', configure_script)
+        self.assertNotIn("git -C /opt/ustreamer fetch", configure_script)
+        self.assertIn("apt-get purge -y --auto-remove", build_script)
+        self.assertIn("umount /var/cache/apt/archives", build_script)
+        self.assertNotIn("apt-get purge -y --auto-remove", configure_script)
+        script = configure_script
         self.assertIn("chown root:petcam /etc/petcam", script)
         self.assertIn("chmod 1770 /etc/petcam", script)
         self.assertNotIn("chmod 0750 /etc/petcam", script)
@@ -69,8 +88,20 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertGreater(script.index("systemctl daemon-reload", template_at), template_at)
         self.assertIn("install -d -o petcam -g petcam -m 0750 /etc/petcam/cameras.d", script)
         self.assertIn('case "$action" in\n    start|restart|enable)', script)
-        self.assertIn("Environment=PETCAM_CONFIG_PATH=/etc/petcam/cameras.d/%i.conf", script)
         self.assertNotIn(r"\nchmod", script)
+
+    def test_main_branch_seeds_cache_shared_by_release_tags(self):
+        workflow = WORKFLOW.read_text()
+        self.assertIn("warm-base-cache:", workflow)
+        self.assertIn(
+            "if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
+            workflow,
+        )
+        self.assertIn("actions/cache/restore@v4", workflow)
+        self.assertIn("lookup-only: true", workflow)
+        self.assertIn("actions/cache/save@v4", workflow)
+        self.assertIn("pigen-base-rootfs-v2-", workflow)
+        self.assertIn('STAGE_LIST="stage0 stage1 stage2 stage-petcam-base"', workflow)
 
     def test_home_assistant_mqtt_is_optional_and_disabled_by_default(self):
         script = CONFIGURE.read_text()

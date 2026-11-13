@@ -7,13 +7,13 @@ fi
 usermod -g petcam -a -G video,i2c petcam
 
 APP_VERSION="$(cat /opt/petcam/releases/*/VERSION)"
-install -d -m 0755 /opt
-git init /opt/ustreamer
-git -C /opt/ustreamer fetch --depth 1 https://github.com/pikvm/ustreamer.git 11fd828ab00c01a39bd0843ef442ef0b6d3cac41
-git -C /opt/ustreamer checkout --detach FETCH_HEAD
-make -C /opt/ustreamer -j1 WITH_SYSTEMD=0 WITH_GPIO=0
-make -C /opt/ustreamer install PREFIX="/opt/petcam/releases/$APP_VERSION/vendor"
-rm -rf /opt/ustreamer
+install -d -m 0755 "/opt/petcam/releases/$APP_VERSION/vendor"
+if [[ ! -x /opt/petcam/ustreamer/bin/ustreamer ]]; then
+    echo "Cached uStreamer binary is missing from the prepared PetCam base rootfs." >&2
+    exit 1
+fi
+cp -a /opt/petcam/ustreamer/. "/opt/petcam/releases/$APP_VERSION/vendor/"
+rm -rf /opt/petcam/ustreamer
 ln -sfn "releases/$APP_VERSION" /opt/petcam/current
 
 cat > /usr/local/bin/petcam-camera <<'SCRIPT'
@@ -350,43 +350,3 @@ JSON
 chown petcam:petcam /var/lib/petcam/motion/config.json
 chmod 0640 /var/lib/petcam/motion/config.json
 systemctl enable petcam-motion.service
-
-
-# Remove image-build-only dependencies after compiling the bundled streamer.
-# Preserve every shared library actually used by the installed binary before
-# purging development packages and allowing apt to remove unused dependencies.
-USTREAMER_BIN="/opt/petcam/releases/$APP_VERSION/vendor/bin/ustreamer"
-while IFS= read -r library; do
-    # Resolve /lib -> /usr/lib symlinks before querying dpkg. On merged-/usr
-    # Raspberry Pi OS, dpkg-query may otherwise report a diversion record
-    # (for example, "diversion by libc6 from: ...") instead of the owner.
-    resolved_library="$(readlink -f "$library" 2>/dev/null || true)"
-    if [[ -z "$resolved_library" ]]; then
-        echo "Unable to resolve runtime library path: $library" >&2
-        exit 1
-    fi
-
-    # Ignore dpkg-divert records; only a real package ownership line has the
-    # "package: /path" shape. Preserve multiarch package names such as libc6:armhf.
-    package="$(dpkg-query -S "$resolved_library" 2>/dev/null | awk -F ': ' '$1 !~ /^(diversion|local diversion)( |$)/ && NF >= 2 { print $1; exit }')"
-    if [[ -z "$package" ]]; then
-        echo "Unable to identify the Debian package owning runtime library: $resolved_library" >&2
-        exit 1
-    fi
-    apt-mark manual "$package" >/dev/null
-done < <(ldd "$USTREAMER_BIN" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^\//) print $i }' | sort -u)
-
-apt-get purge -y --auto-remove \
-    build-essential pkg-config git \
-    libevent-dev libjpeg-dev libbsd-dev libv4l-dev
-# pi-gen's optional shared archive cache is bind-mounted into this chroot.
-# Detach it before cleaning the target rootfs so cleanup never deletes the host cache.
-if [[ -n "${APT_ARCHIVE_CACHE:-}" ]]; then
-    umount /var/cache/apt/archives
-fi
-apt-get clean
-rm -rf /var/lib/apt/lists/*
-find /usr/share/doc -mindepth 1 -maxdepth 1 ! -name copyright -exec rm -rf {} +
-rm -rf /usr/share/man/* /usr/share/info/*
-find /var/log -type f -exec truncate -s 0 {} +
-rm -rf /tmp/* /var/tmp/*

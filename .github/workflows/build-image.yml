@@ -13,6 +13,7 @@ on:
       - "config"
       - "VERSION"
       - "stage-petcam/**"
+      - "stage-petcam-base/**"
       - "tests/**"
       - "tools/**"
       - "assets/**"
@@ -26,6 +27,7 @@ on:
       - "config"
       - "VERSION"
       - "stage-petcam/**"
+      - "stage-petcam-base/**"
       - "tests/**"
       - "tools/**"
       - "assets/**"
@@ -50,14 +52,84 @@ jobs:
 
       - name: Validate PetCam scripts
         run: |
-          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_auth.py stage-petcam/00-install-files/files/usr/local/lib/petcam/health_monitor.py stage-petcam/00-install-files/files/usr/local/lib/petcam/config.py stage-petcam/00-install-files/files/usr/local/lib/petcam/network_diagnostics.py stage-petcam/00-install-files/files/usr/local/lib/petcam/factory_reset.py stage-petcam/00-install-files/files/usr/local/lib/petcam/home_assistant.py stage-petcam/00-install-files/files/usr/local/lib/petcam/timelapse.py stage-petcam/00-install-files/files/usr/local/lib/petcam/motion_detection.py tools/create_imager_os_list.py stage-petcam/00-install-files/files/usr/local/lib/petcam/updater.py tools/create_update_release.py
-          bash -n stage-petcam-base/prerun.sh stage-petcam/prerun.sh stage-petcam/00-install-files/00-run.sh stage-petcam/02-configure-petcam/00-run-chroot.sh
+          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_auth.py stage-petcam/00-install-files/files/usr/local/lib/petcam/health_monitor.py stage-petcam/00-install-files/files/usr/local/lib/petcam/config.py stage-petcam/00-install-files/files/usr/local/lib/petcam/network_diagnostics.py stage-petcam/00-install-files/files/usr/local/lib/petcam/factory_reset.py stage-petcam/00-install-files/files/usr/local/lib/petcam/home_assistant.py stage-petcam/00-install-files/files/usr/local/lib/petcam/timelapse.py stage-petcam/00-install-files/files/usr/local/lib/petcam/motion_detection.py tools/create_imager_os_list.py stage-petcam/00-install-files/files/usr/local/lib/petcam/updater.py tools/create_update_release.py tools/prepare_pigen_build.py
+          bash -n stage-petcam-base/prerun.sh stage-petcam/prerun.sh stage-petcam/00-install-files/00-run.sh stage-petcam/02-configure-petcam/00-run-chroot.sh stage-petcam-base/02-build-ustreamer/00-run-chroot.sh
 
       - name: Install test-only image processing dependency
         run: sudo apt-get update && sudo apt-get install -y python3-pil
 
       - name: Test camera, updater, timelapse, motion detection, and Imager catalogue generation
         run: python3 -m unittest discover -s tests -v
+
+  warm-base-cache:
+    name: Warm reusable image base cache
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - name: Check out PetCam OS
+        uses: actions/checkout@v7
+
+      - name: Check out pi-gen
+        uses: actions/checkout@v7
+        with:
+          repository: RPi-Distro/pi-gen
+          ref: 6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78
+          path: pi-gen
+
+      - name: Check for the shared prepared base root filesystem
+        id: base-rootfs-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/pigen-base-rootfs.tar
+          key: pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile', 'tools/prepare_pigen_build.py') }}
+          lookup-only: true
+
+      - name: Restore reusable APT package archives
+        if: steps.base-rootfs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/pigen-apt-cache
+          key: pigen-apt-v3-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'stage-petcam-base/**', 'tools/prepare_pigen_build.py') }}
+          restore-keys: |
+            pigen-apt-v3-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
+
+      - name: Set up Docker Buildx
+        if: steps.base-rootfs-cache.outputs.cache-hit != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Prepare base-only pi-gen build
+        if: steps.base-rootfs-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/pigen-apt-cache/partial" "${RUNNER_TEMP}/pigen-work"
+          cp config pi-gen/config
+          sed -i 's/^STAGE_LIST=.*/STAGE_LIST="stage0 stage1 stage2 stage-petcam-base"/' pi-gen/config
+          cp -a stage-petcam-base pi-gen/stage-petcam-base
+          chmod 0755 pi-gen/stage-petcam-base/prerun.sh
+          python3 tools/prepare_pigen_build.py pi-gen
+
+      - name: Build and cache the prepared base root filesystem
+        if: steps.base-rootfs-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          cd pi-gen
+          PIGEN_DOCKER_OPTS="--mount type=bind,src=${RUNNER_TEMP}/pigen-apt-cache,dst=/apt-cache -e APT_ARCHIVE_CACHE=/apt-cache --mount type=bind,src=${RUNNER_TEMP}/pigen-work,dst=/pi-gen/work"
+          PIGEN_DOCKER_OPTS="${PIGEN_DOCKER_OPTS}" ./build-docker.sh
+          sudo chown -R "$(id -u):$(id -g)" "${RUNNER_TEMP}/pigen-apt-cache"
+          sudo tar --numeric-owner --xattrs --acls -cpf "${RUNNER_TEMP}/pigen-base-rootfs.tar" -C "${RUNNER_TEMP}/pigen-work" PetCamOS/stage-petcam-base/rootfs
+          sudo chown "$(id -u):$(id -g)" "${RUNNER_TEMP}/pigen-base-rootfs.tar"
+          chmod 0644 "${RUNNER_TEMP}/pigen-base-rootfs.tar"
+
+      - name: Save shared prepared base root filesystem
+        if: steps.base-rootfs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/pigen-base-rootfs.tar
+          key: pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile', 'tools/prepare_pigen_build.py') }}
 
   release:
     name: Build Raspberry Pi OS image
@@ -100,21 +172,21 @@ jobs:
 
       # Cache the prepared OS and stable PetCam package root filesystem, not just
       # Docker's pi-gen builder image or individual downloaded .deb files.
-      # Bump pigen-base-rootfs-v1 when intentionally refreshing base OS or stable package versions.
+      # Bump pigen-base-rootfs-v2 when intentionally refreshing base OS or stable package versions.
       - name: Restore reusable OS and package base root filesystem
         id: base-rootfs-cache
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/pigen-base-rootfs.tar
-          key: pigen-base-rootfs-v1-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile') }}
+          key: pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile', 'tools/prepare_pigen_build.py') }}
 
       - name: Prepare build caches
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/pigen-apt-cache
-          key: pigen-apt-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'stage-petcam-base/**') }}
+          key: pigen-apt-v3-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'stage-petcam-base/**', 'tools/prepare_pigen_build.py') }}
           restore-keys: |
-            pigen-apt-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
+            pigen-apt-v3-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -149,61 +221,7 @@ jobs:
           chmod 0755 pi-gen/stage-petcam/prerun.sh
           chmod 0755 pi-gen/stage-petcam/00-install-files/00-run.sh
           mkdir -p pi-gen/deploy
-          # pi-gen's Dockerfile is stable at the pinned revision. Route its image
-          # build through Buildx so GitHub Actions can persist Docker layers.
-          python3 - <<'PY'
-          from pathlib import Path
-
-          script = Path("pi-gen/build-docker.sh")
-          content = script.read_text(encoding="utf-8")
-          old = '${DOCKER} build ${PLATFORM:+--platform "${PLATFORM}"} --build-arg BASE_IMAGE=${BASE_IMAGE} -t pi-gen "${DIR}"'
-          new = '${DOCKER} buildx build --load --cache-from type=gha --cache-to type=gha,mode=max ${PLATFORM:+--platform "${PLATFORM}"} --build-arg BASE_IMAGE=${BASE_IMAGE} -t pi-gen "${DIR}"'
-          if content.count(old) != 1:
-              raise SystemExit("Pinned pi-gen build-docker.sh no longer has the expected Docker build command")
-          script.write_text(content.replace(old, new), encoding="utf-8")
-
-          # Keep downloaded .deb archives outside the target rootfs, but bind
-          # the shared runner cache into each chroot while pi-gen installs packages.
-          common = Path("pi-gen/scripts/common")
-          content = common.read_text(encoding="utf-8")
-          anchor = 'on_chroot() {\n'
-          mount = '''on_chroot() {
-          	if [ -n "${APT_ARCHIVE_CACHE:-}" ]; then
-          		# APT normally removes downloaded archives after installation.
-          		# Keep them in the shared runner cache so later builds can reuse them.
-          		mkdir -p "${ROOTFS_DIR}/etc/apt/apt.conf.d"
-          		printf '%s\n' 'APT::Keep-Downloaded-Packages "true";' > "${ROOTFS_DIR}/etc/apt/apt.conf.d/99-pigen-archive-cache"
-          		if ! mount | grep -q " ${ROOTFS_DIR}/var/cache/apt/archives "; then
-          			mkdir -p "${ROOTFS_DIR}/var/cache/apt/archives"
-          			mount --bind "${APT_ARCHIVE_CACHE}" "${ROOTFS_DIR}/var/cache/apt/archives"
-          		fi
-          	fi
-          '''
-          if content.count(anchor) != 1:
-              raise SystemExit("Pinned pi-gen common script no longer has the expected on_chroot function")
-          content = content.replace(anchor, mount, 1)
-          chroot_call = 'setarch linux32 capsh $CAPSH_ARG "--chroot=${ROOTFS_DIR}/" -- -e "$@"'
-          cached_chroot_call = 'APT_ARCHIVE_CACHE="${APT_ARCHIVE_CACHE:-}" setarch linux32 capsh $CAPSH_ARG "--chroot=${ROOTFS_DIR}/" -- -e "$@"'
-          if content.count(chroot_call) != 1:
-              raise SystemExit("Pinned pi-gen common script no longer has the expected chroot invocation")
-          common.write_text(content.replace(chroot_call, cached_chroot_call, 1), encoding="utf-8")
-
-          # The final pi-gen source refresh runs apt-get clean inside the chroot.
-          # That would empty the bind-mounted shared cache, so retain archives
-          # whenever the external cache is enabled.
-          export_cleanup = Path("pi-gen/export-image/02-set-sources/01-run.sh")
-          content = export_cleanup.read_text(encoding="utf-8")
-          clean_command = "apt-get clean\n"
-          guarded_clean = 'if [ -z "${APT_ARCHIVE_CACHE:-}" ]; then\n\tapt-get clean\nfi\n'
-          if content.count(clean_command) != 1:
-              raise SystemExit("Pinned pi-gen export cleanup no longer has the expected apt-get clean command")
-          content = content.replace(clean_command, guarded_clean, 1)
-          cache_config_cleanup = 'rm -f "${ROOTFS_DIR}/etc/apt/apt.conf.d/99-pigen-archive-cache"\n'
-          if not content.endswith("EOF\n"):
-              raise SystemExit("Pinned pi-gen export cleanup no longer ends with the expected chroot heredoc")
-          content += cache_config_cleanup
-          export_cleanup.write_text(content, encoding="utf-8")
-          PY
+          python3 tools/prepare_pigen_build.py pi-gen
 
       - name: Build Raspberry Pi OS image
         id: pigen-build
