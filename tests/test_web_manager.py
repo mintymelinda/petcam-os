@@ -321,5 +321,149 @@ class WebManagerTests(unittest.TestCase):
                 MODULE.save_selection({"kind": "csi", "camera": 0, "mode": mode})
 
 
+class CameraControlTests(unittest.TestCase):
+    SAMPLE_CONTROLS = """brightness 0x00980900 (int) : min=0 max=255 step=1 default=128 value=128 flags=has-min-max
+white_balance_automatic 0x0098090c (bool) : default=1 value=1
+power_line_frequency 0x00980918 (menu) : min=0 max=2 default=2 value=2 (60 Hz)
+        0: Disabled
+        1: 50 Hz
+        2: 60 Hz
+auto_exposure 0x009a0901 (menu) : min=0 max=3 default=0 value=3 (Aperture Priority Mode)
+        1: Manual Mode
+        3: Aperture Priority Mode
+exposure_time_absolute 0x009a0902 (int) : min=3 max=2047 step=1 default=250 value=250 flags=inactive, has-min-max
+exposure_dynamic_framerate 0x009a0903 (bool) : default=0 value=1
+"""
+
+    def test_parser_discovers_integer_boolean_and_menu_controls(self):
+        controls = MODULE.parse_v4l2_controls(self.SAMPLE_CONTROLS)
+        by_name = {control["name"]: control for control in controls}
+        self.assertEqual(by_name["brightness"]["min"], 0)
+        self.assertEqual(by_name["brightness"]["max"], 255)
+        self.assertTrue(by_name["brightness"]["writable"])
+        self.assertEqual(by_name["white_balance_automatic"]["type"], "bool")
+        self.assertEqual(by_name["power_line_frequency"]["menu"], [
+            {"value": 0, "label": "Disabled"},
+            {"value": 1, "label": "50 Hz"},
+            {"value": 2, "label": "60 Hz"},
+        ])
+        self.assertEqual(by_name["auto_exposure"]["value"], 3)
+        self.assertFalse(by_name["exposure_time_absolute"]["writable"])
+        self.assertTrue(by_name["exposure_dynamic_framerate"]["writable"])
+
+    def test_active_usb_camera_is_resolved_from_saved_physical_identity(self):
+        camera = {
+            "kind": "usb",
+            "device": "/dev/video4",
+            "physical_path": "/sys/devices/usb1/1-1.2",
+        }
+        config = {
+            "SOURCE": "usb",
+            "DEVICE": "",
+            "USB_PHYSICAL_PATH": "/sys/devices/usb1/1-1.2",
+        }
+        with mock.patch.object(MODULE, "active_camera_config", return_value=config), \\
+                mock.patch.object(MODULE, "camera_inventory", return_value=[camera]):
+            self.assertEqual(MODULE.active_usb_camera(), camera)
+
+    def test_camera_controls_are_unavailable_for_non_usb_active_source(self):
+        with mock.patch.object(MODULE, "active_camera_config", return_value={"SOURCE": "csi"}):
+            result = MODULE.read_camera_controls()
+        self.assertFalse(result["supported"])
+        self.assertEqual(result["controls"], [])
+
+    def test_read_camera_controls_uses_only_discovered_device(self):
+        camera = {"device": "/dev/video4", "label": "USB camera"}
+        completed = mock.Mock(returncode=0, stdout=self.SAMPLE_CONTROLS, stderr="")
+        with mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run:
+            result = MODULE.read_camera_controls(camera)
+        self.assertTrue(result["supported"])
+        self.assertEqual(result["device"], "/dev/video4")
+        self.assertEqual(len(result["controls"]), 6)
+        self.assertEqual(run.call_args.args[0], [
+            "/usr/bin/v4l2-ctl", "--device", "/dev/video4", "--list-ctrls-menus",
+        ])
+
+    def test_read_camera_controls_rejects_untrusted_device_paths(self):
+        with self.assertRaisesRegex(ValueError, "invalid V4L2 device path"):
+            MODULE.read_camera_controls({"device": "/tmp/fake-video"})
+
+    def test_setting_integer_control_uses_validated_v4l2_command(self):
+        camera = {"device": "/dev/video4"}
+        control = {
+            "name": "brightness", "type": "int", "min": 0, "max": 255,
+            "step": 1, "menu": [], "writable": True,
+        }
+        snapshot = {"supported": True, "controls": [control]}
+        completed = mock.Mock(returncode=0, stdout="", stderr="")
+        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \\
+                mock.patch.object(MODULE, "read_camera_controls", side_effect=[snapshot, snapshot]), \\
+                mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run:
+            result = MODULE.set_camera_control({"name": "brightness", "value": 200})
+        self.assertEqual(result, snapshot)
+        self.assertEqual(run.call_args.args[0], [
+            "/usr/bin/v4l2-ctl", "--device", "/dev/video4", "--set-ctrl=brightness=200",
+        ])
+
+    def test_setting_boolean_control_accepts_json_boolean(self):
+        camera = {"device": "/dev/video4"}
+        control = {
+            "name": "exposure_dynamic_framerate", "type": "bool",
+            "min": None, "max": None, "step": 1, "menu": [], "writable": True,
+        }
+        snapshot = {"supported": True, "controls": [control]}
+        completed = mock.Mock(returncode=0, stdout="", stderr="")
+        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \\
+                mock.patch.object(MODULE, "read_camera_controls", side_effect=[snapshot, snapshot]), \\
+                mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run:
+            MODULE.set_camera_control({"name": "exposure_dynamic_framerate", "value": False})
+        self.assertTrue(run.call_args.args[0][-1].endswith("=0"))
+
+    def test_setting_menu_control_rejects_unadvertised_values(self):
+        camera = {"device": "/dev/video4"}
+        control = {
+            "name": "power_line_frequency", "type": "menu", "min": 0, "max": 2,
+            "step": 1, "menu": [{"value": 0, "label": "Disabled"}], "writable": True,
+        }
+        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \\
+                mock.patch.object(MODULE, "read_camera_controls", return_value={
+                    "supported": True, "controls": [control],
+                }), \\
+                mock.patch.object(MODULE.subprocess, "run") as run:
+            with self.assertRaisesRegex(ValueError, "not an advertised menu option"):
+                MODULE.set_camera_control({"name": "power_line_frequency", "value": 2})
+        run.assert_not_called()
+
+    def test_setting_control_rejects_out_of_range_and_inactive_values(self):
+        camera = {"device": "/dev/video4"}
+        control = {
+            "name": "brightness", "type": "int", "min": 0, "max": 255,
+            "step": 1, "menu": [], "writable": True,
+        }
+        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \\
+                mock.patch.object(MODULE, "read_camera_controls", return_value={
+                    "supported": True, "controls": [control],
+                }), \\
+                mock.patch.object(MODULE.subprocess, "run") as run:
+            with self.assertRaisesRegex(ValueError, "above the supported maximum"):
+                MODULE.set_camera_control({"name": "brightness", "value": 300})
+        run.assert_not_called()
+        control["writable"] = False
+        with mock.patch.object(MODULE, "active_usb_camera", return_value=camera), \\
+                mock.patch.object(MODULE, "read_camera_controls", return_value={
+                    "supported": True, "controls": [control],
+                }), \\
+                mock.patch.object(MODULE.subprocess, "run") as run:
+            with self.assertRaisesRegex(ValueError, "inactive or read-only"):
+                MODULE.set_camera_control({"name": "brightness", "value": 100})
+        run.assert_not_called()
+
+    def test_management_page_exposes_dynamic_camera_controls(self):
+        self.assertIn('id="camera-controls-list"', MODULE.PAGE)
+        self.assertIn("/api/camera-controls", MODULE.PAGE)
+        self.assertIn("Dynamic framerate", MODULE.PAGE)
+        self.assertIn("actual captured frame rate", MODULE.PAGE)
+
+
 if __name__ == "__main__":
     unittest.main()
