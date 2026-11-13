@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import ensure_config_lock, parse_config
-from camera import mode_supports_fps
+from camera import PIXEL_BUDGETS, mode_supports_fps, model_tier, read_model
 from network_diagnostics import collect_diagnostics, create_support_bundle
 from camera_profiles import (
     USTREAMER_FORMATS, apply_primary_config, camera_identity, configure_profile, create_profile, list_profiles,
@@ -112,11 +112,14 @@ $("browser-source-url").textContent=browserSourceUrl;
 $("copy-browser-source").onclick=async()=>{const message=$("copy-message");try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(browserSourceUrl)}else{const field=document.createElement("textarea");field.value=browserSourceUrl;field.setAttribute("readonly","");field.style.position="fixed";field.style.opacity="0";document.body.append(field);field.select();const copied=document.execCommand("copy");field.remove();if(!copied)throw Error("Clipboard access is unavailable")}message.textContent="Browser source URL copied."}catch(e){message.textContent="Could not copy automatically. Select and copy the URL above."}};
 let csrfToken=null;let loginPromise=null;async function login(){if(loginPromise)return loginPromise;loginPromise=(async()=>{const setupResponse=await fetch("/api/setup/status",{cache:"no-store"});const setupState=await setupResponse.json();if(!setupResponse.ok)throw Error(setupState.error||"Unable to check initial setup");if(!setupState.configured)throw Error("Create the administrator password in the welcome panel before signing in.");const password=window.prompt("Enter your PetCam manager password");if(password===null)throw Error("Sign-in cancelled");const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password})});const d=await r.json();if(!r.ok)throw Error(d.error||"Sign-in failed");csrfToken=d.csrf_token;return d})();try{return await loginPromise}finally{loginPromise=null}}async function request(path,options={}){const headers=new Headers(options.headers||{});if(options.method&&options.method.toUpperCase()!=="GET"&&!csrfToken){let session=await fetch("/api/session");if(session.status===401){await login()}else{const state=await session.json();if(!session.ok)throw Error(state.error||session.statusText);csrfToken=state.csrf_token}}if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);let r=await fetch(path,{...options,headers});if(r.status===401){await login();if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);r=await fetch(path,{...options,headers})}const d=await r.json();if(!r.ok)throw Error(d.error||r.statusText);return d}
 function modesFor(camera){return camera.kind==="usb"?camera.modes.filter(m=>["MJPG","MJPEG","JPEG","YUYV","YVYU","UYVY","YUV420","YVU420","RGB565","RGB24","GREY"].includes(m.format)):camera.modes}
-function fillModes(){const c=inventory[+$("camera").value];$("mode").replaceChildren();if(!c)return;for(const m of modesFor(c)){let fps=m.fps?.length?m.fps:[m.fps_range?.max||30];if(c.kind==="usb")fps=fps.filter(Number.isInteger);for(const f of fps){const o=document.createElement("option");o.value=JSON.stringify({format:m.format||"CSI",width:m.width,height:m.height,fps:f});o.textContent=`${m.width}×${m.height} · ${f} fps · ${m.format||"CSI"}`; $("mode").append(o)}}}
+function exceedsPerformanceBudget(camera,mode){const budget=Number(camera?.hardware_budget_pixels_per_second||0);return budget>0&&mode.width*mode.height*mode.fps>budget}
+function confirmPerformanceOverride(camera,mode){if(!exceedsPerformanceBudget(camera,mode))return false;const estimate=mode.width*mode.height*mode.fps,budget=Number(camera.hardware_budget_pixels_per_second);return confirm("Performance warning: this mode is estimated at "+estimate.toLocaleString()+" pixels/second, above the "+camera.hardware_tier+" device guideline of "+budget.toLocaleString()+" pixels/second. It may cause low frame rates, dropped frames, or an unresponsive camera stream. Use this mode anyway?")}
+function showSelectedModeWarning(){const c=inventory[+$("camera").value],raw=$("mode").value;if(!c||!raw)return;const mode=JSON.parse(raw);if(exceedsPerformanceBudget(c,mode))$("message").textContent="Performance warning: this mode exceeds the estimated "+c.hardware_tier+" device budget. You can still apply it after confirming the warning.";else $("message").textContent="Selected mode is within the estimated device performance budget."}
+function fillModes(){const c=inventory[+$("camera").value];$("mode").replaceChildren();if(!c)return;for(const m of modesFor(c)){let fps=m.fps?.length?m.fps:[m.fps_range?.max||30];if(c.kind==="usb")fps=fps.filter(Number.isInteger);for(const f of fps){const mode={format:m.format||"CSI",width:m.width,height:m.height,fps:f};const o=document.createElement("option");o.value=JSON.stringify(mode);o.textContent=`${m.width}×${m.height} · ${f} fps · ${m.format||"CSI"}`+(exceedsPerformanceBudget(c,mode)?" · ⚠ above device estimate":"");$("mode").append(o)}}$("mode").onchange=showSelectedModeWarning;showSelectedModeWarning()}
 async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{$("message").textContent=inventory.length+" camera(s) found. Select one to preview and configure.";fillModes()}await refreshStreams()}catch(e){$("message").textContent=e.message}}
 $("refresh").onclick=refresh;$("camera").onchange=fillModes;
-$("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value,target=$("stream-target").value;if(!c||!m)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{if(target==="default"){await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,camera_id:c.id,device:c.device,physical_path:c.physical_path,device_path:c.device_path,camera:c.camera,mode:JSON.parse(m)})})}else{await request("/api/streams/configure",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile_id:target,camera_id:c.id,mode:JSON.parse(m)})})}$("message").textContent="Camera settings saved. Only the selected stream was restarted.";await refreshStreams()}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
-$("add-stream").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;const b=$("add-stream");b.disabled=true;$("message").textContent="Starting independent camera stream…";try{const d=await request("/api/streams",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({camera_id:c.id,mode:JSON.parse(m)})});$("message").textContent="Independent stream started: "+d.profile.stream_path;await refreshStreams()}catch(e){$("message").textContent=e.message}finally{b.disabled=false}};
+$("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value,target=$("stream-target").value;if(!c||!m)return;const mode=JSON.parse(m),override=confirmPerformanceOverride(c,mode);if(exceedsPerformanceBudget(c,mode)&&!override)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{if(target==="default"){await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,camera_id:c.id,device:c.device,physical_path:c.physical_path,device_path:c.device_path,camera:c.camera,mode,allow_performance_override:override})})}else{await request("/api/streams/configure",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile_id:target,camera_id:c.id,mode,allow_performance_override:override})})}$("message").textContent="Camera settings saved. Only the selected stream was restarted.";await refreshStreams()}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
+$("add-stream").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;const mode=JSON.parse(m),override=confirmPerformanceOverride(c,mode);if(exceedsPerformanceBudget(c,mode)&&!override)return;const b=$("add-stream");b.disabled=true;$("message").textContent="Starting independent camera stream…";try{const d=await request("/api/streams",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({camera_id:c.id,mode,allow_performance_override:override})});$("message").textContent="Independent stream started: "+d.profile.stream_path;await refreshStreams()}catch(e){$("message").textContent=e.message}finally{b.disabled=false}};
 $("refresh-streams").onclick=refreshStreams;
 $("logout").onclick=async()=>{try{await request("/api/logout",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});csrfToken=null;location.reload()}catch(e){alert(e.message)}};
 function fillStreamTargets(){const selected=$("stream-target").value;$("stream-target").replaceChildren();const primary=document.createElement("option");primary.value="default";primary.textContent="Primary stream (/stream)";$("stream-target").append(primary);for(const p of streams){if(p.id==="default")continue;const o=document.createElement("option");o.value=p.id;o.textContent=p.label+" · "+p.state;$("stream-target").append(o)}if([...$("stream-target").options].some(o=>o.value===selected))$("stream-target").value=selected}
@@ -164,13 +167,18 @@ def run_camera(command):
 
 def camera_inventory():
     usb = run_camera(["discover"])
+    tier = model_tier(read_model())
+    performance_budget = PIXEL_BUDGETS[tier]
     result = []
     for item in usb.get("usb_devices", []):
         camera = {"kind": "usb", "device": item["device"],
                   "physical_path": item.get("physical_path", ""),
                   "label": f'USB · {item["device"]}', "modes": [mode for mode in item["modes"] if mode["format"] in USTREAMER_FORMATS]}
         identity = camera_identity(camera)
-        result.append({**camera, "id": identity["id"], "stable_identity": identity["stable_identity"]})
+        result.append({
+            **camera, "id": identity["id"], "stable_identity": identity["stable_identity"],
+            "hardware_tier": tier, "hardware_budget_pixels_per_second": performance_budget,
+        })
     for item in usb.get("csi_cameras", []):
         camera = {"kind": "csi", "camera": item["index"], "sensor": item["sensor"],
                   "device_path": item.get("device_path", ""), "label": f'CSI · {item["sensor"]} (camera {item["index"]})',
@@ -253,7 +261,9 @@ def save_selection(data):
             "RESOLUTION": f"{width}x{height}",
             "FPS": str(fps),
         }
-    return apply_primary_config(values, match)
+    return apply_primary_config(
+        values, match, allow_performance_override=data.get("allow_performance_override") is True,
+    )
 
 
 def proxy_stream(handler, port):
@@ -553,14 +563,20 @@ class Handler(BaseHTTPRequestHandler):
                 camera = next((item for item in camera_inventory() if item["id"] == data.get("camera_id")), None)
                 if not camera:
                     raise ValueError("Selected camera is no longer available.")
-                profile = create_profile(camera, data.get("mode") or {})
+                profile = create_profile(
+                    camera, data.get("mode") or {},
+                    allow_performance_override=data.get("allow_performance_override") is True,
+                )
                 self.send_json(201, {"ok": True, "profile": profile})
                 return
             if path == "/api/streams/configure":
                 camera = next((item for item in camera_inventory() if item["id"] == data.get("camera_id")), None)
                 if not camera:
                     raise ValueError("Selected camera is no longer available.")
-                profile = configure_profile(data.get("profile_id", ""), camera, data.get("mode") or {})
+                profile = configure_profile(
+                    data.get("profile_id", ""), camera, data.get("mode") or {},
+                    allow_performance_override=data.get("allow_performance_override") is True,
+                )
                 self.send_json(200, {"ok": True, "profile": profile})
                 return
             if path == "/api/streams/remove":
