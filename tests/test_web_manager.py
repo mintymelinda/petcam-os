@@ -391,8 +391,8 @@ class WebManagerTests(unittest.TestCase):
             def read(self):
                 return json.dumps(payload).encode()
 
-        with mock.patch.object(MODULE, "parse_config", return_value={"PORT": "8081"}), \\
-                mock.patch.object(MODULE.urllib.request, "urlopen", return_value=Response()) as open_url, \\
+        with mock.patch.object(MODULE, "parse_config", return_value={"PORT": "8081"}), \
+                mock.patch.object(MODULE.urllib.request, "urlopen", return_value=Response()) as open_url, \
                 mock.patch.object(MODULE.subprocess, "run") as run:
             actual = MODULE.live_capture_status()
 
@@ -423,7 +423,7 @@ class WebManagerTests(unittest.TestCase):
             def read(self):
                 return json.dumps(self.body).encode()
 
-        with mock.patch.object(MODULE, "parse_config", return_value={"PORT": "8081", "RESOLUTION": "1920x1080"}), \\
+        with mock.patch.object(MODULE, "parse_config", return_value={"PORT": "8081", "RESOLUTION": "1920x1080"}), \
                 mock.patch.object(
                     MODULE.urllib.request,
                     "urlopen",
@@ -439,7 +439,7 @@ class WebManagerTests(unittest.TestCase):
         })
 
     def test_live_capture_status_returns_empty_when_backend_metrics_are_unavailable(self):
-        with mock.patch.object(MODULE, "parse_config", return_value={"PORT": "8081"}), \\
+        with mock.patch.object(MODULE, "parse_config", return_value={"PORT": "8081"}), \
                 mock.patch.object(MODULE.urllib.request, "urlopen", side_effect=OSError("offline")):
             self.assertEqual(MODULE.live_capture_status(), {})
 
