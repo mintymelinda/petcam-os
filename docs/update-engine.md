@@ -25,7 +25,7 @@ The matching private key is held in the GitHub Actions secret `PETCAM_UPDATE_SIG
 - `/opt/petcam/current`: atomically replaced symlink selecting the active release.
 - `/etc/petcam/petcam.conf`: persistent camera configuration; not replaced by application updates.
 
-The updater service is restricted to write to `/opt/petcam` and `/var/lib/petcam/update`. The web manager does not run as root and does not receive general root command access.
+The updater service is restricted to write to `/opt/petcam`, `/var/lib/petcam/update`, `/etc/systemd/system`, and `/etc/petcam`. The two `/etc` paths are required because a verified application release installs its managed Home Assistant, timelapse, and motion service units and initializes the Home Assistant configuration when it is first introduced. Existing Home Assistant settings are preserved. The web manager does not run as root and does not receive general root command access.
 
 ## Release publication contract
 
