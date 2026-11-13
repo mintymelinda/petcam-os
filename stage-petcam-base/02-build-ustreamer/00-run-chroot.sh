@@ -10,6 +10,61 @@ rm -rf "$SOURCE_DIR"
 git init "$SOURCE_DIR"
 git -C "$SOURCE_DIR" fetch --depth 1 https://github.com/pikvm/ustreamer.git "$USTREAMER_COMMIT"
 git -C "$SOURCE_DIR" checkout --detach FETCH_HEAD
+
+# Add an explicit V4L2 hardware capture-rate option while preserving --desired-fps
+# as the independent output pacing control.
+cat > "$SOURCE_DIR/petcam-hw-fps.patch" <<'PATCH'
+diff --git a/src/libs/capture.h b/src/libs/capture.h
+index 0000000..0000000 100644
+--- a/src/libs/capture.h
++++ b/src/libs/capture.h
+@@ -83,6 +83,7 @@ typedef struct {
+ 	uint				width;
+ 	uint				height;
+ 	uint				format;
++	uint				hw_fps;
+ 	char				*media_path;
+ 	char				*media_entity_name;
+
+diff --git a/src/libs/capture.c b/src/libs/capture.c
+index 0000000..0000000 100644
+--- a/src/libs/capture.c
++++ b/src/libs/capture.c
+@@ -1010,7 +1010,8 @@ static void _capture_open_hw_fps(us_capture_s *cap) {
+ 	US_MEMSET_ZERO(setfps);
+ 	setfps.type = run->capture_type;
+ 	TPF(numerator) = 1;
+-	TPF(denominator) = -1; // Request maximum possible FPS
++	TPF(denominator) = cap->hw_fps > 0 ? cap->hw_fps : (uint)-1;
++	// A zero hw_fps preserves the upstream maximum-FPS behavior.
+
+ 	if (us_xioctl(run->fd, VIDIOC_S_PARM, &setfps) < 0) {
+ 		_LOG_PERROR("Can't set HW FPS");
+
+diff --git a/src/ustreamer/options.c b/src/ustreamer/options.c
+index 0000000..0000000 100644
+--- a/src/ustreamer/options.c
++++ b/src/ustreamer/options.c
+@@ -47,6 +47,7 @@ enum _US_OPT_VALUES {
+ 	_O_OPEN_ON_DEMAND = 10000,
+ 	_O_DEVICE_TIMEOUT,
+ 	_O_DEVICE_ERROR_DELAY,
++	_O_HW_FPS,
+ 	_O_FORMAT_SWAP_RGB,
+ 	_O_M2M_DEVICE,
+ 	_O_MEDIA_DEVICE,
+@@ -139,6 +140,7 @@ static const struct option _LONG_OPTS[] = {
+ 	{"io-method",				required_argument,	NULL,	_O_IO_METHOD},
+ 	{"desired-fps",				required_argument,	NULL,	_O_DESIRED_FPS},
++	{"hw-fps",				required_argument,	NULL,	_O_HW_FPS},
+ 	{"min-frame-size",			required_argument,	NULL,	_O_MIN_FRAME_SIZE},
+@@ -451,6 +453,7 @@ 			case _O_IO_METHOD:			OPT_PARSE_ENUM("IO method", cap->io_method, us_capture_parse_io_method, US_IO_METHODS_STR);
+ 			case _O_DESIRED_FPS:		OPT_NUMBER("--desired-fps", stream->desired_fps, 0, US_VIDEO_MAX_FPS, 0);
++			case _O_HW_FPS:			OPT_NUMBER("--hw-fps", cap->hw_fps, 0, US_VIDEO_MAX_FPS, 0);
+ 			case _O_MIN_FRAME_SIZE:		OPT_NUMBER("--min-frame-size", cap->min_frame_size, 1, 8192, 0);
+PATCH
+git -C "$SOURCE_DIR" apply --check "$SOURCE_DIR/petcam-hw-fps.patch"
+git -C "$SOURCE_DIR" apply "$SOURCE_DIR/petcam-hw-fps.patch"
 make -C "$SOURCE_DIR" -j"$(nproc)" WITH_SYSTEMD=0 WITH_GPIO=0
 make -C "$SOURCE_DIR" install PREFIX="/opt/petcam/ustreamer"
 rm -rf "$SOURCE_DIR"
