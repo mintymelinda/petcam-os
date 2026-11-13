@@ -45,7 +45,6 @@ class SignedReleasePublisherTests(unittest.TestCase):
             "lib/health_monitor.py": b"# health monitor\n",
             "lib/config.py": b"# config\n",
             "lib/network_diagnostics.py": b"# network diagnostics\n",
-            "lib/camera_profiles.py": b'"""Compatibility marker for pre-0.2.3 updaters."""\n',
             "lib/factory_reset.py": b"# factory reset\n",
             "lib/home_assistant.py": b"# Home Assistant MQTT\n",
             "lib/timelapse.py": b"# timelapse\n",
@@ -92,8 +91,10 @@ class SignedReleasePublisherTests(unittest.TestCase):
             self.assertEqual(manifest["archive_sha256"], hashlib.sha256(archive.read_bytes()).hexdigest())
             verify_signature(raw, signature_path.read_bytes(), public)
             with tarfile.open(archive, "r:gz") as bundle:
-                self.assertEqual(set(bundle.getnames()), set(expected_files))
-                for name, expected in expected_files.items():
+                from create_update_release import COMPATIBILITY_FILES
+                archive_files = {**expected_files, **COMPATIBILITY_FILES}
+                self.assertEqual(set(bundle.getnames()), set(archive_files))
+                for name, expected in archive_files.items():
                     self.assertEqual(bundle.extractfile(name).read(), expected)
 
     def test_rejects_release_version_mismatch_and_missing_files(self):
