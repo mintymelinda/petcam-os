@@ -45,27 +45,33 @@ PAGE = r"""<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PetCam</title>
 <style>
-:root{color-scheme:dark;font:16px system-ui,sans-serif;background:#17191d;color:#eee}body.setup-required>section:not(#first-run),body.setup-required>footer{display:none}#first-run[hidden]{display:none}
-body{max-width:760px;margin:2rem auto;padding:0 1rem}h1{font-size:1.5rem}section{background:#22262c;border:1px solid #383e47;border-radius:10px;padding:1rem;margin:1rem 0}
+:root{color-scheme:dark;font:16px system-ui,sans-serif;background:#17191d;color:#eee}body.setup-required>section:not(#first-run),body.setup-required>#manager-tabs,body.setup-required>#tab-panels,body.setup-required>footer{display:none}#first-run[hidden]{display:none}
+body{max-width:1120px;margin:2rem auto;padding:0 1rem}h1{font-size:1.5rem}section{background:#22262c;border:1px solid #383e47;border-radius:10px;padding:1rem;margin:1rem 0}
 button,select,input{font:inherit;padding:.55rem .7rem;border-radius:6px;border:1px solid #59616d;background:#303741;color:inherit}
 button{cursor:pointer}button:disabled{opacity:.5}label{display:block;margin:.7rem 0 .25rem}select{width:100%}
 #update-confirmation{border:1px solid #59616d;border-radius:8px;padding:1rem;margin-top:1rem;background:#303741}#update-confirmation[hidden]{display:none}#update-confirmation p{margin-top:0}
 video,img{display:block;width:100%;max-height:55vh;object-fit:contain;background:#090a0b;border-radius:6px}.motion-event{display:flex;gap:.75rem;align-items:center;margin:.6rem 0}.motion-event img{width:160px;max-height:110px;object-fit:cover}
 small,.muted{color:#aeb7c2}#message{min-height:1.5em;color:#b9d8ff}.row{display:flex;gap:.5rem;flex-wrap:wrap}
 dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;color:inherit;border:1px solid #59616d;border-radius:10px;padding:1.25rem}dialog::backdrop{background:#000b}dialog form{display:grid;gap:.5rem}dialog input{width:100%;box-sizing:border-box}#login-password{-webkit-text-security:disc!important}#login-message{min-height:1.4em;color:#ffb4a9}
-</style>
+.tab-nav{display:flex;gap:.4rem;overflow-x:auto;padding:.35rem;background:#22262c;border:1px solid #383e47;border-radius:10px;position:sticky;top:.5rem;z-index:5;scrollbar-width:thin}.tab-nav button{flex:0 0 auto;border-color:transparent;background:transparent;color:#aeb7c2;font-weight:600}.tab-nav button[aria-selected="true"]{background:#3b4654;border-color:#68788c;color:#fff}.tab-panel{display:none}.tab-panel.active{display:block}.tab-panel[hidden]{display:none}.tab-panel>section:first-child{margin-top:1rem}@media(max-width:560px){body{margin:1rem auto;padding:0 .75rem}.tab-nav{position:sticky;top:0}.tab-nav button{padding:.55rem .65rem;font-size:.9rem}}</style>
 <body><h1>PetCam <small>Camera</small></h1>
 <section id="first-run" hidden><h2>Welcome to PetCam</h2><p>Create the administrator password for this camera. You can do this from your browser; SSH is not required.</p><form id="first-run-form"><label for="setup-password">Administrator password (12–1024 characters)</label><input id="setup-password" type="password" minlength="12" maxlength="1024" autocomplete="new-password" required><label for="setup-password-confirm">Confirm password</label><input id="setup-password-confirm" type="password" minlength="12" maxlength="1024" autocomplete="new-password" required><p id="setup-message" role="status" aria-live="polite"></p><button id="setup-submit" type="submit">Create administrator password</button></form></section>
 <dialog id="login-dialog" aria-labelledby="login-title"><form id="login-form"><h2 id="login-title">Sign in to PetCam</h2><label for="login-password">Administrator password</label><input id="login-password" type="password" autocomplete="current-password" required><p id="login-message" role="alert" aria-live="polite"></p><button id="login-submit" type="submit">Sign in</button></form></dialog>
-<section id="updates"><div class="row" style="justify-content:space-between;align-items:center"><h2>Software updates</h2><span id="update-state" class="muted">Not checked</span></div>
-<p id="update-message" role="status" class="muted">Check for signed PetCam application releases. Operating system and firmware updates are managed separately.</p>
-<div class="row"><button id="check-updates">Check for updates</button><button id="install-update" disabled>Install update</button></div>
-<div id="update-confirmation" hidden aria-labelledby="update-confirmation-title"><p id="update-confirmation-title"><strong>Install this signed update?</strong></p><p class="muted">The camera stream and web interface will briefly restart while PetCam installs the verified application release.</p><div class="row"><button id="cancel-update-install" type="button">Cancel</button><button id="confirm-update-install" type="button">Install update</button></div></div>
-<label style="display:flex;gap:.5rem;align-items:center"><input id="auto-check" type="checkbox"> Check automatically when opening this page</label>
-<details><summary>Update details and diagnostics</summary><p id="update-details" class="muted">No update information yet.</p><pre id="update-logs" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
-</section>
+<nav id="manager-tabs" class="tab-nav" role="tablist" aria-label="PetCam sections">
+<button id="tab-live" type="button" role="tab" aria-controls="panel-live" aria-selected="true" tabindex="0" data-tab="live">Live</button>
+<button id="tab-obs" type="button" role="tab" aria-controls="panel-obs" aria-selected="false" tabindex="-1" data-tab="obs">OBS</button>
+<button id="tab-camera-settings" type="button" role="tab" aria-controls="panel-camera-settings" aria-selected="false" tabindex="-1" data-tab="camera-settings">Camera Settings</button>
+<button id="tab-streams" type="button" role="tab" aria-controls="panel-streams" aria-selected="false" tabindex="-1" data-tab="streams">Streams</button>
+<button id="tab-system" type="button" role="tab" aria-controls="panel-system" aria-selected="false" tabindex="-1" data-tab="system">System</button>
+</nav>
+<main id="tab-panels">
+<div id="panel-live" class="tab-panel active" role="tabpanel" aria-labelledby="tab-live" tabindex="0">
 <section><h2>Live preview</h2><img id="live-preview" src="/stream" alt="Live camera preview"><p id="capture-rate" class="muted">Checking actual capture rate…</p><p class="muted">The preview uses the same stream OBS receives.</p></section>
+</div>
+<div id="panel-obs" class="tab-panel" role="tabpanel" aria-labelledby="tab-obs" tabindex="0" hidden>
 <section><h2>OBS browser source</h2><p class="muted">Add this URL as a Browser Source in OBS on a computer on the same network.</p><div class="row" style="align-items:center"><code id="browser-source-url" style="flex:1;overflow-wrap:anywhere">Loading…</code><button id="copy-browser-source">Copy URL</button></div><p id="copy-message" class="muted" role="status" aria-live="polite"></p></section>
+</div>
+<div id="panel-camera-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-camera-settings" tabindex="0" hidden>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera selection</h2><button id="refresh">Refresh cameras</button></div>
 <p id="message" role="status">Discovering cameras…</p>
 <label for="camera">Camera</label><select id="camera"></select>
@@ -77,9 +83,6 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <p id="camera-controls-status" class="muted" role="status">Controls for the active camera will appear here.</p>
 <p class="muted">Controls are discovered from the connected camera. Some settings may be unavailable while automatic modes are active. Dynamic framerate can reduce the actual captured FPS when enabled.</p>
 <div id="camera-controls-list" class="muted">No camera controls loaded.</div></section>
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera streams</h2><button id="refresh-streams">Refresh streams</button></div><div id="stream-profiles" class="muted">Loading streams…</div></section>
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Network and OBS diagnostics</h2><button id="refresh-diagnostics">Run checks</button></div><p id="diagnostic-summary" role="status">Diagnostics have not been run yet.</p><p id="diagnostic-details" class="muted"></p><div class="row"><button id="download-support-bundle">Download redacted support bundle</button></div></section>
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Stream health</h2><button id="refresh-health">Refresh</button></div><p id="health-state" role="status">Checking stream health…</p><p id="health-reason" class="muted"></p><small id="health-details" class="muted"></small></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Timelapse</h2><button id="refresh-timelapse">Refresh status</button></div>
 <p id="timelapse-status" role="status">Loading timelapse status…</p>
 <label style="display:flex;gap:.5rem;align-items:center"><input id="timelapse-enabled" type="checkbox"> Enable periodic captures</label>
@@ -111,7 +114,23 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <p class="muted">Motion samples reuse the active camera MJPEG stream. Frames are reduced to 160×120 grayscale for comparison; no second camera process or continuous video recording is used. The worker runs with a strict CPU and memory limit. Disabled by default.</p>
 <div class="row"><button id="save-motion">Save motion settings</button></div>
 <h3>Recent motion events</h3><div id="motion-events" class="muted">No motion events recorded.</div></section>
+</div>
+<div id="panel-streams" class="tab-panel" role="tabpanel" aria-labelledby="tab-streams" tabindex="0" hidden>
+<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera streams</h2><button id="refresh-streams">Refresh streams</button></div><div id="stream-profiles" class="muted">Loading streams…</div></section>
+</div>
+<div id="panel-system" class="tab-panel" role="tabpanel" aria-labelledby="tab-system" tabindex="0" hidden>
+<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Network and OBS diagnostics</h2><button id="refresh-diagnostics">Run checks</button></div><p id="diagnostic-summary" role="status">Diagnostics have not been run yet.</p><p id="diagnostic-details" class="muted"></p><div class="row"><button id="download-support-bundle">Download redacted support bundle</button></div></section>
+<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Stream health</h2><button id="refresh-health">Refresh</button></div><p id="health-state" role="status">Checking stream health…</p><p id="health-reason" class="muted"></p><small id="health-details" class="muted"></small></section>
+<section id="updates"><div class="row" style="justify-content:space-between;align-items:center"><h2>Software updates</h2><span id="update-state" class="muted">Not checked</span></div>
+<p id="update-message" role="status" class="muted">Check for signed PetCam application releases. Operating system and firmware updates are managed separately.</p>
+<div class="row"><button id="check-updates">Check for updates</button><button id="install-update" disabled>Install update</button></div>
+<div id="update-confirmation" hidden aria-labelledby="update-confirmation-title"><p id="update-confirmation-title"><strong>Install this signed update?</strong></p><p class="muted">The camera stream and web interface will briefly restart while PetCam installs the verified application release.</p><div class="row"><button id="cancel-update-install" type="button">Cancel</button><button id="confirm-update-install" type="button">Install update</button></div></div>
+<label style="display:flex;gap:.5rem;align-items:center"><input id="auto-check" type="checkbox"> Check automatically when opening this page</label>
+<details><summary>Update details and diagnostics</summary><p id="update-details" class="muted">No update information yet.</p><pre id="update-logs" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
+</section>
 <section><h2>Account security</h2><p class="muted">Sign out of this manager.</p><button id="logout">Sign out</button></section>
+</div>
+</main>
 <footer style="text-align:center;padding:1rem 0 2rem"><small>Enjoying PetCam? <a href="https://www.paypal.me/kimmynightmare" target="_blank" rel="noopener noreferrer" style="color:#b9d8ff">Support development with PayPal</a></small></footer>
 <script>
 const $=id=>document.getElementById(id);let inventory=[],streams=[],activeConfig=null,captureStatus={},resourceBudget=null;
@@ -120,6 +139,35 @@ $("first-run-form").onsubmit=async event=>{event.preventDefault();const password
 $("browser-source-url").textContent=browserSourceUrl;
 $("copy-browser-source").onclick=async()=>{const message=$("copy-message");try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(browserSourceUrl)}else{const field=document.createElement("textarea");field.value=browserSourceUrl;field.setAttribute("readonly","");field.style.position="fixed";field.style.opacity="0";document.body.append(field);field.select();const copied=document.execCommand("copy");field.remove();if(!copied)throw Error("Clipboard access is unavailable")}message.textContent="Browser source URL copied."}catch(e){message.textContent="Could not copy automatically. Select and copy the URL above."}};
 let csrfToken=null;let loginPromise=null;async function login(){if(loginPromise)return loginPromise;loginPromise=(async()=>{const setupResponse=await fetch("/api/setup/status",{cache:"no-store"});const setupState=await setupResponse.json();if(!setupResponse.ok)throw Error(setupState.error||"Unable to check initial setup");if(!setupState.configured)throw Error("Create the administrator password in the welcome panel before signing in.");return await new Promise((resolve,reject)=>{const dialog=$("login-dialog"),form=$("login-form"),password=$("login-password"),message=$("login-message"),button=$("login-submit");let settled=false;const finish=(error,data)=>{if(settled)return;settled=true;password.value="";dialog.close();if(error)reject(error);else resolve(data)};form.onsubmit=async event=>{event.preventDefault();button.disabled=true;message.textContent="Signing in…";try{const response=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:password.value})});const data=await response.json();if(!response.ok)throw Error(data.error||"Sign-in failed");csrfToken=data.csrf_token;finish(null,data)}catch(error){message.textContent=error.message;password.value="";password.focus();button.disabled=false}};dialog.oncancel=event=>{event.preventDefault();finish(Error("Sign-in cancelled"))};password.setAttribute("type","password");password.type="password";password.setAttribute("autocomplete","current-password");dialog.showModal();password.focus()})})();try{return await loginPromise}finally{loginPromise=null}}async function request(path,options={}){const headers=new Headers(options.headers||{});if(options.method&&options.method.toUpperCase()!=="GET"&&!csrfToken){let session=await fetch("/api/session");if(session.status===401){await login()}else{const state=await session.json();if(!session.ok)throw Error(state.error||session.statusText);csrfToken=state.csrf_token}}if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);let r=await fetch(path,{...options,headers});if(r.status===401){await login();if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);r=await fetch(path,{...options,headers})}const d=await r.json();if(!r.ok)throw Error(d.error||r.statusText);return d}
+
+const tabButtons=[...document.querySelectorAll("[data-tab]")];
+function activateTab(name,moveFocus=false){
+  const selected=tabButtons.find(button=>button.dataset.tab===name);
+  if(!selected)return;
+  for(const button of tabButtons){
+    const active=button===selected;
+    button.setAttribute("aria-selected",String(active));
+    button.tabIndex=active?0:-1;
+    const panel=$(button.getAttribute("aria-controls"));
+    panel.hidden=!active;
+    panel.classList.toggle("active",active);
+  }
+  if(moveFocus)selected.focus();
+}
+for(const button of tabButtons){
+  button.addEventListener("click",()=>activateTab(button.dataset.tab));
+  button.addEventListener("keydown",event=>{
+    const index=tabButtons.indexOf(button);
+    let next=null;
+    if(event.key==="ArrowRight")next=(index+1)%tabButtons.length;
+    else if(event.key==="ArrowLeft")next=(index-1+tabButtons.length)%tabButtons.length;
+    else if(event.key==="Home")next=0;
+    else if(event.key==="End")next=tabButtons.length-1;
+    if(next!==null){event.preventDefault();activateTab(tabButtons[next].dataset.tab,true)}
+  });
+}
+activateTab("live");
+
 function modesFor(camera){return camera.kind==="usb"?camera.modes.filter(m=>["MJPG","MJPEG","JPEG","YUYV","YVYU","UYVY","YUV420","YVU420","RGB565","RGB24","GREY"].includes(m.format)):camera.modes}
 function projectedPixelRate(mode,target="default",adding=false){const candidate=mode.width*mode.height*mode.fps,budget=resourceBudget;if(!budget||!Number.isFinite(Number(budget.estimated_total_pixels_per_second)))return candidate;let total=Number(budget.estimated_total_pixels_per_second);if(adding)total+=candidate;else if(target==="default")total=total-Number(budget.primary_estimated_pixels_per_second||0)+candidate;else{const existing=streams.find(item=>item.id===target);total=total-Number(existing?.estimated_pixels_per_second||0)+candidate}return Math.max(candidate,total)}
 function exceedsPerformanceBudget(camera,mode,target="default",adding=false){const budget=Number(resourceBudget?.pixel_budget_pixels_per_second||camera?.hardware_budget_pixels_per_second||0);return budget>0&&projectedPixelRate(mode,target,adding)>budget}
@@ -276,23 +324,52 @@ def current_resource_budget():
 
 
 def live_capture_status():
+    """Read capture metrics directly from the active stream backend.
+
+    The general-purpose petcam-status command also performs hardware discovery,
+    diagnostics, and a throughput sample. Running that command for a UI refresh
+    can exceed the manager's timeout on slower Pis, hiding otherwise available
+    capture-rate data. These two local endpoints expose only the live metrics.
+    """
     try:
-        result = subprocess.run(
-            ["/usr/local/bin/petcam-status"],
-            capture_output=True, text=True, timeout=15, check=False,
-        )
-        if result.returncode:
-            return {}
-        status = json.loads(result.stdout)
-        if not isinstance(status, dict):
-            return {}
-        return {
-            "latest_captured_fps": status.get("latest_captured_fps"),
-            "active_resolution": status.get("active_resolution"),
-            "active_capture_format": status.get("active_capture_format"),
-        }
-    except (OSError, subprocess.TimeoutExpired, ValueError, TypeError):
-        return {}
+        config = parse_config(CONFIG)
+        port = int(config["PORT"])
+    except Exception:
+        config = {}
+        port = 8081
+
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/state", timeout=2) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        state = payload.get("result") if isinstance(payload, dict) else None
+        if isinstance(state, dict):
+            source = state.get("source") or {}
+            resolution = source.get("resolution") or {}
+            return {
+                "latest_captured_fps": source.get("captured_fps"),
+                "active_resolution": (
+                    f"{resolution['width']}x{resolution['height']}"
+                    if resolution.get("width") and resolution.get("height") else None
+                ),
+                "active_capture_format": (
+                    "MJPEG" if (state.get("encoder") or {}).get("type") == "HW" else None
+                ),
+            }
+    except (OSError, urllib.error.URLError, subprocess.TimeoutExpired, ValueError, TypeError, KeyError, AttributeError):
+        pass
+
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/status", timeout=2) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        if isinstance(payload, dict) and payload.get("backend") == "csi":
+            return {
+                "latest_captured_fps": payload.get("captured_fps_average"),
+                "active_resolution": config.get("RESOLUTION"),
+                "active_capture_format": "MJPEG",
+            }
+    except (OSError, urllib.error.URLError, subprocess.TimeoutExpired, ValueError, TypeError):
+        pass
+    return {}
 
 
 
