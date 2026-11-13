@@ -596,6 +596,14 @@ exposure_dynamic_framerate 0x009a0903 (bool) : default=0 value=1
         self.assertIn("Dynamic framerate", MODULE.PAGE)
         self.assertIn("actual captured FPS", MODULE.PAGE)
 
+    def test_all_camera_control_editor_types_are_added_to_the_editor(self):
+        self.assertIn('let input,output;', MODULE.PAGE)
+        self.assertIn('if(output)editor.append(input,output);else editor.append(input);', MODULE.PAGE)
+        self.assertIn('input.type="checkbox"', MODULE.PAGE)
+        self.assertIn('input.type="range"', MODULE.PAGE)
+        self.assertIn('input.type="number"', MODULE.PAGE)
+        self.assertIn('document.createElement("select")', MODULE.PAGE)
+
 
 if __name__ == "__main__":
     unittest.main()
