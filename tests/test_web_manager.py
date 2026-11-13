@@ -260,6 +260,12 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("configured:", MODULE.PAGE)
         self.assertIn("actual ", MODULE.PAGE)
 
+    def test_camera_performance_warning_accounts_for_all_streams(self):
+        self.assertIn("projectedPixelRate", MODULE.PAGE)
+        self.assertIn("resourceBudget", MODULE.PAGE)
+        self.assertIn("aggregate pixels/second", MODULE.PAGE)
+        self.assertIn("additional_streams_estimated_pixels_per_second", MODULE.PAGE)
+
     def test_active_camera_config_returns_only_selection_fields(self):
         config = {
             "SOURCE": "usb", "DEVICE": "", "USB_PHYSICAL_PATH": "/sys/devices/usb1/1-1",
