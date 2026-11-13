@@ -17,6 +17,8 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("Refresh cameras", MODULE.PAGE)
         self.assertIn("Live preview", MODULE.PAGE)
         self.assertIn("Apply selected camera and mode", MODULE.PAGE)
+        self.assertIn("above device estimate", MODULE.PAGE)
+        self.assertIn("Use this mode anyway?", MODULE.PAGE)
         self.assertIn("https://www.paypal.me/kimmynightmare", MODULE.PAGE)
         self.assertIn('rel="noopener noreferrer"', MODULE.PAGE)
         self.assertIn("/api/cameras", MODULE.PAGE)
@@ -235,6 +237,15 @@ class WebManagerTests(unittest.TestCase):
         self.assertEqual(len(cameras), 2)
         self.assertTrue(cameras[0]["stable_identity"])
         self.assertEqual(cameras[1]["id"], "csi-imx708-0")
+        self.assertIn(cameras[0]["hardware_tier"], MODULE.PIXEL_BUDGETS)
+        self.assertEqual(
+            cameras[0]["hardware_budget_pixels_per_second"],
+            MODULE.PIXEL_BUDGETS[cameras[0]["hardware_tier"]],
+        )
+        self.assertEqual(
+            cameras[1]["hardware_budget_pixels_per_second"],
+            cameras[0]["hardware_budget_pixels_per_second"],
+        )
 
     def test_invalid_capture_values_are_rejected(self):
         for mode in (
