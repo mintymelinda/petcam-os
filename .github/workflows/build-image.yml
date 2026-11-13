@@ -98,7 +98,7 @@ jobs:
       - name: Prepare pi-gen work directory
         run: mkdir -p "${RUNNER_TEMP}/pigen-work"
 
-      # Cache the completed upstream Raspberry Pi OS root filesystem, not just
+      # Cache the prepared OS and stable PetCam package root filesystem, not just
       # Docker's pi-gen builder image or individual downloaded .deb files.
       # Bump pigen-base-rootfs-v1 when intentionally refreshing base OS packages.
       - name: Restore reusable Raspberry Pi OS base root filesystem
@@ -106,7 +106,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/pigen-base-rootfs.tar
-          key: pigen-base-rootfs-v1-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile') }}
+          key: pigen-base-rootfs-v1-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'pi-gen/stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile') }}
 
       - name: Prepare build caches
         uses: actions/cache@v4
@@ -123,15 +123,16 @@ jobs:
         run: |
           mkdir -p "${RUNNER_TEMP}/pigen-apt-cache/partial" "${RUNNER_TEMP}/pigen-work"
           if [[ "${{ steps.base-rootfs-cache.outputs.cache-hit }}" == "true" ]]; then
-            echo "Restoring cached stage2 root filesystem; skipping unchanged upstream OS stages."
+            echo "Restoring cached prepared base root filesystem; skipping upstream OS and stable package stages."
             sudo tar --numeric-owner --xattrs --acls -xpf "${RUNNER_TEMP}/pigen-base-rootfs.tar" -C "${RUNNER_TEMP}/pigen-work"
-            touch pi-gen/stage0/SKIP pi-gen/stage1/SKIP pi-gen/stage2/SKIP
+            touch pi-gen/stage0/SKIP pi-gen/stage1/SKIP pi-gen/stage2/SKIP pi-gen/stage-petcam-base/SKIP
           else
             # A prefix restore is deliberately not configured: a rootfs built
             # from different upstream inputs must never be treated as a hit.
             rm -f "${RUNNER_TEMP}/pigen-base-rootfs.tar"
           fi
           cp config pi-gen/config
+          cp -a stage-petcam-base pi-gen/stage-petcam-base
           cp -a stage-petcam pi-gen/stage-petcam
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             RELEASE_VERSION="${GITHUB_REF_NAME#v}"
@@ -144,6 +145,7 @@ jobs:
           fi
           printf '%s\n' "${RELEASE_VERSION}" > pi-gen/stage-petcam/00-install-files/files/usr/local/lib/petcam/VERSION
           touch pi-gen/stage2/SKIP_IMAGES
+          chmod 0755 pi-gen/stage-petcam-base/prerun.sh
           chmod 0755 pi-gen/stage-petcam/prerun.sh
           chmod 0755 pi-gen/stage-petcam/00-install-files/00-run.sh
           mkdir -p pi-gen/deploy
@@ -220,7 +222,7 @@ jobs:
           # Cache the pristine stage2 rootfs for subsequent builds. Tar preserves
           # numeric ownership, ACLs, xattrs, hardlinks, and device metadata.
           if [[ "${{ steps.base-rootfs-cache.outputs.cache-hit }}" != "true" ]]; then
-            sudo tar --numeric-owner --xattrs --acls -cpf "${RUNNER_TEMP}/pigen-base-rootfs.tar" -C "${RUNNER_TEMP}/pigen-work" stage2/rootfs
+            sudo tar --numeric-owner --xattrs --acls -cpf "${RUNNER_TEMP}/pigen-base-rootfs.tar" -C "${RUNNER_TEMP}/pigen-work" stage-petcam-base/rootfs
             sudo chown "$(id -u):$(id -g)" "${RUNNER_TEMP}/pigen-base-rootfs.tar"
             chmod 0644 "${RUNNER_TEMP}/pigen-base-rootfs.tar"
           fi
