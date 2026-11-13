@@ -194,9 +194,7 @@ root.append(row)
 }
 $("refresh-camera-controls").onclick=refreshCameraControls;
 $("refresh").onclick=refresh;$("camera").onchange=fillModes;
-$("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value,target=$("stream-target").value;if(!c||!m)return;const mode=JSON.parse(m),override=confirmPerformanceOverride(c,mode,target,false);if(exceedsPerformanceBudget(c,mode,target,false)&&!override)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{if(target==="default"){await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,camera_id:c.id,device:c.device,physical_path:c.physical_path,device_path:c.device_path,camera:c.camera,mode,allow_performance_override:override})})}else{await request("/api/streams/configure",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile_id:target,camera_id:c.id,mode,allow_performance_override:override})})}if(target==="default"){await refresh();refreshLivePreview()}else{await refreshStreams()}$("message").textContent="Camera settings saved. The selected stream preview has been reconnected."}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
-$("add-stream").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;const mode=JSON.parse(m),override=confirmPerformanceOverride(c,mode,"default",true);if(exceedsPerformanceBudget(c,mode,"default",true)&&!override)return;const b=$("add-stream");b.disabled=true;$("message").textContent="Starting independent camera stream…";try{const d=await request("/api/streams",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({camera_id:c.id,mode,allow_performance_override:override})});$("message").textContent="Independent stream started: "+d.profile.stream_path;await refreshStreams()}catch(e){$("message").textContent=e.message}finally{b.disabled=false}};
-$("refresh-streams").onclick=refreshStreams;
+$("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;const mode=JSON.parse(m),override=confirmPerformanceOverride(c,mode);if(exceedsPerformanceBudget(c,mode)&&!override)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,camera_id:c.id,device:c.device,physical_path:c.physical_path,device_path:c.device_path,camera:c.camera,mode,allow_performance_override:override})});await refresh();refreshLivePreview();$("message").textContent="Camera settings saved. The live preview has been reconnected."}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
 $("logout").onclick=async()=>{try{await request("/api/logout",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});csrfToken=null;location.reload()}catch(e){alert(e.message)}};
 async function refreshTimelapse(){try{const d=await request("/api/timelapse");const c=d.config,s=d.status;$("timelapse-enabled").checked=c.enabled;$("timelapse-interval").value=c.interval_seconds;$("timelapse-start").value=c.schedule_start;$("timelapse-end").value=c.schedule_end;$("timelapse-retention").value=c.retention_days;$("timelapse-storage").value=c.max_storage_mb;$("timelapse-free").value=c.min_free_mb;$("timelapse-width").value=c.max_width;$("timelapse-quality").value=c.jpeg_quality;$("timelapse-path").value=c.storage_path;$("timelapse-status").textContent="Status: "+s.state+" · "+s.frames+" frames · "+Math.round(s.storage_bytes/1048576)+" MiB"+(s.last_capture_at?" · Last capture: "+s.last_capture_at:"")+(s.last_error?" · "+s.last_error:"")}catch(e){$("timelapse-status").textContent="Timelapse status unavailable: "+e.message}}
 $("refresh-timelapse").onclick=refreshTimelapse;
@@ -298,13 +296,6 @@ def active_camera_config():
         key: config[key]
         for key in ("SOURCE", "DEVICE", "USB_PHYSICAL_PATH", "CSI_DEVICE_PATH", "CAMERA", "FORMAT", "RESOLUTION", "FPS")
     }
-
-
-def current_resource_budget():
-    try:
-        return resource_budget_report()
-    except Exception:
-        return None
 
 
 def live_capture_status():
@@ -771,22 +762,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/cameras":
             try:
-                self.send_json(200, {"cameras": camera_inventory(), "active_config": active_camera_config(), "capture_status": live_capture_status(), "resource_budget": current_resource_budget()})
+                self.send_json(200, {"cameras": camera_inventory(), "active_config": active_camera_config(), "capture_status": live_capture_status()})
             except Exception as error:
                 self.send_json(500, {"error": str(error)})
             return
-        if path == "/api/streams":
+        if path == "/stream":
             try:
-                self.send_json(200, {"streams": list_profiles()})
+                proxy_stream(self, int(parse_config(CONFIG)["PORT"]))
             except Exception as error:
                 self.send_json(503, {"error": str(error)})
-            return
-        if path == "/stream" or path.startswith("/stream/"):
-            try:
-                profile_id = "default" if path == "/stream" else path[len("/stream/"):]
-                proxy_stream(self, stream_port(profile_id))
-            except ValueError as error:
-                self.send_json(404, {"error": str(error)})
             return
         self.send_error(404)
 
@@ -871,30 +855,6 @@ class Handler(BaseHTTPRequestHandler):
                 start_update()
                 self.send_json(202, {"ok": True, "status": "started"})
                 return
-            if path == "/api/streams":
-                camera = next((item for item in camera_inventory() if item["id"] == data.get("camera_id")), None)
-                if not camera:
-                    raise ValueError("Selected camera is no longer available.")
-                profile = create_profile(
-                    camera, data.get("mode") or {},
-                    allow_performance_override=data.get("allow_performance_override") is True,
-                )
-                self.send_json(201, {"ok": True, "profile": profile})
-                return
-            if path == "/api/streams/configure":
-                camera = next((item for item in camera_inventory() if item["id"] == data.get("camera_id")), None)
-                if not camera:
-                    raise ValueError("Selected camera is no longer available.")
-                profile = configure_profile(
-                    data.get("profile_id", ""), camera, data.get("mode") or {},
-                    allow_performance_override=data.get("allow_performance_override") is True,
-                )
-                self.send_json(200, {"ok": True, "profile": profile})
-                return
-            if path == "/api/streams/remove":
-                remove_profile(data.get("profile_id", ""))
-                self.send_json(200, {"ok": True})
-                return
             if path == "/api/select":
                 save_selection(data)
                 self.send_json(200, {"ok": True})
@@ -912,17 +872,13 @@ class StreamHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
-        if path == "/stream":
-            profile_id = "default"
-        elif path.startswith("/stream/"):
-            profile_id = path[len("/stream/"):]
-        else:
+        if path != "/stream":
             self.send_error(404)
             return
         try:
-            proxy_stream(self, stream_port(profile_id))
-        except ValueError:
-            self.send_error(404)
+            proxy_stream(self, int(parse_config(CONFIG)["PORT"]))
+        except Exception:
+            self.send_error(503)
 
     def log_message(self, fmt, *args):
         pass
