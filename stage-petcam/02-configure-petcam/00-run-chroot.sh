@@ -357,10 +357,23 @@ systemctl enable petcam-motion.service
 # purging development packages and allowing apt to remove unused dependencies.
 USTREAMER_BIN="/opt/petcam/releases/$APP_VERSION/vendor/bin/ustreamer"
 while IFS= read -r library; do
-    package="$(dpkg-query -S "$library" 2>/dev/null | sed -n '1s/: .*//p')"
-    if [[ -n "$package" ]]; then
-        apt-mark manual "$package" >/dev/null
+    # Resolve /lib -> /usr/lib symlinks before querying dpkg. On merged-/usr
+    # Raspberry Pi OS, dpkg-query may otherwise report a diversion record
+    # (for example, "diversion by libc6 from: ...") instead of the owner.
+    resolved_library="$(readlink -f "$library" 2>/dev/null || true)"
+    if [[ -z "$resolved_library" ]]; then
+        echo "Unable to resolve runtime library path: $library" >&2
+        exit 1
     fi
+
+    # Ignore dpkg-divert records; only a real package ownership line has the
+    # "package: /path" shape. Preserve multiarch package names such as libc6:armhf.
+    package="$(dpkg-query -S "$resolved_library" 2>/dev/null | awk -F ': ' '$1 !~ /^(diversion|local diversion)( |$)/ && NF >= 2 { print $1; exit }')"
+    if [[ -z "$package" ]]; then
+        echo "Unable to identify the Debian package owning runtime library: $resolved_library" >&2
+        exit 1
+    fi
+    apt-mark manual "$package" >/dev/null
 done < <(ldd "$USTREAMER_BIN" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^\//) print $i }' | sort -u)
 
 apt-get purge -y --auto-remove \

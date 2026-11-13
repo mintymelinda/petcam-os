@@ -27,6 +27,28 @@ class ImageShrinkContractTests(unittest.TestCase):
         self.assertIn("rm -rf /var/lib/apt/lists/*", cleanup)
         self.assertIn("apt-mark manual", cleanup)
 
+    def test_runtime_library_lookup_ignores_dpkg_diversion_records(self):
+        import subprocess
+
+        parser = r"""$1 !~ /^(diversion|local diversion)( |$)/ && NF >= 2 { print $1; exit }"""
+        result = subprocess.run(
+            ["awk", "-F", ": ", parser],
+            input=(
+                "diversion by libc6 from: /lib/arm-linux-gnueabihf/libc.so.6\n"
+                "libc6:armhf: /usr/lib/arm-linux-gnueabihf/libc.so.6\n"
+            ),
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        self.assertEqual(result.stdout.strip(), "libc6:armhf")
+
+    def test_runtime_library_cleanup_resolves_symlinks_and_fails_closed(self):
+        cleanup = (ROOT / "stage-petcam/02-configure-petcam/00-run-chroot.sh").read_text(encoding="utf-8")
+        self.assertIn('readlink -f "$library"', cleanup)
+        self.assertIn('Unable to identify the Debian package owning runtime library', cleanup)
+        self.assertIn('apt-mark manual "$package"', cleanup)
+
 
 if __name__ == "__main__":
     unittest.main()
