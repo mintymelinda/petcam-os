@@ -21,6 +21,7 @@ from config import parse_config
 
 CONFIG_FILE = Path("/etc/petcam/home-assistant.conf")
 HEALTH_FILE = Path("/var/lib/petcam/health.json")
+LIGHT_SENSOR_FILE = Path("/var/lib/petcam/light-sensor.json")
 DEFAULTS = {
     "MQTT_ENABLED": "false",
     "MQTT_HOST": "",
@@ -253,7 +254,13 @@ class MQTTClient:
                 ],
             }
             if component == "binary_sensor":
-                document.update({"payload_on": "ON", "payload_off": "OFF", "device_class": entity.get("device_class")})
+                document.update({"payload_on": entity.get("payload_on", "ON"), "payload_off": entity.get("payload_off", "OFF"), "device_class": entity.get("device_class")})
+            if entity.get("device_class") and component == "sensor":
+                document["device_class"] = entity["device_class"]
+            if entity.get("unit_of_measurement"):
+                document["unit_of_measurement"] = entity["unit_of_measurement"]
+            if entity.get("state_class"):
+                document["state_class"] = entity["state_class"]
             if entity.get("icon"):
                 document["icon"] = entity["icon"]
             if entity.get("entity_category"):
@@ -325,7 +332,12 @@ def collect_snapshot(config: dict[str, object], health: dict | None = None) -> d
     mode = f"{resolution} @ {fps} fps"
     if capture_format != "auto":
         mode += f" · {capture_format}"
+    light = _read_json(LIGHT_SENSOR_FILE)
+    light_state = str(light.get("state", "unknown")).lower()
+    ambient_light = light_state.upper() if light_state in {"bright", "dark"} else "UNKNOWN"
     return {
+        "ambient_light": ambient_light,
+        "illuminance": str(light.get("illuminance_lux", "unknown")) if light.get("available") else "unknown",
         "service_active": "ON" if active else "OFF",
         "health_available": "ON" if active and health_state in {"healthy", "camera_disconnected", "starting", "configuring"} else "OFF",
         "camera_connected": "ON" if camera_connected is True else ("OFF" if camera_connected is False else "UNKNOWN"),
@@ -341,6 +353,8 @@ def collect_snapshot(config: dict[str, object], health: dict | None = None) -> d
 ENTITIES = [
     {"component": "binary_sensor", "object_id": "camera_connected", "name": "Camera connected", "device_class": "connectivity"},
     {"component": "binary_sensor", "object_id": "stream_ready", "name": "Stream ready", "device_class": "connectivity"},
+    {"component": "binary_sensor", "object_id": "ambient_light", "name": "Ambient light", "device_class": "light", "payload_on": "BRIGHT", "payload_off": "DARK"},
+    {"component": "sensor", "object_id": "illuminance", "name": "Illuminance", "device_class": "illuminance", "unit_of_measurement": "lx", "state_class": "measurement"},
     {"component": "sensor", "object_id": "health_state", "name": "Health state", "icon": "mdi:heart-pulse"},
     {"component": "sensor", "object_id": "active_backend", "name": "Active backend"},
     {"component": "sensor", "object_id": "active_mode", "name": "Active mode"},
