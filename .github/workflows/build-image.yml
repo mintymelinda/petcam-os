@@ -93,6 +93,8 @@ jobs:
         with:
           path: ${{ runner.temp }}/pigen-base-rootfs.tar
           key: ${{ steps.base-rootfs-cache-key.outputs.key }}
+          restore-keys: |
+            pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
           lookup-only: true
 
       - name: Restore reusable APT package archives
@@ -141,7 +143,7 @@ jobs:
   release:
     name: Build Raspberry Pi OS image
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
-    needs: [validate, warm-base-cache]
+    needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     permissions:
@@ -193,6 +195,8 @@ jobs:
         with:
           path: ${{ runner.temp }}/pigen-base-rootfs.tar
           key: ${{ steps.base-rootfs-cache-key.outputs.key }}
+          restore-keys: |
+            pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
 
       - name: Prepare build caches
         uses: actions/cache@v4
@@ -216,8 +220,7 @@ jobs:
             sudo tar --numeric-owner --xattrs --acls -xpf "${RUNNER_TEMP}/pigen-base-rootfs.tar" -C "${RUNNER_TEMP}/pigen-work"
             touch pi-gen/stage0/SKIP pi-gen/stage1/SKIP pi-gen/stage2/SKIP pi-gen/stage-petcam-base/SKIP
           else
-            # A prefix restore is deliberately not configured: a rootfs built
-            # from different upstream inputs must never be treated as a hit.
+            # A compatible cache from an earlier commit is valid for this pinned base.
             rm -f "${RUNNER_TEMP}/pigen-base-rootfs.tar"
           fi
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
