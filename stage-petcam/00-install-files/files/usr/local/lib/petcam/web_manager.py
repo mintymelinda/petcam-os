@@ -130,7 +130,7 @@ function renderCaptureStatus(){const fps=Number(captureStatus.latest_captured_fp
 function refreshLivePreview(){const preview=$("live-preview");preview.src="/stream?refresh="+Date.now()}
 async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;activeConfig=d.active_config;captureStatus=d.capture_status||{};resourceBudget=d.resource_budget||null;$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});const activeIndex=inventory.findIndex(c=>activeCameraMatches(c,activeConfig));if(activeIndex>=0){$("camera").value=String(activeIndex);$("camera").options[activeIndex].textContent+=" · current"}if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{const selected=activeIndex>=0?activeConfig:null;const selectedCamera=activeIndex>=0?inventory[activeIndex]:null;const currentResolution=selected&&selected.RESOLUTION!=="auto"?selected.RESOLUTION:captureStatus.active_resolution;const currentFps=selected&&selected.FPS!=="auto"?Number(selected.FPS):Number(captureStatus.latest_captured_fps);let currentFormat=selected&&selected.FORMAT!=="auto"?selected.FORMAT:(captureStatus.active_capture_format||"CSI");if(currentFormat==="MJPEG"||currentFormat==="JPEG")currentFormat="MJPG";if(selectedCamera?.kind==="csi")currentFormat="CSI";const preferred=currentResolution&&currentResolution!=="auto"&&Number.isFinite(currentFps)&&currentFps>0?{width:Number(currentResolution.split("x")[0]),height:Number(currentResolution.split("x")[1]),fps:currentFps,format:currentFormat}:null;$("message").textContent=inventory.length+" camera(s) found. Current saved camera settings are selected.";fillModes(preferred)}renderCaptureStatus();await refreshStreams();await refreshCameraControls()}catch(e){$("message").textContent=e.message}}
 
-function cameraControlLabel(name){const labels={auto_exposure:"Auto exposure",exposure_time_absolute:"Exposure time",exposure_dynamic_framerate:"Dynamic framerate",white_balance_automatic:"Automatic white balance",white_balance_temperature:"White balance temperature",power_line_frequency:"Power-line frequency",backlight_compensation:"Backlight compensation",focus_automatic_continuous:"Continuous autofocus",focus_absolute:"Focus"};return labels[name]||name.replaceAll("_"," ").replace(/\\b\\w/g,letter=>letter.toUpperCase())}
+function cameraControlLabel(name){const labels={auto_exposure:"Auto exposure",exposure_time_absolute:"Exposure time",exposure_dynamic_framerate:"Dynamic framerate",white_balance_automatic:"Automatic white balance",white_balance_temperature:"White balance temperature",power_line_frequency:"Power-line frequency",backlight_compensation:"Backlight compensation",focus_automatic_continuous:"Continuous autofocus",focus_absolute:"Focus"};return labels[name]||name.replaceAll("_"," ").replace(/\b\w/g,letter=>letter.toUpperCase())}
 async function refreshCameraControls(){
 const root=$("camera-controls-list"),status=$("camera-controls-status");root.replaceChildren();status.textContent="Reading active camera controls…";
 try{
@@ -274,10 +274,10 @@ def live_capture_status():
 
 
 V4L2_CONTROL_LINE = re.compile(
-    r"^\\s*(?P<name>[a-zA-Z0-9_]+)\\s+0x[0-9a-fA-F]+\\s+"
-    r"\\((?P<type>[^)]+)\\)\\s*:\\s*(?P<metadata>.*)$"
+    r"^\s*(?P<name>[a-zA-Z0-9_]+)\s+0x[0-9a-fA-F]+\s+"
+    r"\((?P<type>[^)]+)\)\s*:\s*(?P<metadata>.*)$"
 )
-V4L2_MENU_LINE = re.compile(r"^\\s*(?P<value>-?\\d+)\\s*:\\s*(?P<label>.+?)\\s*$")
+V4L2_MENU_LINE = re.compile(r"^\s*(?P<value>-?\d+)\s*:\s*(?P<label>.+?)\s*$")
 
 
 def parse_v4l2_controls(output):
@@ -290,10 +290,10 @@ def parse_v4l2_controls(output):
             metadata = match.group("metadata")
             values = {}
             for key in ("min", "max", "step", "default", "value"):
-                value_match = re.search(rf"(?:^|\\s){key}=(-?\\d+)", metadata)
+                value_match = re.search(rf"(?:^|\s){key}=(-?\d+)", metadata)
                 if value_match:
                     values[key] = int(value_match.group(1))
-            flags_match = re.search(r"(?:^|\\s)flags=(.+)$", metadata)
+            flags_match = re.search(r"(?:^|\s)flags=(.+)$", metadata)
             flags = [flag.strip() for flag in flags_match.group(1).split(",")] if flags_match else []
             control_type = match.group("type").lower()
             supported = control_type in ("bool", "int", "menu", "intmenu")
