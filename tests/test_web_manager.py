@@ -264,7 +264,7 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("projectedPixelRate", MODULE.PAGE)
         self.assertIn("resourceBudget", MODULE.PAGE)
         self.assertIn("aggregate pixels/second", MODULE.PAGE)
-        self.assertIn("additional_streams_estimated_pixels_per_second", MODULE.PAGE)
+        self.assertIn("primary_estimated_pixels_per_second", MODULE.PAGE)
 
     def test_active_camera_config_returns_only_selection_fields(self):
         config = {
