@@ -229,7 +229,6 @@ class UpdateArchiveTests(unittest.TestCase):
             "lib/health_monitor.py": b"# health monitor",
             "lib/config.py": b"# config",
             "lib/network_diagnostics.py": b"# network diagnostics",
-            "lib/camera_profiles.py": b"# camera profiles",
             "lib/home_assistant.py": b"# Home Assistant MQTT",
             "lib/timelapse.py": b"# Timelapse",
             "lib/motion_detection.py": b"# Motion detection",

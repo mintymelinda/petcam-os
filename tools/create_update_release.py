@@ -22,7 +22,6 @@ REQUIRED_FILES = (
     "lib/config.py",
     "lib/network_diagnostics.py",
     "lib/factory_reset.py",
-    "lib/camera_profiles.py",
     "lib/home_assistant.py",
     "lib/timelapse.py",
     "lib/motion_detection.py",

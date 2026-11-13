@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """PetCam camera capability discovery and hardware-aware mode selection."""
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -32,6 +33,48 @@ PIXEL_BUDGETS = {
     "pi5": 3840 * 2160 * 30,
     "unknown": 1280 * 720 * 30,
 }
+
+
+def _camera_slug(value):
+    return re.sub(r"[^a-z0-9-]+", "-", value.lower()).strip("-") or "camera"
+
+
+def camera_identity(camera):
+    """Return a stable identifier for a discovered physical camera."""
+    kind = camera.get("kind")
+    if kind == "usb":
+        device = str(camera.get("device", ""))
+        if not re.fullmatch(r"/dev/(?:video[0-9]+|v4l/by-id/[A-Za-z0-9._:+-]+)", device):
+            raise ValueError("USB camera has no valid device path.")
+        physical_path = str(camera.get("physical_path", ""))
+        stable = device.startswith("/dev/v4l/by-id/") or bool(physical_path)
+        source = device if device.startswith("/dev/v4l/by-id/") else physical_path or device
+        digest = hashlib.sha256(source.encode("utf-8")).hexdigest()[:12]
+        return {
+            "id": f"usb-{digest}",
+            "kind": "usb",
+            "device": device,
+            "physical_path": physical_path,
+            "stable_identity": stable,
+            "label": camera.get("label") or f"USB camera · {device}",
+        }
+    if kind == "csi":
+        sensor = _camera_slug(str(camera.get("sensor", "csi")))
+        index = camera.get("camera")
+        device_path = str(camera.get("device_path", ""))
+        if not isinstance(index, int) or index < 0:
+            raise ValueError("CSI camera index is invalid.")
+        digest = hashlib.sha256(f"{sensor}|{device_path}".encode("utf-8")).hexdigest()[:12]
+        return {
+            "id": f"csi-{digest}" if device_path else f"csi-{sensor}-{index}",
+            "kind": "csi",
+            "camera": index,
+            "sensor": sensor,
+            "device_path": device_path,
+            "stable_identity": bool(device_path),
+            "label": camera.get("label") or f"CSI {sensor} · camera {index}",
+        }
+    raise ValueError("Camera type must be usb or csi.")
 
 
 def parse_modes(output):

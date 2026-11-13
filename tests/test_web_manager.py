@@ -17,10 +17,11 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("Refresh cameras", MODULE.PAGE)
         self.assertIn("Live preview", MODULE.PAGE)
         self.assertIn('role="tablist"', MODULE.PAGE)
-        self.assertLess(MODULE.PAGE.index(">Live</button>"), MODULE.PAGE.index(">OBS</button>"))
-        self.assertLess(MODULE.PAGE.index(">OBS</button>"), MODULE.PAGE.index(">Camera Settings</button>"))
-        self.assertLess(MODULE.PAGE.index(">Camera Settings</button>"), MODULE.PAGE.index(">Streams</button>"))
-        self.assertLess(MODULE.PAGE.index(">Streams</button>"), MODULE.PAGE.index(">System</button>"))
+        self.assertLess(MODULE.PAGE.index(">Live</button>"), MODULE.PAGE.index(">Camera Settings</button>"))
+        self.assertLess(MODULE.PAGE.index(">Camera Settings</button>"), MODULE.PAGE.index(">System</button>"))
+        self.assertNotIn(">OBS</button>", MODULE.PAGE)
+        self.assertNotIn(">Streams</button>", MODULE.PAGE)
+        self.assertIn('id="copy-browser-source" type="button">URL Browser Source</button>', MODULE.PAGE)
         self.assertIn('id="panel-camera-settings"', MODULE.PAGE)
         self.assertIn('id="panel-system"', MODULE.PAGE)
         self.assertIn("activateTab", MODULE.PAGE)
@@ -37,12 +38,9 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("/api/update/check", MODULE.PAGE)
         self.assertIn("/api/update/install", MODULE.PAGE)
         self.assertIn("/api/update/status", MODULE.PAGE)
-        self.assertIn("Configure stream", MODULE.PAGE)
-        self.assertIn("Add independent stream", MODULE.PAGE)
-        self.assertIn("Camera streams", MODULE.PAGE)
-        self.assertIn("/api/streams/configure", MODULE.PAGE)
-        self.assertIn("/api/streams/remove", MODULE.PAGE)
-        self.assertIn("stream_path", MODULE.PAGE)
+        self.assertNotIn("/api/streams", MODULE.PAGE)
+        self.assertNotIn("stream_path", MODULE.PAGE)
+        self.assertNotIn("OBS browser source", MODULE.PAGE)
         self.assertIn("Network and OBS diagnostics", MODULE.PAGE)
         self.assertIn("/api/diagnostics", MODULE.PAGE)
         self.assertIn("/api/support-bundle", MODULE.PAGE)
@@ -159,24 +157,17 @@ class WebManagerTests(unittest.TestCase):
             "modes": [{"width": 640, "height": 480, "fps": [30], "format": "MJPG"}],
         }]
         try:
-            with mock.patch.object(MODULE, "apply_primary_config") as apply:
+            with mock.patch.object(MODULE, "apply_config") as apply:
                 MODULE.save_selection({
                     "kind": "usb",
                     "device": "/dev/video0",
                     "mode": {"width": 640, "height": 480, "fps": 30, "format": "MJPG"},
                 })
-            apply.assert_called_once_with(
-                {
-                    "SOURCE": "usb", "DEVICE": "/dev/video0",
-                    "USB_PHYSICAL_PATH": "", "CSI_DEVICE_PATH": "", "CAMERA": "auto",
-                    "FORMAT": "MJPG", "RESOLUTION": "640x480", "FPS": "30",
-                },
-                {
-                    "kind": "usb", "device": "/dev/video0",
-                    "modes": [{"width": 640, "height": 480, "fps": [30], "format": "MJPG"}],
-                },
-                allow_performance_override=False,
-            )
+            apply.assert_called_once_with({
+                "SOURCE": "usb", "DEVICE": "/dev/video0",
+                "USB_PHYSICAL_PATH": "", "CSI_DEVICE_PATH": "", "CAMERA": "auto",
+                "FORMAT": "MJPG", "RESOLUTION": "640x480", "FPS": "30",
+            })
         finally:
             MODULE.camera_inventory = original
 
@@ -186,13 +177,15 @@ class WebManagerTests(unittest.TestCase):
             "modes": [{"width": 1920, "height": 1080, "fps": [60], "format": "MJPG"}],
         }
         with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \
-                mock.patch.object(MODULE, "apply_primary_config") as apply:
+                mock.patch.object(MODULE, "model_tier", return_value="pi3"), \
+                mock.patch.object(MODULE, "PIXEL_BUDGETS", {"pi3": 1}), \
+                mock.patch.object(MODULE, "apply_config") as apply:
             MODULE.save_selection({
                 "kind": "usb", "camera_id": "usb-fast",
                 "mode": {"width": 1920, "height": 1080, "fps": 60, "format": "MJPG"},
                 "allow_performance_override": True,
             })
-        self.assertTrue(apply.call_args.kwargs["allow_performance_override"])
+        self.assertEqual(apply.call_args.args[0]["FPS"], "60")
 
     def test_primary_usb_selection_persists_physical_topology(self):
         physical_path = "/sys/devices/platform/soc/usb1/1-1/1-1.2"
@@ -204,7 +197,7 @@ class WebManagerTests(unittest.TestCase):
             "modes": [{"width": 640, "height": 480, "fps": [30], "format": "MJPG"}],
         }
         with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \
-                mock.patch.object(MODULE, "apply_primary_config") as apply:
+                mock.patch.object(MODULE, "apply_config") as apply:
             MODULE.save_selection({
                 "kind": "usb",
                 "camera_id": "usb-stable",
@@ -227,7 +220,7 @@ class WebManagerTests(unittest.TestCase):
             "modes": [{"width": 640, "height": 480, "fps": 30}],
         }
         with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \
-                mock.patch.object(MODULE, "apply_primary_config") as apply:
+                mock.patch.object(MODULE, "apply_config") as apply:
             MODULE.save_selection({
                 "kind": "csi",
                 "camera_id": "csi-stable",
@@ -350,11 +343,13 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("configured:", MODULE.PAGE)
         self.assertIn("actual ", MODULE.PAGE)
 
-    def test_camera_performance_warning_accounts_for_all_streams(self):
+    def test_camera_performance_warning_uses_single_capture_budget(self):
         self.assertIn("projectedPixelRate", MODULE.PAGE)
-        self.assertIn("resourceBudget", MODULE.PAGE)
-        self.assertIn("aggregate pixels/second", MODULE.PAGE)
-        self.assertIn("primary_estimated_pixels_per_second", MODULE.PAGE)
+        self.assertIn("hardware_budget_pixels_per_second", MODULE.PAGE)
+        self.assertIn("exceedsPerformanceBudget", MODULE.PAGE)
+        self.assertIn("pixels/second", MODULE.PAGE)
+        self.assertNotIn("aggregate pixels/second", MODULE.PAGE)
+        self.assertNotIn("primary_estimated_pixels_per_second", MODULE.PAGE)
 
     def test_active_camera_config_returns_only_selection_fields(self):
         config = {
@@ -603,6 +598,22 @@ exposure_dynamic_framerate 0x009a0903 (bool) : default=0 value=1
         self.assertIn('input.type="range"', MODULE.PAGE)
         self.assertIn('input.type="number"', MODULE.PAGE)
         self.assertIn('document.createElement("select")', MODULE.PAGE)
+
+
+class CameraIdentityTests(unittest.TestCase):
+    def test_usb_camera_identity_prefers_physical_path(self):
+        camera = {"kind": "usb", "device": "/dev/video4", "physical_path": "/sys/devices/usb1/1-1"}
+        identity = MODULE.camera_identity(camera)
+        self.assertTrue(identity["stable_identity"])
+        self.assertEqual(identity["id"], MODULE.camera_identity({
+            **camera, "device": "/dev/video7",
+        })["id"])
+
+    def test_csi_camera_identity_uses_device_tree_path_when_available(self):
+        camera = {"kind": "csi", "camera": 0, "sensor": "IMX219", "device_path": "/sys/firmware/devicetree/base/cam0"}
+        identity = MODULE.camera_identity(camera)
+        self.assertTrue(identity["stable_identity"])
+        self.assertTrue(identity["id"].startswith("csi-"))
 
 
 if __name__ == "__main__":

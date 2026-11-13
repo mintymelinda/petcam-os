@@ -16,26 +16,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from config import ensure_config_lock, parse_config
-from camera import PIXEL_BUDGETS, mode_supports_fps, model_tier, read_model
+from config import apply_config, ensure_config_lock, parse_config
+from camera import PIXEL_BUDGETS, USTREAMER_FORMATS, camera_identity, mode_supports_fps, model_tier, read_model
 from network_diagnostics import collect_diagnostics, create_support_bundle
-from camera_profiles import (
-    USTREAMER_FORMATS, apply_primary_config, camera_identity, configure_profile, create_profile, list_profiles,
-    remove_profile, resource_budget_report, stream_port,
-)
 from timelapse import load_config as load_timelapse_config, save_config as save_timelapse_config, state_snapshot as timelapse_snapshot
 from motion_detection import load_config as load_motion_config, save_config as save_motion_config, state_snapshot as motion_snapshot, FRAMES as MOTION_FRAMES
 from web_auth import SESSION_TTL, get_session, initialize_password, invalidate_session, is_configured, new_session, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
-DEFAULT_STREAM_URL = "http://127.0.0.1:8081"
-
-
-def backend_stream_url():
-    try:
-        return f"http://127.0.0.1:{parse_config(CONFIG)['PORT']}"
-    except Exception:
-        return DEFAULT_STREAM_URL
 TLS_CERT = Path("/etc/petcam/web-manager.crt")
 TLS_KEY = Path("/etc/petcam/web-manager.key")
 HEALTH_FILE = Path("/var/lib/petcam/health.json")
@@ -59,26 +47,20 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <dialog id="login-dialog" aria-labelledby="login-title"><form id="login-form"><h2 id="login-title">Sign in to PetCam</h2><label for="login-password">Administrator password</label><input id="login-password" type="password" autocomplete="current-password" required><p id="login-message" role="alert" aria-live="polite"></p><button id="login-submit" type="submit">Sign in</button></form></dialog>
 <nav id="manager-tabs" class="tab-nav" role="tablist" aria-label="PetCam sections">
 <button id="tab-live" type="button" role="tab" aria-controls="panel-live" aria-selected="true" tabindex="0" data-tab="live">Live</button>
-<button id="tab-obs" type="button" role="tab" aria-controls="panel-obs" aria-selected="false" tabindex="-1" data-tab="obs">OBS</button>
 <button id="tab-camera-settings" type="button" role="tab" aria-controls="panel-camera-settings" aria-selected="false" tabindex="-1" data-tab="camera-settings">Camera Settings</button>
-<button id="tab-streams" type="button" role="tab" aria-controls="panel-streams" aria-selected="false" tabindex="-1" data-tab="streams">Streams</button>
 <button id="tab-system" type="button" role="tab" aria-controls="panel-system" aria-selected="false" tabindex="-1" data-tab="system">System</button>
 </nav>
 <main id="tab-panels">
 <div id="panel-live" class="tab-panel active" role="tabpanel" aria-labelledby="tab-live" tabindex="0">
-<section><h2>Live preview</h2><img id="live-preview" src="/stream" alt="Live camera preview"><p id="capture-rate" class="muted">Checking actual capture rate…</p><p class="muted">The preview uses the same stream OBS receives.</p></section>
-</div>
-<div id="panel-obs" class="tab-panel" role="tabpanel" aria-labelledby="tab-obs" tabindex="0" hidden>
-<section><h2>OBS browser source</h2><p class="muted">Add this URL as a Browser Source in OBS on a computer on the same network.</p><div class="row" style="align-items:center"><code id="browser-source-url" style="flex:1;overflow-wrap:anywhere">Loading…</code><button id="copy-browser-source">Copy URL</button></div><p id="copy-message" class="muted" role="status" aria-live="polite"></p></section>
+<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Live preview</h2><button id="copy-browser-source" type="button">URL Browser Source</button></div><img id="live-preview" src="/stream" alt="Live camera preview"><p id="capture-rate" class="muted">Checking actual capture rate…</p><p class="muted">The preview uses the same stream OBS receives.</p></section>
 </div>
 <div id="panel-camera-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-camera-settings" tabindex="0" hidden>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera selection</h2><button id="refresh">Refresh cameras</button></div>
 <p id="message" role="status">Discovering cameras…</p>
 <label for="camera">Camera</label><select id="camera"></select>
 <label for="mode">Capture mode</label><select id="mode"></select>
-<label for="stream-target">Configure stream</label><select id="stream-target"><option value="default">Primary stream (existing /stream)</option></select>
-<div class="row" style="margin-top:1rem"><button id="apply">Apply selected camera and mode</button><button id="add-stream">Add independent stream</button></div>
-<p class="muted">Only advertised modes are offered. Applying to the primary stream preserves the existing /stream URL. Independent streams receive their own configuration, service, and OBS URL.</p></section>
+<div class="row" style="margin-top:1rem"><button id="apply">Apply selected camera and mode</button></div>
+<p class="muted">Only advertised camera modes are offered.</p></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera controls</h2><button id="refresh-camera-controls" type="button">Refresh controls</button></div>
 <p id="camera-controls-status" class="muted" role="status">Controls for the active camera will appear here.</p>
 <p class="muted">Controls are discovered from the connected camera. Some settings may be unavailable while automatic modes are active. Dynamic framerate can reduce the actual captured FPS when enabled.</p>
@@ -115,9 +97,6 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <div class="row"><button id="save-motion">Save motion settings</button></div>
 <h3>Recent motion events</h3><div id="motion-events" class="muted">No motion events recorded.</div></section>
 </div>
-<div id="panel-streams" class="tab-panel" role="tabpanel" aria-labelledby="tab-streams" tabindex="0" hidden>
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera streams</h2><button id="refresh-streams">Refresh streams</button></div><div id="stream-profiles" class="muted">Loading streams…</div></section>
-</div>
 <div id="panel-system" class="tab-panel" role="tabpanel" aria-labelledby="tab-system" tabindex="0" hidden>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Network and OBS diagnostics</h2><button id="refresh-diagnostics">Run checks</button></div><p id="diagnostic-summary" role="status">Diagnostics have not been run yet.</p><p id="diagnostic-details" class="muted"></p><div class="row"><button id="download-support-bundle">Download redacted support bundle</button></div></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Stream health</h2><button id="refresh-health">Refresh</button></div><p id="health-state" role="status">Checking stream health…</p><p id="health-reason" class="muted"></p><small id="health-details" class="muted"></small></section>
@@ -133,11 +112,10 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 </main>
 <footer style="text-align:center;padding:1rem 0 2rem"><small>Enjoying PetCam? <a href="https://www.paypal.me/kimmynightmare" target="_blank" rel="noopener noreferrer" style="color:#b9d8ff">Support development with PayPal</a></small></footer>
 <script>
-const $=id=>document.getElementById(id);let inventory=[],streams=[],activeConfig=null,captureStatus={},resourceBudget=null;
+const $=id=>document.getElementById(id);let inventory=[],activeConfig=null,captureStatus={};
 const browserSourceUrl="http://"+window.location.hostname+":8080/stream";
 $("first-run-form").onsubmit=async event=>{event.preventDefault();const password=$("setup-password").value,confirmation=$("setup-password-confirm").value,message=$("setup-message"),button=$("setup-submit");if(password!==confirmation){message.textContent="The passwords do not match.";return}button.disabled=true;message.textContent="Creating administrator account…";try{const response=await fetch("/api/setup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password,password_confirmation:confirmation})});const data=await response.json();if(!response.ok)throw Error(data.error||"Initial setup failed");message.textContent="Administrator account created. Opening PetCam…";location.reload()}catch(error){message.textContent=error.message;button.disabled=false}};
-$("browser-source-url").textContent=browserSourceUrl;
-$("copy-browser-source").onclick=async()=>{const message=$("copy-message");try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(browserSourceUrl)}else{const field=document.createElement("textarea");field.value=browserSourceUrl;field.setAttribute("readonly","");field.style.position="fixed";field.style.opacity="0";document.body.append(field);field.select();const copied=document.execCommand("copy");field.remove();if(!copied)throw Error("Clipboard access is unavailable")}message.textContent="Browser source URL copied."}catch(e){message.textContent="Could not copy automatically. Select and copy the URL above."}};
+$("copy-browser-source").onclick=async()=>{try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(browserSourceUrl)}else{const field=document.createElement("textarea");field.value=browserSourceUrl;field.setAttribute("readonly","");field.style.position="fixed";field.style.opacity="0";document.body.append(field);field.select();const copied=document.execCommand("copy");field.remove();if(!copied)throw Error("Clipboard access is unavailable")}}catch(error){console.error("Unable to copy Browser Source URL",error)}};
 let csrfToken=null;let loginPromise=null;async function login(){if(loginPromise)return loginPromise;loginPromise=(async()=>{const setupResponse=await fetch("/api/setup/status",{cache:"no-store"});const setupState=await setupResponse.json();if(!setupResponse.ok)throw Error(setupState.error||"Unable to check initial setup");if(!setupState.configured)throw Error("Create the administrator password in the welcome panel before signing in.");return await new Promise((resolve,reject)=>{const dialog=$("login-dialog"),form=$("login-form"),password=$("login-password"),message=$("login-message"),button=$("login-submit");let settled=false;const finish=(error,data)=>{if(settled)return;settled=true;password.value="";dialog.close();if(error)reject(error);else resolve(data)};form.onsubmit=async event=>{event.preventDefault();button.disabled=true;message.textContent="Signing in…";try{const response=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:password.value})});const data=await response.json();if(!response.ok)throw Error(data.error||"Sign-in failed");csrfToken=data.csrf_token;finish(null,data)}catch(error){message.textContent=error.message;password.value="";password.focus();button.disabled=false}};dialog.oncancel=event=>{event.preventDefault();finish(Error("Sign-in cancelled"))};password.setAttribute("type","password");password.type="password";password.setAttribute("autocomplete","current-password");dialog.showModal();password.focus()})})();try{return await loginPromise}finally{loginPromise=null}}async function request(path,options={}){const headers=new Headers(options.headers||{});if(options.method&&options.method.toUpperCase()!=="GET"&&!csrfToken){let session=await fetch("/api/session");if(session.status===401){await login()}else{const state=await session.json();if(!session.ok)throw Error(state.error||session.statusText);csrfToken=state.csrf_token}}if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);let r=await fetch(path,{...options,headers});if(r.status===401){await login();if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);r=await fetch(path,{...options,headers})}const d=await r.json();if(!r.ok)throw Error(d.error||r.statusText);return d}
 
 const tabButtons=[...document.querySelectorAll("[data-tab]")];
@@ -169,15 +147,15 @@ for(const button of tabButtons){
 activateTab("live");
 
 function modesFor(camera){return camera.kind==="usb"?camera.modes.filter(m=>["MJPG","MJPEG","JPEG","YUYV","YVYU","UYVY","YUV420","YVU420","RGB565","RGB24","GREY"].includes(m.format)):camera.modes}
-function projectedPixelRate(mode,target="default",adding=false){const candidate=mode.width*mode.height*mode.fps,budget=resourceBudget;if(!budget||!Number.isFinite(Number(budget.estimated_total_pixels_per_second)))return candidate;let total=Number(budget.estimated_total_pixels_per_second);if(adding)total+=candidate;else if(target==="default")total=total-Number(budget.primary_estimated_pixels_per_second||0)+candidate;else{const existing=streams.find(item=>item.id===target);total=total-Number(existing?.estimated_pixels_per_second||0)+candidate}return Math.max(candidate,total)}
-function exceedsPerformanceBudget(camera,mode,target="default",adding=false){const budget=Number(resourceBudget?.pixel_budget_pixels_per_second||camera?.hardware_budget_pixels_per_second||0);return budget>0&&projectedPixelRate(mode,target,adding)>budget}
-function confirmPerformanceOverride(camera,mode,target="default",adding=false){if(!exceedsPerformanceBudget(camera,mode,target,adding))return false;const estimate=projectedPixelRate(mode,target,adding),budget=Number(resourceBudget?.pixel_budget_pixels_per_second||camera.hardware_budget_pixels_per_second);return confirm("Performance warning: this change is estimated to put the device at "+estimate.toLocaleString()+" aggregate pixels/second, above the "+(resourceBudget?.hardware_tier||camera.hardware_tier)+" device guideline of "+budget.toLocaleString()+" pixels/second. It may cause low frame rates, dropped frames, or an unresponsive camera stream. Use this mode anyway?")}
-function showSelectedModeWarning(){const c=inventory[+$("camera").value],raw=$("mode").value,target=$("stream-target").value;if(!c||!raw)return;const mode=JSON.parse(raw);if(exceedsPerformanceBudget(c,mode,target))$("message").textContent="Performance warning: this selection would exceed the estimated aggregate "+c.hardware_tier+" device budget. You can still apply it after confirming the warning.";else $("message").textContent="Selected mode is within the estimated device performance budget."}
+function projectedPixelRate(mode){return mode.width*mode.height*mode.fps}
+function exceedsPerformanceBudget(camera,mode){const budget=Number(camera?.hardware_budget_pixels_per_second||0);return budget>0&&projectedPixelRate(mode)>budget}
+function confirmPerformanceOverride(camera,mode){if(!exceedsPerformanceBudget(camera,mode))return false;const estimate=projectedPixelRate(mode),budget=Number(camera.hardware_budget_pixels_per_second);return confirm("Performance warning: this capture mode is estimated at "+estimate.toLocaleString()+" pixels/second, above the "+camera.hardware_tier+" device guideline of "+budget.toLocaleString()+" pixels/second. It may cause low frame rates, dropped frames, or an unresponsive camera stream. Use this mode anyway?")}
+function showSelectedModeWarning(){const c=inventory[+$("camera").value],raw=$("mode").value;if(!c||!raw)return;const mode=JSON.parse(raw);if(exceedsPerformanceBudget(c,mode))$("message").textContent="Performance warning: this capture mode exceeds the estimated "+c.hardware_tier+" device budget. You can still apply it after confirming the warning.";else $("message").textContent="Selected mode is within the estimated device performance budget."}
 function activeCameraMatches(camera,config){if(!config)return false;if(config.SOURCE==="usb")return camera.kind==="usb"&&(config.USB_PHYSICAL_PATH?camera.physical_path===config.USB_PHYSICAL_PATH:camera.device===config.DEVICE);if(config.SOURCE==="csi")return camera.kind==="csi"&&(config.CSI_DEVICE_PATH?camera.device_path===config.CSI_DEVICE_PATH:String(camera.camera)===String(config.CAMERA));return false}
-function fillModes(preferred=null){const c=inventory[+$("camera").value];$("mode").replaceChildren();if(!c)return;let matched=false;for(const m of modesFor(c)){let fps=m.fps?.length?m.fps:[m.fps_range?.max||30];if(c.kind==="usb")fps=fps.filter(Number.isInteger);if(preferred&&preferred.width===m.width&&preferred.height===m.height&&(preferred.format||"CSI")===(m.format||"CSI")&&!fps.some(f=>Math.abs(f-preferred.fps)<0.1))fps=[...fps,preferred.fps];for(const f of fps){const mode={format:m.format||"CSI",width:m.width,height:m.height,fps:f};const o=document.createElement("option");o.value=JSON.stringify(mode);o.textContent=`${m.width}×${m.height} · ${f} fps · ${m.format||"CSI"}`+(exceedsPerformanceBudget(c,mode,$("stream-target").value,false)?" · ⚠ above device estimate":"");if(preferred&&mode.width===preferred.width&&mode.height===preferred.height&&mode.format===(preferred.format||"CSI")&&Math.abs(mode.fps-preferred.fps)<0.1){o.selected=true;matched=true}$("mode").append(o)}}if(preferred&&!matched){const mode={format:preferred.format||"CSI",width:preferred.width,height:preferred.height,fps:Number(preferred.fps)};const o=document.createElement("option");o.value=JSON.stringify(mode);o.textContent=`${mode.width}×${mode.height} · ${mode.fps} fps · ${mode.format} (saved setting; not currently advertised)`;o.selected=true;$("mode").prepend(o)}$("mode").onchange=showSelectedModeWarning;showSelectedModeWarning()}
+function fillModes(preferred=null){const c=inventory[+$("camera").value];$("mode").replaceChildren();if(!c)return;let matched=false;for(const m of modesFor(c)){let fps=m.fps?.length?m.fps:[m.fps_range?.max||30];if(c.kind==="usb")fps=fps.filter(Number.isInteger);if(preferred&&preferred.width===m.width&&preferred.height===m.height&&(preferred.format||"CSI")===(m.format||"CSI")&&!fps.some(f=>Math.abs(f-preferred.fps)<0.1))fps=[...fps,preferred.fps];for(const f of fps){const mode={format:m.format||"CSI",width:m.width,height:m.height,fps:f};const o=document.createElement("option");o.value=JSON.stringify(mode);o.textContent=`${m.width}×${m.height} · ${f} fps · ${m.format||"CSI"}`+(exceedsPerformanceBudget(c,mode)?" · ⚠ above device estimate":"");if(preferred&&mode.width===preferred.width&&mode.height===preferred.height&&mode.format===(preferred.format||"CSI")&&Math.abs(mode.fps-preferred.fps)<0.1){o.selected=true;matched=true}$("mode").append(o)}}if(preferred&&!matched){const mode={format:preferred.format||"CSI",width:preferred.width,height:preferred.height,fps:Number(preferred.fps)};const o=document.createElement("option");o.value=JSON.stringify(mode);o.textContent=`${mode.width}×${mode.height} · ${mode.fps} fps · ${mode.format} (saved setting; not currently advertised)`;o.selected=true;$("mode").prepend(o)}$("mode").onchange=showSelectedModeWarning;showSelectedModeWarning()}
 function renderCaptureStatus(){const fps=Number(captureStatus.latest_captured_fps),configured=activeConfig?.FPS;if(Number.isFinite(fps)&&fps>0){$("capture-rate").textContent="Actual captured rate: "+fps.toFixed(1).replace(/\.0$/,"")+" FPS"+(configured&&configured!=="auto"?" · configured: "+configured+" FPS":"")+(activeConfig?.RESOLUTION&&activeConfig.RESOLUTION!=="auto"?" · "+activeConfig.RESOLUTION:"")}else $("capture-rate").textContent="Actual captured rate: not currently reported"}
 function refreshLivePreview(){const preview=$("live-preview");preview.src="/stream?refresh="+Date.now()}
-async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;activeConfig=d.active_config;captureStatus=d.capture_status||{};resourceBudget=d.resource_budget||null;$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});const activeIndex=inventory.findIndex(c=>activeCameraMatches(c,activeConfig));if(activeIndex>=0){$("camera").value=String(activeIndex);$("camera").options[activeIndex].textContent+=" · current"}if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{const selected=activeIndex>=0?activeConfig:null;const selectedCamera=activeIndex>=0?inventory[activeIndex]:null;const currentResolution=selected&&selected.RESOLUTION!=="auto"?selected.RESOLUTION:captureStatus.active_resolution;const currentFps=selected&&selected.FPS!=="auto"?Number(selected.FPS):Number(captureStatus.latest_captured_fps);let currentFormat=selected&&selected.FORMAT!=="auto"?selected.FORMAT:(captureStatus.active_capture_format||"CSI");if(currentFormat==="MJPEG"||currentFormat==="JPEG")currentFormat="MJPG";if(selectedCamera?.kind==="csi")currentFormat="CSI";const preferred=currentResolution&&currentResolution!=="auto"&&Number.isFinite(currentFps)&&currentFps>0?{width:Number(currentResolution.split("x")[0]),height:Number(currentResolution.split("x")[1]),fps:currentFps,format:currentFormat}:null;$("message").textContent=inventory.length+" camera(s) found. Current saved camera settings are selected.";fillModes(preferred)}renderCaptureStatus();await refreshStreams();await refreshCameraControls()}catch(e){$("message").textContent=e.message}}
+async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;activeConfig=d.active_config;captureStatus=d.capture_status||{};$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});const activeIndex=inventory.findIndex(c=>activeCameraMatches(c,activeConfig));if(activeIndex>=0){$("camera").value=String(activeIndex);$("camera").options[activeIndex].textContent+=" · current"}if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{const selected=activeIndex>=0?activeConfig:null;const selectedCamera=activeIndex>=0?inventory[activeIndex]:null;const currentResolution=selected&&selected.RESOLUTION!=="auto"?selected.RESOLUTION:captureStatus.active_resolution;const currentFps=selected&&selected.FPS!=="auto"?Number(selected.FPS):Number(captureStatus.latest_captured_fps);let currentFormat=selected&&selected.FORMAT!=="auto"?selected.FORMAT:(captureStatus.active_capture_format||"CSI");if(currentFormat==="MJPEG"||currentFormat==="JPEG")currentFormat="MJPG";if(selectedCamera?.kind==="csi")currentFormat="CSI";const preferred=currentResolution&&currentResolution!=="auto"&&Number.isFinite(currentFps)&&currentFps>0?{width:Number(currentResolution.split("x")[0]),height:Number(currentResolution.split("x")[1]),fps:currentFps,format:currentFormat}:null;$("message").textContent=inventory.length+" camera(s) found. Current saved camera settings are selected.";fillModes(preferred)}renderCaptureStatus();await refreshCameraControls()}catch(e){$("message").textContent=e.message}}
 
 function cameraControlLabel(name){const labels={auto_exposure:"Auto exposure",exposure_time_absolute:"Exposure time",exposure_dynamic_framerate:"Dynamic framerate",white_balance_automatic:"Automatic white balance",white_balance_temperature:"White balance temperature",power_line_frequency:"Power-line frequency",backlight_compensation:"Backlight compensation",focus_automatic_continuous:"Continuous autofocus",focus_absolute:"Focus"};return labels[name]||name.replaceAll("_"," ").replace(/\b\w/g,letter=>letter.toUpperCase())}
 async function refreshCameraControls(){
@@ -207,14 +185,9 @@ root.append(row)
 }catch(error){status.textContent="Camera controls unavailable: "+error.message}
 }
 $("refresh-camera-controls").onclick=refreshCameraControls;
-$("refresh").onclick=refresh;$("camera").onchange=fillModes;$("stream-target").onchange=showSelectedModeWarning;
-$("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value,target=$("stream-target").value;if(!c||!m)return;const mode=JSON.parse(m),override=confirmPerformanceOverride(c,mode,target,false);if(exceedsPerformanceBudget(c,mode,target,false)&&!override)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{if(target==="default"){await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,camera_id:c.id,device:c.device,physical_path:c.physical_path,device_path:c.device_path,camera:c.camera,mode,allow_performance_override:override})})}else{await request("/api/streams/configure",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile_id:target,camera_id:c.id,mode,allow_performance_override:override})})}if(target==="default"){await refresh();refreshLivePreview()}else{await refreshStreams()}$("message").textContent="Camera settings saved. The selected stream preview has been reconnected."}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
-$("add-stream").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;const mode=JSON.parse(m),override=confirmPerformanceOverride(c,mode,"default",true);if(exceedsPerformanceBudget(c,mode,"default",true)&&!override)return;const b=$("add-stream");b.disabled=true;$("message").textContent="Starting independent camera stream…";try{const d=await request("/api/streams",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({camera_id:c.id,mode,allow_performance_override:override})});$("message").textContent="Independent stream started: "+d.profile.stream_path;await refreshStreams()}catch(e){$("message").textContent=e.message}finally{b.disabled=false}};
-$("refresh-streams").onclick=refreshStreams;
+$("refresh").onclick=refresh;$("camera").onchange=fillModes;
+$("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;const mode=JSON.parse(m),override=confirmPerformanceOverride(c,mode);if(exceedsPerformanceBudget(c,mode)&&!override)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,camera_id:c.id,device:c.device,physical_path:c.physical_path,device_path:c.device_path,camera:c.camera,mode,allow_performance_override:override})});await refresh();refreshLivePreview();$("message").textContent="Camera settings saved. The live preview has been reconnected."}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
 $("logout").onclick=async()=>{try{await request("/api/logout",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});csrfToken=null;location.reload()}catch(e){alert(e.message)}};
-function fillStreamTargets(){const selected=$("stream-target").value;$("stream-target").replaceChildren();const primary=document.createElement("option");primary.value="default";primary.textContent="Primary stream (/stream)";$("stream-target").append(primary);for(const p of streams){if(p.id==="default")continue;const o=document.createElement("option");o.value=p.id;o.textContent=p.label+" · "+p.state;$("stream-target").append(o)}if([...$("stream-target").options].some(o=>o.value===selected))$("stream-target").value=selected}
-function renderStreams(){const root=$("stream-profiles");root.replaceChildren();for(const p of streams){const card=document.createElement("section"),title=document.createElement("h3"),state=document.createElement("p"),preview=document.createElement("img"),url=document.createElement("code"),row=document.createElement("div");title.textContent=p.label;state.textContent="Service: "+p.state+" · "+(p.ready?"frames available":"no frame detected")+(p.id==="default"&&Number(captureStatus.latest_captured_fps)>0?" · actual "+Number(captureStatus.latest_captured_fps).toFixed(1).replace(/\.0$/,"")+" FPS":"")+(p.stable_identity===false?" · identity may change if USB enumeration changes":"");preview.src=p.stream_path;preview.alt=p.label+" preview";preview.style.maxHeight="220px";url.textContent="OBS: http://"+window.location.hostname+":8080"+p.stream_path;row.className="row";row.append(url);card.append(title,state,preview,row);if(p.managed_independently){const remove=document.createElement("button");remove.textContent="Remove stream";remove.onclick=async()=>{remove.disabled=true;try{await request("/api/streams/remove",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile_id:p.id})});await refreshStreams()}catch(e){state.textContent=e.message;remove.disabled=false}};card.append(remove)}root.append(card)}}
-async function refreshStreams(){try{const d=await request("/api/streams");streams=d.streams||[];fillStreamTargets();renderStreams()}catch(e){$("stream-profiles").textContent="Unable to load streams: "+e.message}}
 async function refreshTimelapse(){try{const d=await request("/api/timelapse");const c=d.config,s=d.status;$("timelapse-enabled").checked=c.enabled;$("timelapse-interval").value=c.interval_seconds;$("timelapse-start").value=c.schedule_start;$("timelapse-end").value=c.schedule_end;$("timelapse-retention").value=c.retention_days;$("timelapse-storage").value=c.max_storage_mb;$("timelapse-free").value=c.min_free_mb;$("timelapse-width").value=c.max_width;$("timelapse-quality").value=c.jpeg_quality;$("timelapse-path").value=c.storage_path;$("timelapse-status").textContent="Status: "+s.state+" · "+s.frames+" frames · "+Math.round(s.storage_bytes/1048576)+" MiB"+(s.last_capture_at?" · Last capture: "+s.last_capture_at:"")+(s.last_error?" · "+s.last_error:"")}catch(e){$("timelapse-status").textContent="Timelapse status unavailable: "+e.message}}
 $("refresh-timelapse").onclick=refreshTimelapse;
 $("save-timelapse").onclick=async()=>{const b=$("save-timelapse");b.disabled=true;try{await request("/api/timelapse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:$("timelapse-enabled").checked,interval_seconds:Number($("timelapse-interval").value),schedule_start:$("timelapse-start").value,schedule_end:$("timelapse-end").value,retention_days:Number($("timelapse-retention").value),max_storage_mb:Number($("timelapse-storage").value),min_free_mb:Number($("timelapse-free").value),max_width:Number($("timelapse-width").value),jpeg_quality:Number($("timelapse-quality").value),storage_path:$("timelapse-path").value})});await refreshTimelapse()}catch(e){$("timelapse-status").textContent=e.message}finally{b.disabled=false}};
@@ -315,13 +288,6 @@ def active_camera_config():
         key: config[key]
         for key in ("SOURCE", "DEVICE", "USB_PHYSICAL_PATH", "CSI_DEVICE_PATH", "CAMERA", "FORMAT", "RESOLUTION", "FPS")
     }
-
-
-def current_resource_budget():
-    try:
-        return resource_budget_report()
-    except Exception:
-        return None
 
 
 def live_capture_status():
@@ -578,9 +544,14 @@ def save_selection(data):
             "RESOLUTION": f"{width}x{height}",
             "FPS": str(fps),
         }
-    return apply_primary_config(
-        values, match, allow_performance_override=data.get("allow_performance_override") is True,
-    )
+    estimated_pixels_per_second = width * height * float(fps)
+    pixel_budget = PIXEL_BUDGETS[model_tier(read_model())]
+    if estimated_pixels_per_second > pixel_budget and data.get("allow_performance_override") is not True:
+        raise ValueError(
+            "This capture mode exceeds the estimated performance budget for this device. "
+            "Confirm the warning to use it anyway, or choose a lower resolution or FPS."
+        )
+    return apply_config(values)
 
 
 def proxy_stream(handler, port):
@@ -788,22 +759,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/cameras":
             try:
-                self.send_json(200, {"cameras": camera_inventory(), "active_config": active_camera_config(), "capture_status": live_capture_status(), "resource_budget": current_resource_budget()})
+                self.send_json(200, {"cameras": camera_inventory(), "active_config": active_camera_config(), "capture_status": live_capture_status()})
             except Exception as error:
                 self.send_json(500, {"error": str(error)})
             return
-        if path == "/api/streams":
+        if path == "/stream":
             try:
-                self.send_json(200, {"streams": list_profiles()})
+                proxy_stream(self, int(parse_config(CONFIG)["PORT"]))
             except Exception as error:
                 self.send_json(503, {"error": str(error)})
-            return
-        if path == "/stream" or path.startswith("/stream/"):
-            try:
-                profile_id = "default" if path == "/stream" else path[len("/stream/"):]
-                proxy_stream(self, stream_port(profile_id))
-            except ValueError as error:
-                self.send_json(404, {"error": str(error)})
             return
         self.send_error(404)
 
@@ -888,30 +852,6 @@ class Handler(BaseHTTPRequestHandler):
                 start_update()
                 self.send_json(202, {"ok": True, "status": "started"})
                 return
-            if path == "/api/streams":
-                camera = next((item for item in camera_inventory() if item["id"] == data.get("camera_id")), None)
-                if not camera:
-                    raise ValueError("Selected camera is no longer available.")
-                profile = create_profile(
-                    camera, data.get("mode") or {},
-                    allow_performance_override=data.get("allow_performance_override") is True,
-                )
-                self.send_json(201, {"ok": True, "profile": profile})
-                return
-            if path == "/api/streams/configure":
-                camera = next((item for item in camera_inventory() if item["id"] == data.get("camera_id")), None)
-                if not camera:
-                    raise ValueError("Selected camera is no longer available.")
-                profile = configure_profile(
-                    data.get("profile_id", ""), camera, data.get("mode") or {},
-                    allow_performance_override=data.get("allow_performance_override") is True,
-                )
-                self.send_json(200, {"ok": True, "profile": profile})
-                return
-            if path == "/api/streams/remove":
-                remove_profile(data.get("profile_id", ""))
-                self.send_json(200, {"ok": True})
-                return
             if path == "/api/select":
                 save_selection(data)
                 self.send_json(200, {"ok": True})
@@ -929,17 +869,13 @@ class StreamHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
-        if path == "/stream":
-            profile_id = "default"
-        elif path.startswith("/stream/"):
-            profile_id = path[len("/stream/"):]
-        else:
+        if path != "/stream":
             self.send_error(404)
             return
         try:
-            proxy_stream(self, stream_port(profile_id))
-        except ValueError:
-            self.send_error(404)
+            proxy_stream(self, int(parse_config(CONFIG)["PORT"]))
+        except Exception:
+            self.send_error(503)
 
     def log_message(self, fmt, *args):
         pass
