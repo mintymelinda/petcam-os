@@ -18,7 +18,7 @@ diff --git a/src/libs/capture.h b/src/libs/capture.h
 index 0000000..0000000 100644
 --- a/src/libs/capture.h
 +++ b/src/libs/capture.h
-@@ -83,5 +83,6 @@ typedef struct {
+@@ -60,5 +60,6 @@ typedef struct {
  	uint				width;
  	uint				height;
  	uint				format;
@@ -30,7 +30,7 @@ diff --git a/src/libs/capture.c b/src/libs/capture.c
 index 0000000..0000000 100644
 --- a/src/libs/capture.c
 +++ b/src/libs/capture.c
-@@ -1010,8 +1010,9 @@ static void _capture_open_hw_fps(us_capture_s *cap) {
+@@ -1111,8 +1111,9 @@ static void _capture_open_hw_fps(us_capture_s *cap) {
  	US_MEMSET_ZERO(setfps);
  	setfps.type = run->capture_type;
  	TPF(numerator) = 1;
@@ -40,12 +40,13 @@ index 0000000..0000000 100644
  
  	if (us_xioctl(run->fd, VIDIOC_S_PARM, &setfps) < 0) {
  		_LOG_PERROR("Can't set HW FPS");
+ 		return;
 
 diff --git a/src/ustreamer/options.c b/src/ustreamer/options.c
 index 0000000..0000000 100644
 --- a/src/ustreamer/options.c
 +++ b/src/ustreamer/options.c
-@@ -47,7 +47,8 @@ enum _US_OPT_VALUES {
+@@ -92,7 +92,8 @@ enum _US_OPT_VALUES {
  	_O_OPEN_ON_DEMAND = 10000,
  	_O_DEVICE_TIMEOUT,
  	_O_DEVICE_ERROR_DELAY,
@@ -54,12 +55,12 @@ index 0000000..0000000 100644
  	_O_M2M_DEVICE,
  	_O_MEDIA_DEVICE,
  	_O_MEDIA_ENTITY_NAME,
-@@ -139,3 +140,4 @@ static const struct option _LONG_OPTS[] = {
+@@ -180,3 +181,4 @@ static const struct option _LONG_OPTS[] = {
  	{"io-method",				required_argument,	NULL,	_O_IO_METHOD},
  	{"desired-fps",				required_argument,	NULL,	_O_DESIRED_FPS},
 +	{"hw-fps",				required_argument,	NULL,	_O_HW_FPS},
  	{"min-frame-size",			required_argument,	NULL,	_O_MIN_FRAME_SIZE},
-@@ -451,4 +453,5 @@ 			case _O_IO_METHOD:			OPT_PARSE_ENUM("IO method", cap->io_method, us_capture_parse_io_method, US_IO_METHODS_STR);
+@@ -445,3 +447,4 @@ 			case _O_IO_METHOD:			OPT_PARSE_ENUM("IO method", cap->io_method, us_capture_parse_io_method, US_IO_METHODS_STR);
  			case _O_IO_METHOD:			OPT_PARSE_ENUM("IO method", cap->io_method, us_capture_parse_io_method, US_IO_METHODS_STR);
  			case _O_DESIRED_FPS:		OPT_NUMBER("--desired-fps", stream->desired_fps, 0, US_VIDEO_MAX_FPS, 0);
 +			case _O_HW_FPS:			OPT_NUMBER("--hw-fps", cap->hw_fps, 0, US_VIDEO_MAX_FPS, 0);
