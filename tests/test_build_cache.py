@@ -13,6 +13,10 @@ class BuildCacheContractTests(unittest.TestCase):
         self.assertFalse((ROOT / "tools/shrink_image.sh").exists())
 
     def test_prepared_package_rootfs_is_cached_with_a_stable_explicit_epoch(self):
+        self.assertEqual(workflow.count("id: base-rootfs-cache-key"), 2)
+        self.assertEqual(workflow.count("key: ${{ steps.base-rootfs-cache-key.outputs.key }}"), 3)
+        self.assertIn("needs: [validate, warm-base-cache]", workflow)
+        self.assertIn("github.ref_type == 'tag'", workflow)
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
         self.assertIn("id: base-rootfs-cache", workflow)
         self.assertIn("pigen-base-rootfs-v2-", workflow)
