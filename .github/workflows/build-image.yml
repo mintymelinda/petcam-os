@@ -139,7 +139,12 @@ jobs:
           '''
           if content.count(anchor) != 1:
               raise SystemExit("Pinned pi-gen common script no longer has the expected on_chroot function")
-          common.write_text(content.replace(anchor, mount, 1), encoding="utf-8")
+          content = content.replace(anchor, mount, 1)
+          chroot_call = 'setarch linux32 capsh $CAPSH_ARG "--chroot=${ROOTFS_DIR}/" -- -e "$@"'
+          cached_chroot_call = 'APT_ARCHIVE_CACHE="${APT_ARCHIVE_CACHE:-}" setarch linux32 capsh $CAPSH_ARG "--chroot=${ROOTFS_DIR}/" -- -e "$@"'
+          if content.count(chroot_call) != 1:
+              raise SystemExit("Pinned pi-gen common script no longer has the expected chroot invocation")
+          common.write_text(content.replace(chroot_call, cached_chroot_call, 1), encoding="utf-8")
           PY
 
       - name: Build Raspberry Pi OS image
