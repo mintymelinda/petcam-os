@@ -18,7 +18,7 @@ class BuildCacheContractTests(unittest.TestCase):
         self.assertEqual(workflow.count("key: ${{ steps.base-rootfs-cache-key.outputs.key }}"), 3)
         self.assertNotIn("needs: [validate, warm-base-cache]", workflow)
         self.assertEqual(workflow.count("pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-"), 2)
-        self.assertEqual(workflow.count("restore-keys: |"), 3)
+        self.assertEqual(workflow.count("restore-keys: |"), 4)
         self.assertIn("github.ref_type == 'tag'", workflow)
         self.assertIn("id: base-rootfs-cache", workflow)
         self.assertIn("pigen-base-rootfs-v2-", workflow)
