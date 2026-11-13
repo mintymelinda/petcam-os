@@ -1,8 +1,0 @@
-avahi-utils
-git
-libevent-dev
-libjpeg-dev
-libbsd-dev
-libv4l-dev
-openssl
-python3-pil
