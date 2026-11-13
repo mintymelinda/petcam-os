@@ -203,7 +203,7 @@ class CameraProfileTests(unittest.TestCase):
         mode = {"format": "MJPG", "width": 1920, "height": 1080, "fps": 60}
         discovered = [{"device": camera["device"], "modes": camera["modes"]}]
         with mock.patch.object(MODULE, "discover_devices", return_value=discovered):
-            with self.assertRaisesRegex(MODULE.ProfileError, "exceeds the estimated performance budget"):
+            with self.assertRaisesRegex(MODULE.ProfileError, "aggregate capture budget"):
                 MODULE.create_profile(camera, mode, restart_service=mock.Mock(), ready=mock.Mock(return_value=True))
             profile = MODULE.create_profile(
                 camera, mode, restart_service=mock.Mock(), ready=mock.Mock(return_value=True),
