@@ -50,5 +50,30 @@ class ImageShrinkContractTests(unittest.TestCase):
         self.assertIn('apt-mark manual "$package"', cleanup)
 
 
+class BuildCacheContractTests(unittest.TestCase):
+    def test_release_build_uses_buildkit_and_persistent_apt_archive_caches(self):
+        workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
+        self.assertIn("docker/setup-buildx-action@v3", workflow)
+        self.assertIn("--cache-from type=gha", workflow)
+        self.assertIn("--cache-to type=gha,mode=max", workflow)
+        self.assertIn("uses: actions/cache@v4", workflow)
+        self.assertIn("pigen-apt-\${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-", workflow)
+        self.assertIn("APT_ARCHIVE_CACHE=/apt-cache", workflow)
+        self.assertIn("--mount type=bind", workflow)
+
+    def test_manual_image_build_is_non_publishing_and_emits_timing_metrics(self):
+        workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
+        self.assertIn("build_image:", workflow)
+        self.assertIn("if: github.ref_type == 'tag'", workflow)
+        self.assertIn("pi-gen build duration seconds:", workflow)
+        self.assertIn("actions/upload-artifact@v4", workflow)
+        self.assertIn("pigen-build-diagnostics-", workflow)
+
+    def test_shared_apt_archive_cache_is_detached_before_target_cleanup(self):
+        cleanup = (ROOT / "stage-petcam/02-configure-petcam/00-run-chroot.sh").read_text(encoding="utf-8")
+        self.assertIn('umount /var/cache/apt/archives', cleanup)
+        self.assertLess(cleanup.index('umount /var/cache/apt/archives'), cleanup.index("apt-get clean"))
+
+
 if __name__ == "__main__":
     unittest.main()
