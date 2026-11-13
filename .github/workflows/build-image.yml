@@ -92,7 +92,7 @@ jobs:
               exit 1
             fi
           else
-            gh release create "${TAG}" --draft --verify-tag \\
+            gh release create "${TAG}" --draft --verify-tag \
               --title "PetCam OS ${VERSION}" --generate-notes
           fi
 
@@ -329,10 +329,10 @@ jobs:
             --private-key "${KEY_FILE}" \
             --output-dir "${RUNNER_TEMP}/petcam-update-assets"
 
-          gh release upload "${TAG}" "${IMAGE_NAME}" petcam-os-os-list.json \\
-            "${PACKAGE_INVENTORY}" "${RUNNER_TEMP}/${TAG}-build-info.txt" \\
-            "${RUNNER_TEMP}/petcam-update-assets/${ARCHIVE_NAME}" \\
-            "${RUNNER_TEMP}/petcam-update-assets/petcam-update-manifest.json" \\
+          gh release upload "${TAG}" "${IMAGE_NAME}" petcam-os-os-list.json \
+            "${PACKAGE_INVENTORY}" "${RUNNER_TEMP}/${TAG}-build-info.txt" \
+            "${RUNNER_TEMP}/petcam-update-assets/${ARCHIVE_NAME}" \
+            "${RUNNER_TEMP}/petcam-update-assets/petcam-update-manifest.json" \
             "${RUNNER_TEMP}/petcam-update-assets/petcam-update-manifest.json.sig" --clobber
 
           ASSETS="$(gh release view "${TAG}" --json assets --jq '[.assets[].name]')"
