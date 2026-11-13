@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from config import ensure_config_lock, parse_config
+from config import apply_config, ensure_config_lock, parse_config
 from camera import PIXEL_BUDGETS, USTREAMER_FORMATS, camera_identity, mode_supports_fps, model_tier, read_model
 from network_diagnostics import collect_diagnostics, create_support_bundle
 from timelapse import load_config as load_timelapse_config, save_config as save_timelapse_config, state_snapshot as timelapse_snapshot
@@ -552,9 +552,14 @@ def save_selection(data):
             "RESOLUTION": f"{width}x{height}",
             "FPS": str(fps),
         }
-    return apply_primary_config(
-        values, match, allow_performance_override=data.get("allow_performance_override") is True,
-    )
+    estimated_pixels_per_second = width * height * float(fps)
+    pixel_budget = PIXEL_BUDGETS[model_tier(read_model())]
+    if estimated_pixels_per_second > pixel_budget and data.get("allow_performance_override") is not True:
+        raise ValueError(
+            "This capture mode exceeds the estimated performance budget for this device. "
+            "Confirm the warning to use it anyway, or choose a lower resolution or FPS."
+        )
+    return apply_config(values)
 
 
 def proxy_stream(handler, port):
