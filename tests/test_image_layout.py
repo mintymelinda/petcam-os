@@ -25,7 +25,7 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn('"$RELEASE_DIR/lib/csi_stream.py"', script)
         self.assertIn('"$RELEASE_DIR/lib/web_manager.py"', script)
         self.assertIn('"$RELEASE_DIR/manifest.json"', script)
-        self.assertIn('"$RELEASE_DIR/lib/camera_profiles.py"', script)
+        self.assertNotIn("camera_profiles.py", script)
         self.assertIn('"$RELEASE_DIR/lib/home_assistant.py"', script)
         self.assertIn('"$RELEASE_DIR/systemd/petcam-home-assistant.service"', script)
         self.assertIn('"$RELEASE_DIR/etc/petcam/home-assistant.conf"', script)
