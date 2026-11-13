@@ -73,6 +73,9 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertNotIn("pkg-config", packages)
         self.assertIn('cp -a /opt/petcam/ustreamer/.', configure_script)
         self.assertNotIn("git -C /opt/ustreamer fetch", configure_script)
+        self.assertIn("apt-get purge -y --auto-remove", build_script)
+        self.assertIn("umount /var/cache/apt/archives", build_script)
+        self.assertNotIn("apt-get purge -y --auto-remove", configure_script)
         script = configure_script
         self.assertIn("chown root:petcam /etc/petcam", script)
         self.assertIn("chmod 1770 /etc/petcam", script)
