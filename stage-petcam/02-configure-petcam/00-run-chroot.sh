@@ -208,7 +208,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/opt/petcam /var/lib/petcam/update
+ReadWritePaths=/opt/petcam /var/lib/petcam/update /etc/systemd/system /etc/petcam
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 [Install]
