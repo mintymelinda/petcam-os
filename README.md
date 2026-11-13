@@ -120,6 +120,40 @@ Version tags matching `vMAJOR.MINOR.PATCH` trigger the image and signed applicat
 
 The tagged-release workflow generates a Raspberry Pi Imager OS sublist using the published schema, HTTPS release asset URLs, compressed and extracted SHA-256 hashes, supported 32-bit Pi device tags, and `init_format: cloudinit-rpi`. The generated sublist is attached to each versioned GitHub Release. Inclusion in Raspberry Pi Imager's default catalogue is subject to Raspberry Pi's catalogue review and should not be assumed until it is approved.
 
+### Use the custom PetCam catalogue in Raspberry Pi Imager 2
+
+Until PetCam is accepted into Imager's built-in OS catalogue, you can add the PetCam release catalogue yourself. Imager 2 can load a repository JSON file directly from a URL or from a local file.
+
+1. Install and open **Raspberry Pi Imager 2** on your computer.
+2. Open **App Options** (bottom-right of the Imager window).
+3. Find **Content Repository** and select **Edit**.
+4. Choose **Use custom URL**.
+5. Paste this stable URL:
+
+   `https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-os-os-list.json`
+
+6. Select **Apply & Restart**. Imager reloads using the PetCam catalogue.
+7. Select your Raspberry Pi model in the **Device** tab.
+8. Open **Operating System** and find the PetCam entry in the custom OS list. Select it, then choose your microSD card under **Storage**.
+9. Select **Next** and review the OS customisation options. Configure Wi-Fi and its WLAN country, hostname, user account, locale, and SSH as desired.
+10. Review the selected storage device carefully, then confirm **Write**.
+
+The URL above is a GitHub Releases `latest` download link. It follows the newest published PetCam release; it does not point at an unreleased build or automatically add PetCam to Imager's official catalogue. If GitHub has no published release yet, the URL will not provide a catalogue.
+
+**Use a local catalogue file instead:** download `petcam-os-os-list.json` from the [PetCam Releases](https://github.com/mintymelinda/petcam-os/releases) page. In **App Options → Content Repository → Edit**, choose **Use custom file** and select the downloaded JSON file, then choose **Apply & Restart**.
+
+**Command-line alternative:** close Imager and launch it with the repository URL:
+
+```bash
+rpi-imager --repo https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-os-os-list.json
+```
+
+On Windows, use the same `--repo` argument when launching Raspberry Pi Imager from a terminal or shortcut. The executable name and launch command can vary by installation.
+
+The custom catalogue lists PetCam's versioned image release assets and declares `init_format: cloudinit-rpi`, which allows Imager 2 to offer the image's supported first-boot customisation flow. Prefer the catalogue entry over **Use custom** with the raw `.img.xz` file: when Imager loads only a raw image file, it has no manifest metadata to identify the image's customisation format.
+
+If the PetCam entry does not appear after restarting, check that the URL opens and returns JSON in your browser, that the latest GitHub Release includes `petcam-os-os-list.json`, and that Imager is still configured to use the custom repository rather than the official one.
+
 When installing with Raspberry Pi Imager, use its normal customisation step to set the hostname, configure Wi-Fi, select the WLAN regulatory country, create the administrator account, and optionally enable SSH. PetCam does not bake in a Wi-Fi country. To change it later, use `sudo raspi-config` → **Localisation Options** → **WLAN Country**.
 
 ## Security and network exposure
