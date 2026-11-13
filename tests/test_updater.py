@@ -19,6 +19,7 @@ from updater import (
     safe_extract,
     validate_release,
     install_runtime_integration_files,
+    repair_config_directory_permissions,
     remove_inactive_release,
     restart_services,
     verify_signature,
@@ -277,6 +278,42 @@ class FailedReleaseCleanupTests(unittest.TestCase):
             with mock.patch("updater.CURRENT", current):
                 self.assertFalse(remove_inactive_release(release))
             self.assertTrue(release.is_dir())
+
+
+class ConfigDirectoryMigrationTests(unittest.TestCase):
+    def test_repairs_existing_directory_owner_and_mode(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp) / "etc/petcam"
+            directory.mkdir(parents=True)
+            with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=985)), \\
+                    mock.patch("updater.os.chown") as chown, \\
+                    mock.patch("updater.os.chmod") as chmod:
+                repair_config_directory_permissions(directory)
+            chown.assert_called_once_with(directory, 0, 985)
+            chmod.assert_called_once_with(directory, 0o1770)
+
+    def test_creates_missing_directory_with_restricted_permissions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp) / "etc/petcam"
+            with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=985)), \\
+                    mock.patch("updater.os.chown") as chown, \\
+                    mock.patch("updater.os.chmod") as chmod:
+                repair_config_directory_permissions(directory)
+            self.assertTrue(directory.is_dir())
+            chown.assert_called_once_with(directory, 0, 985)
+            chmod.assert_called_once_with(directory, 0o1770)
+
+    def test_refuses_to_follow_a_symlinked_config_directory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            target = root / "target"
+            target.mkdir()
+            directory = root / "petcam"
+            directory.symlink_to(target, target_is_directory=True)
+            with mock.patch("updater.grp.getgrnam") as getgrnam:
+                with self.assertRaisesRegex(UpdateError, "symlinked"):
+                    repair_config_directory_permissions(directory)
+            getgrnam.assert_not_called()
 
 
 class UpdaterServiceSandboxTests(unittest.TestCase):
