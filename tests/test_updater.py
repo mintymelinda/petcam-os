@@ -249,5 +249,15 @@ class UpdateArchiveTests(unittest.TestCase):
                 validate_release(root, "1.2.3")
 
 
+class UpdaterServiceSandboxTests(unittest.TestCase):
+    def test_updater_service_can_write_only_required_integration_directories(self):
+        script = Path("stage-petcam/02-configure-petcam/00-run-chroot.sh").read_text(encoding="utf-8")
+        self.assertIn(
+            "ReadWritePaths=/opt/petcam /var/lib/petcam/update /etc/systemd/system /etc/petcam",
+            script,
+        )
+        self.assertIn("ProtectSystem=strict", script)
+
+
 if __name__ == "__main__":
     unittest.main()
