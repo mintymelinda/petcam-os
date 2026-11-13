@@ -47,6 +47,8 @@ Home Assistant discovers these entities automatically:
 | --- | --- |
 | Camera connected | Last camera-presence result from PetCam's health monitor |
 | Stream ready | Capture backend and public OBS stream both produced frames |
+| Ambient light | TSL2591 bright/dark state using configurable lux thresholds |
+| Illuminance | Current TSL2591 reading in lux (lx) |
 | Health state | PetCam health-monitor state |
 | Active backend | Last detected USB or CSI backend |
 | Active mode | Configured resolution, frame rate, and format |
@@ -55,6 +57,14 @@ Home Assistant discovers these entities automatically:
 The publisher reports device identity using a non-reversible hash of the device machine ID (or hostname fallback). It publishes retained discovery and state messages. MQTT broker availability uses a retained Last Will (`offline`) so Home Assistant marks the device unavailable if the publisher or network disappears unexpectedly. A separate retained PetCam-health availability topic means MQTT connectivity alone does not make an unhealthy PetCam appear healthy. A disconnected camera remains visible as a disconnected camera instead of making every entity unavailable.
 
 The publisher retries broker failures with bounded backoff. It runs independently of the capture and web-manager services, so a broker outage cannot block or restart camera streaming.
+
+## TSL2591 ambient light sensor
+
+PetCam supports the TSL2591FN over the Raspberry Pi I²C bus. Wire VIN to 3.3V, GND to GND, SDA to GPIO 2 (physical pin 3), and SCL to GPIO 3 (physical pin 5). Enable I²C in Raspberry Pi OS (for example, \`sudo raspi-config\` → Interface Options → I2C), then reboot. The sensor's default I²C address is \`0x29\`.
+
+In the web manager, open Camera Settings → Ambient light sensor, enable it, and set the bright and dark thresholds in lux. Bright is asserted at or above the bright threshold; dark is asserted at or below the dark threshold. Between thresholds, the previous state is retained to prevent rapid toggling. Defaults are 100 lx (bright) and 30 lx (dark). Home Assistant discovers an Ambient light binary sensor and an Illuminance sensor automatically through MQTT. The feature remains optional; a disabled or disconnected sensor reports unknown/unavailable.
+
+The service reads the sensor through Linux \`/dev/i2c-1\` and uses Python's standard library. The service account receives the \`i2c\` supplementary group through the installed I²C utilities package.
 
 ## OBS stream URL privacy
 
