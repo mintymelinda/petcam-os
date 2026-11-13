@@ -250,7 +250,6 @@ class UpdateArchiveTests(unittest.TestCase):
                 validate_release(root, "1.2.3")
 
 
-
 class FailedReleaseCleanupTests(unittest.TestCase):
     def test_removes_failed_release_when_previous_release_is_active(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -278,6 +277,7 @@ class FailedReleaseCleanupTests(unittest.TestCase):
             with mock.patch("updater.CURRENT", current):
                 self.assertFalse(remove_inactive_release(release))
             self.assertTrue(release.is_dir())
+
 
 class UpdaterServiceSandboxTests(unittest.TestCase):
     def test_updater_service_can_write_only_required_integration_directories(self):
