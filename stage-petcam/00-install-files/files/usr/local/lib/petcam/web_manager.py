@@ -72,6 +72,10 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <label for="stream-target">Configure stream</label><select id="stream-target"><option value="default">Primary stream (existing /stream)</option></select>
 <div class="row" style="margin-top:1rem"><button id="apply">Apply selected camera and mode</button><button id="add-stream">Add independent stream</button></div>
 <p class="muted">Only advertised modes are offered. Applying to the primary stream preserves the existing /stream URL. Independent streams receive their own configuration, service, and OBS URL.</p></section>
+<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera controls</h2><button id="refresh-camera-controls" type="button">Refresh controls</button></div>
+<p id="camera-controls-status" class="muted" role="status">Controls for the active camera will appear here.</p>
+<p class="muted">Controls are discovered from the connected camera. Some settings may be unavailable while automatic modes are active. Dynamic framerate can reduce the actual captured FPS when enabled.</p>
+<div id="camera-controls-list" class="muted">No camera controls loaded.</div></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera streams</h2><button id="refresh-streams">Refresh streams</button></div><div id="stream-profiles" class="muted">Loading streams…</div></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Network and OBS diagnostics</h2><button id="refresh-diagnostics">Run checks</button></div><p id="diagnostic-summary" role="status">Diagnostics have not been run yet.</p><p id="diagnostic-details" class="muted"></p><div class="row"><button id="download-support-bundle">Download redacted support bundle</button></div></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Stream health</h2><button id="refresh-health">Refresh</button></div><p id="health-state" role="status">Checking stream health…</p><p id="health-reason" class="muted"></p><small id="health-details" class="muted"></small></section>
@@ -124,7 +128,35 @@ function activeCameraMatches(camera,config){if(!config)return false;if(config.SO
 function fillModes(preferred=null){const c=inventory[+$("camera").value];$("mode").replaceChildren();if(!c)return;let matched=false;for(const m of modesFor(c)){let fps=m.fps?.length?m.fps:[m.fps_range?.max||30];if(c.kind==="usb")fps=fps.filter(Number.isInteger);if(preferred&&preferred.width===m.width&&preferred.height===m.height&&(preferred.format||"CSI")===(m.format||"CSI")&&!fps.some(f=>Math.abs(f-preferred.fps)<0.1))fps=[...fps,preferred.fps];for(const f of fps){const mode={format:m.format||"CSI",width:m.width,height:m.height,fps:f};const o=document.createElement("option");o.value=JSON.stringify(mode);o.textContent=`${m.width}×${m.height} · ${f} fps · ${m.format||"CSI"}`+(exceedsPerformanceBudget(c,mode,$("stream-target").value,false)?" · ⚠ above device estimate":"");if(preferred&&mode.width===preferred.width&&mode.height===preferred.height&&mode.format===(preferred.format||"CSI")&&Math.abs(mode.fps-preferred.fps)<0.1){o.selected=true;matched=true}$("mode").append(o)}}if(preferred&&!matched){const mode={format:preferred.format||"CSI",width:preferred.width,height:preferred.height,fps:Number(preferred.fps)};const o=document.createElement("option");o.value=JSON.stringify(mode);o.textContent=`${mode.width}×${mode.height} · ${mode.fps} fps · ${mode.format} (saved setting; not currently advertised)`;o.selected=true;$("mode").prepend(o)}$("mode").onchange=showSelectedModeWarning;showSelectedModeWarning()}
 function renderCaptureStatus(){const fps=Number(captureStatus.latest_captured_fps),configured=activeConfig?.FPS;if(Number.isFinite(fps)&&fps>0){$("capture-rate").textContent="Actual captured rate: "+fps.toFixed(1).replace(/\.0$/,"")+" FPS"+(configured&&configured!=="auto"?" · configured: "+configured+" FPS":"")+(activeConfig?.RESOLUTION&&activeConfig.RESOLUTION!=="auto"?" · "+activeConfig.RESOLUTION:"")}else $("capture-rate").textContent="Actual captured rate: not currently reported"}
 function refreshLivePreview(){const preview=$("live-preview");preview.src="/stream?refresh="+Date.now()}
-async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;activeConfig=d.active_config;captureStatus=d.capture_status||{};resourceBudget=d.resource_budget||null;$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});const activeIndex=inventory.findIndex(c=>activeCameraMatches(c,activeConfig));if(activeIndex>=0){$("camera").value=String(activeIndex);$("camera").options[activeIndex].textContent+=" · current"}if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{const selected=activeIndex>=0?activeConfig:null;const selectedCamera=activeIndex>=0?inventory[activeIndex]:null;const currentResolution=selected&&selected.RESOLUTION!=="auto"?selected.RESOLUTION:captureStatus.active_resolution;const currentFps=selected&&selected.FPS!=="auto"?Number(selected.FPS):Number(captureStatus.latest_captured_fps);let currentFormat=selected&&selected.FORMAT!=="auto"?selected.FORMAT:(captureStatus.active_capture_format||"CSI");if(currentFormat==="MJPEG"||currentFormat==="JPEG")currentFormat="MJPG";if(selectedCamera?.kind==="csi")currentFormat="CSI";const preferred=currentResolution&&currentResolution!=="auto"&&Number.isFinite(currentFps)&&currentFps>0?{width:Number(currentResolution.split("x")[0]),height:Number(currentResolution.split("x")[1]),fps:currentFps,format:currentFormat}:null;$("message").textContent=inventory.length+" camera(s) found. Current saved camera settings are selected.";fillModes(preferred)}renderCaptureStatus();await refreshStreams()}catch(e){$("message").textContent=e.message}}
+async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;activeConfig=d.active_config;captureStatus=d.capture_status||{};resourceBudget=d.resource_budget||null;$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});const activeIndex=inventory.findIndex(c=>activeCameraMatches(c,activeConfig));if(activeIndex>=0){$("camera").value=String(activeIndex);$("camera").options[activeIndex].textContent+=" · current"}if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{const selected=activeIndex>=0?activeConfig:null;const selectedCamera=activeIndex>=0?inventory[activeIndex]:null;const currentResolution=selected&&selected.RESOLUTION!=="auto"?selected.RESOLUTION:captureStatus.active_resolution;const currentFps=selected&&selected.FPS!=="auto"?Number(selected.FPS):Number(captureStatus.latest_captured_fps);let currentFormat=selected&&selected.FORMAT!=="auto"?selected.FORMAT:(captureStatus.active_capture_format||"CSI");if(currentFormat==="MJPEG"||currentFormat==="JPEG")currentFormat="MJPG";if(selectedCamera?.kind==="csi")currentFormat="CSI";const preferred=currentResolution&&currentResolution!=="auto"&&Number.isFinite(currentFps)&&currentFps>0?{width:Number(currentResolution.split("x")[0]),height:Number(currentResolution.split("x")[1]),fps:currentFps,format:currentFormat}:null;$("message").textContent=inventory.length+" camera(s) found. Current saved camera settings are selected.";fillModes(preferred)}renderCaptureStatus();await refreshStreams();await refreshCameraControls()}catch(e){$("message").textContent=e.message}}
+
+function cameraControlLabel(name){const labels={auto_exposure:"Auto exposure",exposure_time_absolute:"Exposure time",exposure_dynamic_framerate:"Dynamic framerate",white_balance_automatic:"Automatic white balance",white_balance_temperature:"White balance temperature",power_line_frequency:"Power-line frequency",backlight_compensation:"Backlight compensation",focus_automatic_continuous:"Continuous autofocus",focus_absolute:"Focus"};return labels[name]||name.replaceAll("_"," ").replace(/\\b\\w/g,letter=>letter.toUpperCase())}
+async function refreshCameraControls(){
+const root=$("camera-controls-list"),status=$("camera-controls-status");root.replaceChildren();status.textContent="Reading active camera controls…";
+try{
+const data=await request("/api/camera-controls");
+if(!data.supported){status.textContent=data.message||"Camera controls are unavailable.";root.textContent="";return}
+status.textContent="Controls for "+data.label+" · "+data.device;
+if(!data.controls.length){root.textContent="This camera did not report any controls.";return}
+for(const control of data.controls){
+const row=document.createElement("div"),label=document.createElement("label"),details=document.createElement("small"),editor=document.createElement("div"),apply=document.createElement("button");
+row.style.cssText="border-top:1px solid #383e47;padding:.65rem 0";
+label.textContent=cameraControlLabel(control.name);details.className="muted";details.style.display="block";
+details.textContent="Current: "+(control.value===null?"unknown":control.value)+(control.default!==null?" · Default: "+control.default:"")+(control.min!==null&&control.max!==null?" · Range: "+control.min+"–"+control.max:"")+(control.writable?"":" · Currently unavailable");
+editor.className="row";editor.style.alignItems="center";
+let input;
+if(control.type==="bool"){input=document.createElement("input");input.type="checkbox";input.checked=Number(control.value)===1;input.disabled=!control.writable}
+else if(control.type==="menu"||control.type==="intmenu"){input=document.createElement("select");for(const option of control.menu){const choice=document.createElement("option");choice.value=option.value;choice.textContent=option.label;input.append(choice)}input.value=String(control.value);input.disabled=!control.writable}
+else if(control.type==="int"&&control.min!==null&&control.max!==null&&control.max-control.min<=10000){input=document.createElement("input");input.type="range";input.min=control.min;input.max=control.max;input.step=control.step;input.value=control.value??control.min;input.disabled=!control.writable;const output=document.createElement("output");output.textContent=input.value;input.oninput=()=>output.textContent=input.value;editor.append(input,output)}
+else{input=document.createElement("input");input.type="number";if(control.min!==null)input.min=control.min;if(control.max!==null)input.max=control.max;input.step=control.step;input.value=control.value??"";input.disabled=!control.writable}
+apply.type="button";apply.textContent="Apply";apply.disabled=!control.writable;apply.onclick=async()=>{apply.disabled=true;status.textContent="Updating "+cameraControlLabel(control.name)+"…";try{const value=control.type==="bool"?(input.checked?1:0):Number(input.value);await request("/api/camera-controls",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:control.name,value})});await refreshCameraControls();status.textContent=cameraControlLabel(control.name)+" updated."}catch(error){status.textContent=error.message;apply.disabled=false}};
+editor.append(apply);row.append(label,details,editor);
+if(control.name==="exposure_dynamic_framerate"){const note=document.createElement("small");note.className="muted";note.textContent="When enabled, the camera may lower its delivered frame rate to accommodate exposure. Disable it if you need a stable frame-rate target.";row.append(note)}
+root.append(row)
+}
+}catch(error){status.textContent="Camera controls unavailable: "+error.message}
+}
+$("refresh-camera-controls").onclick=refreshCameraControls;
 $("refresh").onclick=refresh;$("camera").onchange=fillModes;$("stream-target").onchange=showSelectedModeWarning;
 $("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value,target=$("stream-target").value;if(!c||!m)return;const mode=JSON.parse(m),override=confirmPerformanceOverride(c,mode,target,false);if(exceedsPerformanceBudget(c,mode,target,false)&&!override)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{if(target==="default"){await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,camera_id:c.id,device:c.device,physical_path:c.physical_path,device_path:c.device_path,camera:c.camera,mode,allow_performance_override:override})})}else{await request("/api/streams/configure",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile_id:target,camera_id:c.id,mode,allow_performance_override:override})})}if(target==="default"){await refresh();refreshLivePreview()}else{await refreshStreams()}$("message").textContent="Camera settings saved. The selected stream preview has been reconnected."}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
 $("add-stream").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;const mode=JSON.parse(m),override=confirmPerformanceOverride(c,mode,"default",true);if(exceedsPerformanceBudget(c,mode,"default",true)&&!override)return;const b=$("add-stream");b.disabled=true;$("message").textContent="Starting independent camera stream…";try{const d=await request("/api/streams",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({camera_id:c.id,mode,allow_performance_override:override})});$("message").textContent="Independent stream started: "+d.profile.stream_path;await refreshStreams()}catch(e){$("message").textContent=e.message}finally{b.disabled=false}};
@@ -239,6 +271,138 @@ def live_capture_status():
     except (OSError, subprocess.TimeoutExpired, ValueError, TypeError):
         return {}
 
+
+
+V4L2_CONTROL_LINE = re.compile(
+    r"^\\s*(?P<name>[a-zA-Z0-9_]+)\\s+0x[0-9a-fA-F]+\\s+"
+    r"\\((?P<type>[^)]+)\\)\\s*:\\s*(?P<metadata>.*)$"
+)
+V4L2_MENU_LINE = re.compile(r"^\\s*(?P<value>-?\\d+)\\s*:\\s*(?P<label>.+?)\\s*$")
+
+
+def parse_v4l2_controls(output):
+    """Parse v4l2-ctl control metadata without assuming a particular camera model."""
+    controls = []
+    current = None
+    for raw_line in output.splitlines():
+        match = V4L2_CONTROL_LINE.match(raw_line)
+        if match:
+            metadata = match.group("metadata")
+            values = {}
+            for key in ("min", "max", "step", "default", "value"):
+                value_match = re.search(rf"(?:^|\\s){key}=(-?\\d+)", metadata)
+                if value_match:
+                    values[key] = int(value_match.group(1))
+            flags_match = re.search(r"(?:^|\\s)flags=(.+)$", metadata)
+            flags = [flag.strip() for flag in flags_match.group(1).split(",")] if flags_match else []
+            control_type = match.group("type").lower()
+            supported = control_type in ("bool", "int", "menu", "intmenu")
+            current = {
+                "name": match.group("name"),
+                "type": control_type,
+                "min": values.get("min"),
+                "max": values.get("max"),
+                "step": max(1, values.get("step", 1)),
+                "default": values.get("default"),
+                "value": values.get("value"),
+                "flags": flags,
+                "menu": [],
+                "supported": supported,
+                "writable": supported and "inactive" not in flags and "read-only" not in flags,
+            }
+            controls.append(current)
+            continue
+        if current:
+            menu_match = V4L2_MENU_LINE.match(raw_line)
+            if menu_match:
+                current["menu"].append({
+                    "value": int(menu_match.group("value")),
+                    "label": menu_match.group("label"),
+                })
+    return controls
+
+
+def active_usb_camera():
+    """Resolve the configured primary USB camera through current discovery, never a client path."""
+    config = active_camera_config()
+    if not config or config.get("SOURCE") != "usb":
+        return None
+    physical_path = config.get("USB_PHYSICAL_PATH", "")
+    device = config.get("DEVICE", "")
+    for camera in camera_inventory():
+        if camera.get("kind") != "usb":
+            continue
+        if physical_path and camera.get("physical_path") == physical_path:
+            return camera
+        if not physical_path and device and camera.get("device") == device:
+            return camera
+    return None
+
+
+def read_camera_controls(camera=None):
+    camera = camera or active_usb_camera()
+    if not camera:
+        return {
+            "supported": False,
+            "message": "Camera controls are available for the active USB camera. Select and apply a USB camera first.",
+            "controls": [],
+        }
+    device = camera.get("device", "")
+    if not device.startswith(("/dev/video", "/dev/v4l/by-id/", "/dev/v4l/by-path/")):
+        raise ValueError("The active camera has an invalid V4L2 device path.")
+    result = subprocess.run(
+        ["/usr/bin/v4l2-ctl", "--device", device, "--list-ctrls-menus"],
+        capture_output=True, text=True, timeout=10, check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or "Unable to read camera controls")
+    return {
+        "supported": True,
+        "device": device,
+        "label": camera.get("label", "Active USB camera"),
+        "controls": parse_v4l2_controls(result.stdout),
+    }
+
+
+def set_camera_control(data):
+    name = data.get("name")
+    value = data.get("value")
+    if not isinstance(name, str) or not re.fullmatch(r"[a-zA-Z0-9_]+", name):
+        raise ValueError("Invalid camera control name.")
+    camera = active_usb_camera()
+    if not camera:
+        raise ValueError("There is no active USB camera.")
+    current = read_camera_controls(camera)
+    control = next((item for item in current["controls"] if item["name"] == name), None)
+    if not control:
+        raise ValueError("That control is not supported by the active camera.")
+    if not control["writable"]:
+        raise ValueError("That camera control is currently inactive or read-only.")
+    if control["type"] == "bool":
+        if isinstance(value, bool):
+            value = int(value)
+        if not isinstance(value, int) or value not in (0, 1):
+            raise ValueError("Boolean camera controls must be true or false.")
+    else:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("Camera control values must be integers.")
+        if control["min"] is not None and value < control["min"]:
+            raise ValueError("Camera control value is below the supported minimum.")
+        if control["max"] is not None and value > control["max"]:
+            raise ValueError("Camera control value is above the supported maximum.")
+        if control["min"] is not None and (value - control["min"]) % control["step"]:
+            raise ValueError("Camera control value does not match the supported step.")
+        if control["type"] in ("menu", "intmenu") and value not in {
+            option["value"] for option in control["menu"]
+        }:
+            raise ValueError("Camera control value is not an advertised menu option.")
+    result = subprocess.run(
+        ["/usr/bin/v4l2-ctl", "--device", camera["device"], f"--set-ctrl={name}={value}"],
+        capture_output=True, text=True, timeout=10, check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or "Unable to update camera control")
+    return read_camera_controls(camera)
 
 def save_selection(data):
     kind = data.get("kind")
@@ -512,6 +676,12 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as error:
                 self.send_json(503, {"error": str(error)})
             return
+        if path == "/api/camera-controls":
+            try:
+                self.send_json(200, read_camera_controls())
+            except Exception as error:
+                self.send_json(503, {"error": str(error)})
+            return
         if path == "/api/cameras":
             try:
                 self.send_json(200, {"cameras": camera_inventory(), "active_config": active_camera_config(), "capture_status": live_capture_status(), "resource_budget": current_resource_budget()})
@@ -591,6 +761,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             data = _body(self)
+            if path == "/api/camera-controls":
+                self.send_json(200, set_camera_control(data))
+                return
             if path == "/api/timelapse":
                 current = load_timelapse_config()
                 updated = save_timelapse_config({**current, **data})
