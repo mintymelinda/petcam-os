@@ -95,6 +95,19 @@ jobs:
           ref: 6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78
           path: pi-gen
 
+      - name: Prepare pi-gen work directory
+        run: mkdir -p "${RUNNER_TEMP}/pigen-work"
+
+      # Cache the completed upstream Raspberry Pi OS root filesystem, not just
+      # Docker's pi-gen builder image or individual downloaded .deb files.
+      # Bump pigen-base-rootfs-v1 when intentionally refreshing base OS packages.
+      - name: Restore reusable Raspberry Pi OS base root filesystem
+        id: base-rootfs-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/pigen-base-rootfs.tar
+          key: pigen-base-rootfs-v1-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile') }}
+
       - name: Prepare build caches
         uses: actions/cache@v4
         with:
@@ -108,7 +121,16 @@ jobs:
 
       - name: Add PetCam image stage and configure pi-gen caches
         run: |
-          mkdir -p "${RUNNER_TEMP}/pigen-apt-cache/partial"
+          mkdir -p "${RUNNER_TEMP}/pigen-apt-cache/partial" "${RUNNER_TEMP}/pigen-work"
+          if [[ "${{ steps.base-rootfs-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "Restoring cached stage2 root filesystem; skipping unchanged upstream OS stages."
+            sudo tar --numeric-owner --xattrs --acls -xpf "${RUNNER_TEMP}/pigen-base-rootfs.tar" -C "${RUNNER_TEMP}/pigen-work"
+            touch pi-gen/stage0/SKIP pi-gen/stage1/SKIP pi-gen/stage2/SKIP
+          else
+            # A prefix restore is deliberately not configured: a rootfs built
+            # from different upstream inputs must never be treated as a hit.
+            rm -f "${RUNNER_TEMP}/pigen-base-rootfs.tar"
+          fi
           cp config pi-gen/config
           cp -a stage-petcam pi-gen/stage-petcam
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
@@ -188,13 +210,25 @@ jobs:
           BUILD_STARTED="$(date +%s)"
           APT_CACHE_BEFORE="$(du -sb "${RUNNER_TEMP}/pigen-apt-cache" | cut -f1)"
           cd pi-gen
-          PIGEN_DOCKER_OPTS="--mount type=bind,src=${RUNNER_TEMP}/pigen-apt-cache,dst=/apt-cache -e APT_ARCHIVE_CACHE=/apt-cache"
+          PIGEN_DOCKER_OPTS="--mount type=bind,src=${RUNNER_TEMP}/pigen-apt-cache,dst=/apt-cache -e APT_ARCHIVE_CACHE=/apt-cache --mount type=bind,src=${RUNNER_TEMP}/pigen-work,dst=/pigen-work -e WORK_DIR=/pigen-work"
           PIGEN_DOCKER_OPTS="${PIGEN_DOCKER_OPTS}" ./build-docker.sh
           BUILD_FINISHED="$(date +%s)"
           # pi-gen runs as root in Docker and leaves APT cache entries (including
           # partial/) root-owned. Restore runner ownership so metrics collection
           # and actions/cache post-job archiving can read the complete cache.
           sudo chown -R "$(id -u):$(id -g)" "${RUNNER_TEMP}/pigen-apt-cache"
+          # Cache the pristine stage2 rootfs for subsequent builds. Tar preserves
+          # numeric ownership, ACLs, xattrs, hardlinks, and device metadata.
+          if [[ "${{ steps.base-rootfs-cache.outputs.cache-hit }}" != "true" ]]; then
+            sudo tar --numeric-owner --xattrs --acls -cpf "${RUNNER_TEMP}/pigen-base-rootfs.tar" -C "${RUNNER_TEMP}/pigen-work" stage2/rootfs
+            sudo chown "$(id -u):$(id -g)" "${RUNNER_TEMP}/pigen-base-rootfs.tar"
+            chmod 0644 "${RUNNER_TEMP}/pigen-base-rootfs.tar"
+          fi
+          BASE_ROOTFS_CACHE_HIT="${{ steps.base-rootfs-cache.outputs.cache-hit }}"
+          BASE_ROOTFS_CACHE_BYTES=0
+          if [[ -f "${RUNNER_TEMP}/pigen-base-rootfs.tar" ]]; then
+            BASE_ROOTFS_CACHE_BYTES="$(stat -c '%s' "${RUNNER_TEMP}/pigen-base-rootfs.tar")"
+          fi
           APT_CACHE_AFTER="$(du -sb "${RUNNER_TEMP}/pigen-apt-cache" | cut -f1)"
           APT_CACHE_FILES="$(find "${RUNNER_TEMP}/pigen-apt-cache" -type f -name '*.deb' | wc -l)"
           mkdir -p "${RUNNER_TEMP}/pigen-build-metrics"
@@ -207,6 +241,8 @@ jobs:
           APT archive cache bytes before: ${APT_CACHE_BEFORE}
           APT archive cache bytes after: ${APT_CACHE_AFTER}
           Cached .deb files after build: ${APT_CACHE_FILES}
+          Base rootfs cache hit: ${BASE_ROOTFS_CACHE_HIT}
+          Base rootfs cache archive bytes: ${BASE_ROOTFS_CACHE_BYTES}
           EOF
           cat "${RUNNER_TEMP}/pigen-build-metrics/build-timing.txt" >> "${GITHUB_STEP_SUMMARY}"
 
@@ -220,18 +256,6 @@ jobs:
             pi-gen/deploy/*.log
           if-no-files-found: warn
           retention-days: 30
-
-      - name: Shrink and recompress the release image
-        if: github.ref_type == 'tag'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends parted e2fsprogs xz-utils
-          mapfile -t IMAGES < <(find pi-gen/deploy -maxdepth 1 -type f -name '*.img.xz' -print)
-          if [[ "${#IMAGES[@]}" -ne 1 ]]; then
-            echo "Expected exactly one .img.xz image before shrinking; found ${#IMAGES[@]}." >&2
-            exit 1
-          fi
-          bash tools/shrink_image.sh "${IMAGES[0]}"
 
       - name: Prepare and publish signed application update
         if: github.ref_type == 'tag'
