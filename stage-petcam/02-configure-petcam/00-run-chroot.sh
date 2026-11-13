@@ -350,3 +350,7 @@ JSON
 chown petcam:petcam /var/lib/petcam/motion/config.json
 chmod 0640 /var/lib/petcam/motion/config.json
 systemctl enable petcam-motion.service
+chown root:petcam /etc/petcam/light-sensor.conf
+chmod 0640 /etc/petcam/light-sensor.conf
+install -d -o petcam -g petcam -m 0750 /var/lib/petcam
+systemctl enable petcam-light-sensor.service
