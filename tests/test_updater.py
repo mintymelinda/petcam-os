@@ -24,6 +24,7 @@ from updater import (
     restart_services,
     verify_signature,
     version_tuple,
+    release_manifest_candidates,
 )
 
 
@@ -325,6 +326,73 @@ class UpdaterServiceSandboxTests(unittest.TestCase):
         )
         self.assertIn("ProtectSystem=strict", script)
 
+
+
+class RecentReleaseDiscoveryTests(unittest.TestCase):
+    @staticmethod
+    def manifest(version):
+        return json.dumps({
+            "schema_version": 1,
+            "application": "petcam-os",
+            "version": version,
+            "architecture": "armhf",
+            "archive_url": f"https://github.com/example/petcam/releases/download/v{version}/archive.tar.gz",
+            "archive_size": 123,
+            "archive_sha256": "a" * 64,
+            "release_notes": f"Release {version}",
+        }).encode()
+
+    def test_skips_bad_recent_release_and_returns_valid_releases_newest_first(self):
+        api_url = "https://api.github.com/repos/mintymelinda/petcam-os/releases?per_page=30"
+        releases = [
+            {"tag_name": "v1.5.0", "draft": False, "prerelease": False, "published_at": "2026-11-13T00:00:00Z",
+             "assets": [{"name": "petcam-update-manifest.json", "browser_download_url": "https://assets/bad/manifest"},
+                        {"name": "petcam-update-manifest.json.sig", "browser_download_url": "https://assets/bad/signature"}]},
+            {"tag_name": "v1.4.0", "draft": False, "prerelease": False, "published_at": "2026-11-12T00:00:00Z",
+             "assets": [{"name": "petcam-update-manifest.json", "browser_download_url": "https://assets/good/manifest"},
+                        {"name": "petcam-update-manifest.json.sig", "browser_download_url": "https://assets/good/signature"}]},
+            {"tag_name": "v1.3.0", "draft": False, "prerelease": False, "published_at": "2026-11-11T00:00:00Z",
+             "assets": [{"name": "petcam-update-manifest.json", "browser_download_url": "https://assets/older/manifest"},
+                        {"name": "petcam-update-manifest.json.sig", "browser_download_url": "https://assets/older/signature"}]},
+        ]
+        payloads = {
+            api_url: json.dumps(releases).encode(),
+            "https://assets/bad/manifest": b"not json",
+            "https://assets/bad/signature": b"bad",
+            "https://assets/good/manifest": self.manifest("1.4.0"),
+            "https://assets/good/signature": b"valid-signature",
+            "https://assets/older/manifest": self.manifest("1.3.0"),
+            "https://assets/older/signature": b"valid-signature",
+        }
+
+        def fake_fetch(url, limit):
+            if url not in payloads:
+                raise AssertionError(f"Unexpected URL: {url}")
+            return payloads[url]
+
+        with mock.patch("updater.fetch", side_effect=fake_fetch), \\
+                mock.patch("updater.verify_signature") as verify:
+            found = release_manifest_candidates(
+                "https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json",
+                Path("/trusted/key.pem"),
+            )
+
+        self.assertEqual([item["manifest"]["version"] for item in found], ["1.4.0", "1.3.0"])
+        self.assertEqual(found[0]["manifest_url"], "https://assets/good/manifest")
+        self.assertEqual(verify.call_count, 2)
+
+    def test_ignores_drafts_and_prereleases(self):
+        api_url = "https://api.github.com/repos/mintymelinda/petcam-os/releases?per_page=30"
+        releases = [
+            {"tag_name": "v9.0.0", "draft": True, "prerelease": False, "assets": []},
+            {"tag_name": "v8.0.0", "draft": False, "prerelease": True, "assets": []},
+        ]
+        with mock.patch("updater.fetch", return_value=json.dumps(releases).encode()):
+            found = release_manifest_candidates(
+                "https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json",
+                Path("/trusted/key.pem"),
+            )
+        self.assertEqual(found, [])
 
 if __name__ == "__main__":
     unittest.main()
