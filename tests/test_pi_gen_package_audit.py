@@ -7,9 +7,9 @@ PI_GEN_COMMIT = "6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78"
 
 
 class PiGenPackageAuditTests(unittest.TestCase):
-    def test_petcam_package_list_avoids_packages_already_installed_by_pi_gen(self):
+    def test_cached_petcam_package_list_avoids_packages_already_installed_by_pi_gen(self):
         packages = set(
-            (ROOT / "stage-petcam/01-install-packages/00-packages")
+            (ROOT / "stage-petcam-base/01-install-packages/00-packages")
             .read_text(encoding="utf-8")
             .split()
         )
@@ -24,6 +24,8 @@ class PiGenPackageAuditTests(unittest.TestCase):
         self.assertFalse(packages & upstream_duplicates)
         # Keep discovery utilities available for future network diagnostics.
         self.assertIn("avahi-utils", packages)
+        config = (ROOT / "config").read_text(encoding="utf-8")
+        self.assertIn("stage-petcam-base stage-petcam", config)
 
     def test_release_build_uses_a_fixed_pi_gen_commit(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
