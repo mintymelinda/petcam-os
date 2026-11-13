@@ -76,6 +76,26 @@ jobs:
       - name: Check out PetCam OS
         uses: actions/checkout@v7
 
+      # Draft releases stay hidden from releases/latest while the image builds.
+      - name: Prepare draft release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            IS_DRAFT="$(gh release view "${TAG}" --json isDraft --jq '.isDraft')"
+            if [[ "${IS_DRAFT}" != "true" ]]; then
+              echo "Release ${TAG} is already published. Refusing to modify it; convert it to a draft manually before rerunning." >&2
+              exit 1
+            fi
+          else
+            gh release create "${TAG}" --draft --verify-tag \
+              --title "PetCam OS ${VERSION}" --generate-notes
+          fi
+
       - name: Check out pi-gen
         uses: actions/checkout@v7
         with:
@@ -309,17 +329,19 @@ jobs:
             --private-key "${KEY_FILE}" \
             --output-dir "${RUNNER_TEMP}/petcam-update-assets"
 
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release upload "${TAG}" "${IMAGE_NAME}" petcam-os-os-list.json \
-              "${PACKAGE_INVENTORY}" "${RUNNER_TEMP}/${TAG}-build-info.txt" \
-              "${RUNNER_TEMP}/petcam-update-assets/${ARCHIVE_NAME}" \
-              "${RUNNER_TEMP}/petcam-update-assets/petcam-update-manifest.json" \
-              "${RUNNER_TEMP}/petcam-update-assets/petcam-update-manifest.json.sig" --clobber
-          else
-            gh release create "${TAG}" "${IMAGE_NAME}" petcam-os-os-list.json \
-              "${PACKAGE_INVENTORY}" "${RUNNER_TEMP}/${TAG}-build-info.txt" \
-              "${RUNNER_TEMP}/petcam-update-assets/${ARCHIVE_NAME}" \
-              "${RUNNER_TEMP}/petcam-update-assets/petcam-update-manifest.json" \
-              "${RUNNER_TEMP}/petcam-update-assets/petcam-update-manifest.json.sig" \
-              --title "PetCam OS ${VERSION}" --generate-notes
-          fi
+          gh release upload "${TAG}" "${IMAGE_NAME}" petcam-os-os-list.json \
+            "${PACKAGE_INVENTORY}" "${RUNNER_TEMP}/${TAG}-build-info.txt" \
+            "${RUNNER_TEMP}/petcam-update-assets/${ARCHIVE_NAME}" \
+            "${RUNNER_TEMP}/petcam-update-assets/petcam-update-manifest.json" \
+            "${RUNNER_TEMP}/petcam-update-assets/petcam-update-manifest.json.sig" --clobber
+
+          ASSETS="$(gh release view "${TAG}" --json assets --jq '[.assets[].name]')"
+          for REQUIRED_ASSET in "${ARCHIVE_NAME}" "petcam-update-manifest.json" "petcam-update-manifest.json.sig"; do
+            if ! jq -e --arg asset "${REQUIRED_ASSET}" 'index($asset) != null' <<<"${ASSETS}" >/dev/null; then
+              echo "Release ${TAG} is missing required asset: ${REQUIRED_ASSET}" >&2
+              exit 1
+            fi
+          done
+
+          # Publish only after the updater archive, manifest, and signature exist.
+          gh release edit "${TAG}" --draft=false
