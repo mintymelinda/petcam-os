@@ -157,24 +157,17 @@ class WebManagerTests(unittest.TestCase):
             "modes": [{"width": 640, "height": 480, "fps": [30], "format": "MJPG"}],
         }]
         try:
-            with mock.patch.object(MODULE, "apply_primary_config") as apply:
+            with mock.patch.object(MODULE, "apply_config") as apply:
                 MODULE.save_selection({
                     "kind": "usb",
                     "device": "/dev/video0",
                     "mode": {"width": 640, "height": 480, "fps": 30, "format": "MJPG"},
                 })
-            apply.assert_called_once_with(
-                {
-                    "SOURCE": "usb", "DEVICE": "/dev/video0",
-                    "USB_PHYSICAL_PATH": "", "CSI_DEVICE_PATH": "", "CAMERA": "auto",
-                    "FORMAT": "MJPG", "RESOLUTION": "640x480", "FPS": "30",
-                },
-                {
-                    "kind": "usb", "device": "/dev/video0",
-                    "modes": [{"width": 640, "height": 480, "fps": [30], "format": "MJPG"}],
-                },
-                allow_performance_override=False,
-            )
+            apply.assert_called_once_with({
+                "SOURCE": "usb", "DEVICE": "/dev/video0",
+                "USB_PHYSICAL_PATH": "", "CSI_DEVICE_PATH": "", "CAMERA": "auto",
+                "FORMAT": "MJPG", "RESOLUTION": "640x480", "FPS": "30",
+            })
         finally:
             MODULE.camera_inventory = original
 
@@ -184,13 +177,15 @@ class WebManagerTests(unittest.TestCase):
             "modes": [{"width": 1920, "height": 1080, "fps": [60], "format": "MJPG"}],
         }
         with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \
-                mock.patch.object(MODULE, "apply_primary_config") as apply:
+                mock.patch.object(MODULE, "model_tier", return_value="pi3"), \
+                mock.patch.object(MODULE, "PIXEL_BUDGETS", {"pi3": 1}), \
+                mock.patch.object(MODULE, "apply_config") as apply:
             MODULE.save_selection({
                 "kind": "usb", "camera_id": "usb-fast",
                 "mode": {"width": 1920, "height": 1080, "fps": 60, "format": "MJPG"},
                 "allow_performance_override": True,
             })
-        self.assertTrue(apply.call_args.kwargs["allow_performance_override"])
+        self.assertEqual(apply.call_args.args[0]["FPS"], "60")
 
     def test_primary_usb_selection_persists_physical_topology(self):
         physical_path = "/sys/devices/platform/soc/usb1/1-1/1-1.2"
@@ -202,7 +197,7 @@ class WebManagerTests(unittest.TestCase):
             "modes": [{"width": 640, "height": 480, "fps": [30], "format": "MJPG"}],
         }
         with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \
-                mock.patch.object(MODULE, "apply_primary_config") as apply:
+                mock.patch.object(MODULE, "apply_config") as apply:
             MODULE.save_selection({
                 "kind": "usb",
                 "camera_id": "usb-stable",
@@ -225,7 +220,7 @@ class WebManagerTests(unittest.TestCase):
             "modes": [{"width": 640, "height": 480, "fps": 30}],
         }
         with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \
-                mock.patch.object(MODULE, "apply_primary_config") as apply:
+                mock.patch.object(MODULE, "apply_config") as apply:
             MODULE.save_selection({
                 "kind": "csi",
                 "camera_id": "csi-stable",
