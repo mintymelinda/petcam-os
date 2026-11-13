@@ -2,6 +2,17 @@ name: Build PetCam OS image
 
 on:
   workflow_dispatch:
+    inputs:
+      build_image:
+        description: Build a non-publishing image for cache benchmarking
+        required: false
+        default: false
+        type: boolean
+      release_version:
+        description: Application version to embed in a manual benchmark image
+        required: false
+        default: "0.0.0"
+        type: string
   pull_request:
     paths:
       - "config"
@@ -54,8 +65,8 @@ jobs:
         run: python3 -m unittest discover -s tests -v
 
   release:
-    name: Build and publish release image
-    if: github.ref_type == 'tag'
+    name: Build Raspberry Pi OS image
+    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.build_image)
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -72,11 +83,27 @@ jobs:
           ref: 6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78
           path: pi-gen
 
-      - name: Add PetCam image stage
+      - name: Prepare build caches
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/pigen-apt-cache
+          key: pigen-apt-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'stage-petcam/**') }}
+          restore-keys: |
+            pigen-apt-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Add PetCam image stage and configure pi-gen caches
         run: |
+          mkdir -p "${RUNNER_TEMP}/pigen-apt-cache/partial"
           cp config pi-gen/config
           cp -a stage-petcam pi-gen/stage-petcam
-          RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          else
+            RELEASE_VERSION="${{ inputs.release_version }}"
+          fi
           if [[ ! "${RELEASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Release tag must be vMAJOR.MINOR.PATCH; got ${GITHUB_REF_NAME}." >&2
             exit 1
@@ -86,13 +113,78 @@ jobs:
           chmod 0755 pi-gen/stage-petcam/prerun.sh
           chmod 0755 pi-gen/stage-petcam/00-install-files/00-run.sh
           mkdir -p pi-gen/deploy
+          # pi-gen's Dockerfile is stable at the pinned revision. Route its image
+          # build through Buildx so GitHub Actions can persist Docker layers.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          script = Path("pi-gen/build-docker.sh")
+          content = script.read_text(encoding="utf-8")
+          old = '${DOCKER} build ${PLATFORM:+--platform "${PLATFORM}"} --build-arg BASE_IMAGE=${BASE_IMAGE} -t pi-gen "${DIR}"'
+          new = '${DOCKER} buildx build --load --cache-from type=gha --cache-to type=gha,mode=max ${PLATFORM:+--platform "${PLATFORM}"} --build-arg BASE_IMAGE=${BASE_IMAGE} -t pi-gen "${DIR}"'
+          if content.count(old) != 1:
+              raise SystemExit("Pinned pi-gen build-docker.sh no longer has the expected Docker build command")
+          script.write_text(content.replace(old, new), encoding="utf-8")
+
+          # Keep downloaded .deb archives outside the target rootfs, but bind
+          # the shared runner cache into each chroot while pi-gen installs packages.
+          common = Path("pi-gen/scripts/common")
+          content = common.read_text(encoding="utf-8")
+          anchor = 'on_chroot() {\n'
+          mount = '''on_chroot() {
+          	if [ -n "${APT_ARCHIVE_CACHE:-}" ] && ! mount | grep -q " ${ROOTFS_DIR}/var/cache/apt/archives "; then
+          		mkdir -p "${ROOTFS_DIR}/var/cache/apt/archives"
+          		mount --bind "${APT_ARCHIVE_CACHE}" "${ROOTFS_DIR}/var/cache/apt/archives"
+          	fi
+          '''
+          if content.count(anchor) != 1:
+              raise SystemExit("Pinned pi-gen common script no longer has the expected on_chroot function")
+          content = content.replace(anchor, mount, 1)
+          chroot_call = 'setarch linux32 capsh $CAPSH_ARG "--chroot=${ROOTFS_DIR}/" -- -e "$@"'
+          cached_chroot_call = 'APT_ARCHIVE_CACHE="${APT_ARCHIVE_CACHE:-}" setarch linux32 capsh $CAPSH_ARG "--chroot=${ROOTFS_DIR}/" -- -e "$@"'
+          if content.count(chroot_call) != 1:
+              raise SystemExit("Pinned pi-gen common script no longer has the expected chroot invocation")
+          common.write_text(content.replace(chroot_call, cached_chroot_call, 1), encoding="utf-8")
+          PY
 
       - name: Build Raspberry Pi OS image
+        id: pigen-build
         run: |
+          set -euo pipefail
+          BUILD_STARTED="$(date +%s)"
+          APT_CACHE_BEFORE="$(du -sb "${RUNNER_TEMP}/pigen-apt-cache" | cut -f1)"
           cd pi-gen
-          sudo ./build-docker.sh
+          PIGEN_DOCKER_OPTS="--mount type=bind,src=${RUNNER_TEMP}/pigen-apt-cache,dst=/apt-cache -e APT_ARCHIVE_CACHE=/apt-cache"
+          PIGEN_DOCKER_OPTS="${PIGEN_DOCKER_OPTS}" ./build-docker.sh
+          BUILD_FINISHED="$(date +%s)"
+          APT_CACHE_AFTER="$(du -sb "${RUNNER_TEMP}/pigen-apt-cache" | cut -f1)"
+          APT_CACHE_FILES="$(find "${RUNNER_TEMP}/pigen-apt-cache" -type f -name '*.deb' | wc -l)"
+          mkdir -p "${RUNNER_TEMP}/pigen-build-metrics"
+          cat > "${RUNNER_TEMP}/pigen-build-metrics/build-timing.txt" <<EOF
+          pi-gen commit: 6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78
+          Raspberry Pi OS release: trixie
+          Build started (epoch): ${BUILD_STARTED}
+          Build finished (epoch): ${BUILD_FINISHED}
+          pi-gen build duration seconds: $((BUILD_FINISHED - BUILD_STARTED))
+          APT archive cache bytes before: ${APT_CACHE_BEFORE}
+          APT archive cache bytes after: ${APT_CACHE_AFTER}
+          Cached .deb files after build: ${APT_CACHE_FILES}
+          EOF
+          cat "${RUNNER_TEMP}/pigen-build-metrics/build-timing.txt" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload pi-gen build logs and timing metrics
+        if: always() && steps.pigen-build.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pigen-build-diagnostics-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/pigen-build-metrics/**
+            pi-gen/deploy/*.log
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Shrink and recompress the release image
+        if: github.ref_type == 'tag'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends parted e2fsprogs xz-utils
@@ -104,6 +196,7 @@ jobs:
           bash tools/shrink_image.sh "${IMAGES[0]}"
 
       - name: Prepare and publish signed application update
+        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
           PETCAM_UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.PETCAM_UPDATE_SIGNING_PRIVATE_KEY }}

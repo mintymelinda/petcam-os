@@ -5,12 +5,23 @@
 The workflow is named **Build PetCam OS image**.
 
 - Pull requests, pushes to `main`, and manual workflow dispatches run validation: Python byte-compilation, shell syntax checks, and the unit test suite.
-- A full Raspberry Pi OS image build and GitHub Release publication runs only when a version tag matching `vMAJOR.MINOR.PATCH` is pushed.
+- A full Raspberry Pi OS image build and GitHub Release publication runs when a version tag matching `vMAJOR.MINOR.PATCH` is pushed. A manual workflow dispatch can also run a non-publishing image build for cache benchmarking.
 - The tagged release job checks out the official Raspberry Pi [pi-gen](https://github.com/RPi-Distro/pi-gen) project at a fixed commit, adds the PetCam stage, builds and shrinks the image, inventories the packages in the final root filesystem, generates and validates the Raspberry Pi Imager OS sublist, packages the exact application release from the built image, signs the update manifest, and uploads the resulting assets to the GitHub Release.
 
 The pi-gen revision is pinned to `6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78`. This prevents upstream stage/package changes from silently changing release contents. Each release also includes a TSV inventory of installed packages (including versions and installed sizes) and a build-info file recording the pi-gen commit.
 
-Running **Actions → Build PetCam OS image → Run workflow** does not build or upload a flashable image; it runs the validation job. Use a version tag to invoke the release build.
+Running **Actions → Build PetCam OS image → Run workflow** runs validation by default. To build an image without publishing a release, set **Build a non-publishing image for cache benchmarking** and optionally choose the embedded application version. The image-build job records pi-gen build duration, APT cache size/file counts, and uploads those metrics with the pi-gen build log. The image is not published by a manual run. Version tags still run the complete release pipeline.
+
+### Build caches and measuring improvements
+
+The release workflow uses two independent caches:
+
+- Docker Buildx's GitHub Actions cache stores layers for the pinned pi-gen build-container image. The upstream pi-gen checkout remains pinned, and the build-container layer cache is safe to miss or evict; a normal Docker build still completes from scratch.
+- `actions/cache` stores downloaded Debian `.deb` archives. The cache key includes the runner OS, Raspberry Pi OS release, pinned pi-gen revision, PetCam build configuration, and custom stage inputs. The archive directory is bind-mounted into pi-gen's package-install chroots, then detached before the final `apt-get clean` so image cleanup cannot erase the shared cache. APT still verifies package hashes and signatures; a cache miss simply downloads packages normally.
+
+To measure the effect, manually run the workflow twice on the same branch with image benchmarking enabled and the same configuration. The first run establishes/warm-populates caches; the second run measures the warm path. Compare **pi-gen build duration seconds** in each run's **Build PetCam OS image** job summary or its `pigen-build-diagnostics-*` artifact. Also compare the APT cache bytes and `.deb` count. The full image build is the measured workload; validation-only runs do not populate either cache. GitHub may evict caches, so the build must never depend on a cache being present.
+
+Do not cache or restore the entire pi-gen `work/` tree at this stage. It contains large mutable root filesystems and intermediate stage state; reusing it risks stale outputs and can cost more time to transfer than rebuilding. Selective stage-output caching should be evaluated only after these measurements, with keys covering the pi-gen revision, OS release, configuration, and all relevant stage inputs.
 
 ## pi-gen base package audit
 

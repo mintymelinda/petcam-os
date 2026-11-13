@@ -379,6 +379,11 @@ done < <(ldd "$USTREAMER_BIN" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^\//)
 apt-get purge -y --auto-remove \
     build-essential pkg-config git \
     libevent-dev libjpeg-dev libbsd-dev libv4l-dev
+# pi-gen's optional shared archive cache is bind-mounted into this chroot.
+# Detach it before cleaning the target rootfs so cleanup never deletes the host cache.
+if [[ -n "${APT_ARCHIVE_CACHE:-}" ]]; then
+    umount /var/cache/apt/archives
+fi
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 find /usr/share/doc -mindepth 1 -maxdepth 1 ! -name copyright -exec rm -rf {} +
