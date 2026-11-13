@@ -32,6 +32,11 @@ REQUIRED_FILES = (
     "lib/start-stream.sh",
     "vendor/bin/ustreamer",
 )
+# Old installed updaters require this path during archive validation. Keep it in
+# update archives only; do not reintroduce it into the current image release tree.
+COMPATIBILITY_FILES = {
+    "lib/camera_profiles.py": b'"""Compatibility marker for pre-v0.2.3 updaters."""\n',
+}
 MAX_ARCHIVE = 300 * 1024 * 1024
 
 
@@ -69,6 +74,14 @@ def build_release(release_dir: Path, version: str, archive_url: str,
     with tarfile.open(archive, "w:gz", compresslevel=9) as bundle:
         for relative in REQUIRED_FILES:
             bundle.add(release_dir / relative, arcname=relative, recursive=False)
+        # Add compatibility-only files for older installed updaters. These are
+        # deliberately absent from the current image's active release layout.
+        import io
+        for relative, content in COMPATIBILITY_FILES.items():
+            info = tarfile.TarInfo(relative)
+            info.size = len(content)
+            info.mode = 0o644
+            bundle.addfile(info, io.BytesIO(content))
         # Include any future regular application assets while refusing links/special files.
         for path in sorted(release_dir.rglob("*")):
             relative = path.relative_to(release_dir).as_posix()
