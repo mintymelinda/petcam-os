@@ -308,7 +308,7 @@ def parse_v4l2_controls(output):
                 "flags": flags,
                 "menu": [],
                 "supported": supported,
-                "writable": supported and "inactive" not in flags and "read-only" not in flags,
+                "writable": supported and not any(flag in flags for flag in ("inactive", "read-only", "grabbed")),
             }
             controls.append(current)
             continue
