@@ -381,7 +381,8 @@ def _available_memory_bytes() -> int:
 
 
 def _check_resource_budget(
-    candidate: dict[str, Any], existing: list[dict[str, Any]], primary: dict[str, Any] | None = None
+    candidate: dict[str, Any], existing: list[dict[str, Any]], primary: dict[str, Any] | None = None,
+    allow_performance_override: bool = False,
 ) -> dict[str, Any]:
     primary = primary or _default_stream_estimate()
     model = read_model()
@@ -389,10 +390,11 @@ def _check_resource_budget(
     streams = [primary, *existing, candidate]
     pixel_rate = sum(int(item.get("estimated_pixels_per_second", 0)) for item in streams)
     pixel_budget = PIXEL_BUDGETS[tier]
-    if pixel_rate > pixel_budget:
+    if pixel_rate > pixel_budget and not allow_performance_override:
         raise ProfileError(
             f"Adding this camera would exceed the {tier} aggregate capture budget "
-            f"({pixel_rate:,} > {pixel_budget:,} pixels/second). Reduce resolution or FPS."
+            f"({pixel_rate:,} > {pixel_budget:,} pixels/second). Reduce resolution or FPS, "
+            "or explicitly confirm the performance warning to continue."
         )
     raw_usb_mbps = sum(float(item.get("usb_raw_mbps", 0)) for item in streams)
     if raw_usb_mbps > USB2_SAFE_BANDWIDTH_MBPS:
@@ -418,24 +420,37 @@ def _check_resource_budget(
     }
 
 
-def apply_primary_config(values: dict[str, str], selected_camera: dict[str, Any]) -> dict[str, Any]:
+def apply_primary_config(
+    values: dict[str, str], selected_camera: dict[str, Any], allow_performance_override: bool = False
+) -> dict[str, Any]:
     with profile_manager_guard():
         if profile_exists(selected_camera):
             raise ProfileError("This camera already has an independent stream. Select its profile to change it.")
-        validate_primary_change(values)
+        validate_primary_change(values, allow_performance_override=allow_performance_override)
         return apply_config(values)
 
 
-def validate_primary_change(values: dict[str, str]) -> dict[str, Any]:
+def validate_primary_change(
+    values: dict[str, str], allow_performance_override: bool = False
+) -> dict[str, Any]:
     current = parse_config(CONFIG_PATH, check_hardware=False)
     candidate_config = validate_config({**current, **values}, check_hardware=True)
     primary = _default_stream_estimate(candidate_config)
+    performance_exceeded = primary["estimated_pixels_per_second"] > PIXEL_BUDGETS[model_tier(read_model())]
+    if performance_exceeded and not allow_performance_override:
+        raise ProfileError(
+            f"This capture mode exceeds the estimated performance budget for this {model_tier(read_model())} "
+            "device. Confirm the warning to use it anyway, or choose a lower resolution or FPS."
+        )
     empty_candidate = {
         "estimated_pixels_per_second": 0,
         "buffer_memory_bytes": 0,
         "usb_raw_mbps": 0.0,
     }
-    return _check_resource_budget(empty_candidate, _load_profiles(), primary=primary)
+    return _check_resource_budget(
+        empty_candidate, _load_profiles(), primary=primary,
+        allow_performance_override=performance_exceeded and allow_performance_override,
+    )
 
 
 def _next_port(profiles: list[dict[str, Any]]) -> int:
@@ -453,6 +468,7 @@ def create_profile(
     mode: dict[str, Any],
     restart_service=_profile_service_action,
     ready=wait_for_stream,
+    allow_performance_override: bool = False,
 ) -> dict[str, Any]:
     profiles = _load_profiles()
     values, candidate = _mode_selection(camera, mode)
@@ -480,7 +496,16 @@ def create_profile(
     port = _next_port(profiles)
     candidate["port"] = port
     candidate["service"] = f"petcam-stream@{candidate['id']}.service"
-    budget = _check_resource_budget(candidate, profiles)
+    performance_exceeded = candidate["estimated_pixels_per_second"] > PIXEL_BUDGETS[model_tier(read_model())]
+    if performance_exceeded and not allow_performance_override:
+        raise ProfileError(
+            f"This capture mode exceeds the estimated performance budget for this {model_tier(read_model())} "
+            "device. Confirm the warning to use it anyway, or choose a lower resolution or FPS."
+        )
+    budget = _check_resource_budget(
+        candidate, profiles,
+        allow_performance_override=performance_exceeded and allow_performance_override,
+    )
     validated = validate_config({**values, "PORT": str(port)}, check_hardware=True)
     path = _profile_config_path(candidate["id"])
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -515,6 +540,7 @@ def configure_profile(
     mode: dict[str, Any],
     restart_service=_profile_service_action,
     ready=wait_for_stream,
+    allow_performance_override: bool = False,
 ) -> dict[str, Any]:
     profiles = _load_profiles()
     existing = next((item for item in profiles if item["id"] == profile_id), None)
@@ -526,7 +552,16 @@ def configure_profile(
     candidate["port"] = int(existing["port"])
     candidate["service"] = existing["service"]
     others = [item for item in profiles if item["id"] != profile_id]
-    budget = _check_resource_budget(candidate, others)
+    performance_exceeded = candidate["estimated_pixels_per_second"] > PIXEL_BUDGETS[model_tier(read_model())]
+    if performance_exceeded and not allow_performance_override:
+        raise ProfileError(
+            f"This capture mode exceeds the estimated performance budget for this {model_tier(read_model())} "
+            "device. Confirm the warning to use it anyway, or choose a lower resolution or FPS."
+        )
+    budget = _check_resource_budget(
+        candidate, others,
+        allow_performance_override=performance_exceeded and allow_performance_override,
+    )
     validated = validate_config({**values, "PORT": str(candidate["port"])}, check_hardware=True)
     path = _profile_config_path(profile_id)
     last_good = path.with_name(path.name + ".last-good")
