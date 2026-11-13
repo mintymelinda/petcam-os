@@ -15,8 +15,8 @@ class BuildCacheContractTests(unittest.TestCase):
     def test_prepared_package_rootfs_is_cached_with_a_stable_explicit_epoch(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
         self.assertIn("id: base-rootfs-cache", workflow)
-        self.assertIn("pigen-base-rootfs-v1-", workflow)
-        self.assertIn("hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile')", workflow)
+        self.assertIn("pigen-base-rootfs-v2-", workflow)
+        self.assertIn("hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile', 'tools/prepare_pigen_build.py')", workflow)
         self.assertIn("pigen-base-rootfs.tar", workflow)
         self.assertIn("stage-petcam-base/**", workflow)
         self.assertIn("sudo tar --numeric-owner --xattrs --acls -xpf", workflow)
@@ -42,11 +42,12 @@ class BuildCacheContractTests(unittest.TestCase):
     def test_debian_archives_and_docker_layers_remain_cached(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
         self.assertIn("docker/setup-buildx-action@v3", workflow)
-        self.assertIn("--cache-from type=gha", workflow)
-        self.assertIn("--cache-to type=gha,mode=max", workflow)
+        build_helper = (ROOT / "tools/prepare_pigen_build.py").read_text(encoding="utf-8")
+        self.assertIn("--cache-from type=gha,scope=pigen-builder", build_helper)
+        self.assertIn("--cache-to type=gha,scope=pigen-builder,mode=max", build_helper)
         self.assertIn("uses: actions/cache@v4", workflow)
         self.assertIn("APT_ARCHIVE_CACHE=/apt-cache", workflow)
-        self.assertIn("hashFiles('config', 'stage-petcam-base/**')", workflow)
+        self.assertIn("hashFiles('config', 'stage-petcam-base/**', 'tools/prepare_pigen_build.py')", workflow)
         self.assertIn("--mount type=bind", workflow)
 
     def test_manual_image_build_remains_non_publishing_and_emits_timing_metrics(self):
