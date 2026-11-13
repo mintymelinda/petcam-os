@@ -162,8 +162,8 @@ jobs:
           if content.count(clean_command) != 1:
               raise SystemExit("Pinned pi-gen export cleanup no longer has the expected apt-get clean command")
           content = content.replace(clean_command, guarded_clean, 1)
-          cache_config_cleanup = 'rm -f "${ROOTFS_DIR}/etc/apt/apt.conf.d/99-pigen-archive-cache"\\n'
-          if not content.endswith("EOF\\n"):
+          cache_config_cleanup = 'rm -f "${ROOTFS_DIR}/etc/apt/apt.conf.d/99-pigen-archive-cache"\n'
+          if not content.endswith("EOF\n"):
               raise SystemExit("Pinned pi-gen export cleanup no longer ends with the expected chroot heredoc")
           content += cache_config_cleanup
           export_cleanup.write_text(content, encoding="utf-8")
