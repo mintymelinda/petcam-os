@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 
@@ -30,13 +31,13 @@ class UStreamerHardwareFpsTests(unittest.TestCase):
         build = (
             ROOT / "stage-petcam-base/02-build-ustreamer/00-run-chroot.sh"
         ).read_text(encoding="utf-8")
-        patch = build.split("<<'PATCH'\\n", 1)[1].split("\\nPATCH\\n", 1)[0]
+        patch = build.split("<<'PATCH'\n", 1)[1].split("\nPATCH\n", 1)[0]
         lines = patch.splitlines()
 
         for index, line in enumerate(lines):
             if not line.startswith("@@ "):
                 continue
-            header = re.match(r"^@@ -\\d+,(\\d+) \\+\\d+,(\\d+) @@", line)
+            header = re.match(r"^@@ -\d+,(\d+) \+\d+,(\d+) @@", line)
             self.assertIsNotNone(header, line)
             old_expected, new_expected = map(int, header.groups())
             old_actual = 0
