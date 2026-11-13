@@ -46,7 +46,6 @@ class SignedReleasePublisherTests(unittest.TestCase):
             "lib/config.py": b"# config\n",
             "lib/network_diagnostics.py": b"# network diagnostics\n",
             "lib/factory_reset.py": b"# factory reset\n",
-            "lib/camera_profiles.py": b"# camera profiles\n",
             "lib/home_assistant.py": b"# Home Assistant MQTT\n",
             "lib/timelapse.py": b"# timelapse\n",
             "lib/motion_detection.py": b"# motion detection\n",
