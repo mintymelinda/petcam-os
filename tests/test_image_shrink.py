@@ -69,6 +69,15 @@ class BuildCacheContractTests(unittest.TestCase):
         self.assertIn("actions/upload-artifact@v4", workflow)
         self.assertIn("pigen-build-diagnostics-", workflow)
 
+    def test_pigen_final_cleanup_preserves_external_apt_archive_cache(self):
+        workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
+        self.assertIn('export_cleanup = Path("pi-gen/export-image/02-set-sources/01-run.sh")', workflow)
+        self.assertIn('clean_command = "apt-get clean\\n"', workflow)
+        self.assertIn('if [ -z "${APT_ARCHIVE_CACHE:-}" ]; then', workflow)
+        self.assertIn("cache_config_cleanup =", workflow)
+        self.assertIn("99-pigen-archive-cache", workflow)
+        self.assertIn("content += cache_config_cleanup", workflow)
+
     def test_shared_apt_archive_cache_is_detached_before_target_cleanup(self):
         cleanup = (ROOT / "stage-petcam/02-configure-petcam/00-run-chroot.sh").read_text(encoding="utf-8")
         self.assertIn('umount /var/cache/apt/archives', cleanup)

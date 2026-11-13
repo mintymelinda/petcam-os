@@ -136,7 +136,7 @@ jobs:
           		# APT normally removes downloaded archives after installation.
           		# Keep them in the shared runner cache so later builds can reuse them.
           		mkdir -p "${ROOTFS_DIR}/etc/apt/apt.conf.d"
-          		printf '%s\\n' 'APT::Keep-Downloaded-Packages "true";' > "${ROOTFS_DIR}/etc/apt/apt.conf.d/99-pigen-archive-cache"
+          		printf '%s\n' 'APT::Keep-Downloaded-Packages "true";' > "${ROOTFS_DIR}/etc/apt/apt.conf.d/99-pigen-archive-cache"
           		if ! mount | grep -q " ${ROOTFS_DIR}/var/cache/apt/archives "; then
           			mkdir -p "${ROOTFS_DIR}/var/cache/apt/archives"
           			mount --bind "${APT_ARCHIVE_CACHE}" "${ROOTFS_DIR}/var/cache/apt/archives"
@@ -151,6 +151,22 @@ jobs:
           if content.count(chroot_call) != 1:
               raise SystemExit("Pinned pi-gen common script no longer has the expected chroot invocation")
           common.write_text(content.replace(chroot_call, cached_chroot_call, 1), encoding="utf-8")
+
+          # The final pi-gen source refresh runs apt-get clean inside the chroot.
+          # That would empty the bind-mounted shared cache, so retain archives
+          # whenever the external cache is enabled.
+          export_cleanup = Path("pi-gen/export-image/02-set-sources/01-run.sh")
+          content = export_cleanup.read_text(encoding="utf-8")
+          clean_command = "apt-get clean\n"
+          guarded_clean = 'if [ -z "${APT_ARCHIVE_CACHE:-}" ]; then\n\tapt-get clean\nfi\n'
+          if content.count(clean_command) != 1:
+              raise SystemExit("Pinned pi-gen export cleanup no longer has the expected apt-get clean command")
+          content = content.replace(clean_command, guarded_clean, 1)
+          cache_config_cleanup = 'rm -f "${ROOTFS_DIR}/etc/apt/apt.conf.d/99-pigen-archive-cache"\n'
+          if not content.endswith("EOF\n"):
+              raise SystemExit("Pinned pi-gen export cleanup no longer ends with the expected chroot heredoc")
+          content += cache_config_cleanup
+          export_cleanup.write_text(content, encoding="utf-8")
           PY
 
       - name: Build Raspberry Pi OS image
