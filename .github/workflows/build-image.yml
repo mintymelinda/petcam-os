@@ -63,7 +63,7 @@ jobs:
 
   warm-base-cache:
     name: Warm reusable image base cache
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref_type == 'tag')) || github.event_name == 'workflow_dispatch'
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -80,12 +80,21 @@ jobs:
           ref: 6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78
           path: pi-gen
 
+      - name: Compute immutable base rootfs cache key
+        id: base-rootfs-cache-key
+        env:
+          BASE_ROOTFS_CACHE_HASH: ${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile', 'tools/prepare_pigen_build.py') }}
+        run: |
+          echo "key=pigen-base-rootfs-v2-${RUNNER_OS}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${BASE_ROOTFS_CACHE_HASH}" >> "$GITHUB_OUTPUT"
+
       - name: Check for the shared prepared base root filesystem
         id: base-rootfs-cache
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/pigen-base-rootfs.tar
-          key: pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile', 'tools/prepare_pigen_build.py') }}
+          key: ${{ steps.base-rootfs-cache-key.outputs.key }}
+          restore-keys: |
+            pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
           lookup-only: true
 
       - name: Restore reusable APT package archives
@@ -129,7 +138,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/pigen-base-rootfs.tar
-          key: pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile', 'tools/prepare_pigen_build.py') }}
+          key: ${{ steps.base-rootfs-cache-key.outputs.key }}
 
   release:
     name: Build Raspberry Pi OS image
@@ -167,6 +176,13 @@ jobs:
           ref: 6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78
           path: pi-gen
 
+      - name: Compute immutable base rootfs cache key
+        id: base-rootfs-cache-key
+        env:
+          BASE_ROOTFS_CACHE_HASH: ${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile', 'tools/prepare_pigen_build.py') }}
+        run: |
+          echo "key=pigen-base-rootfs-v2-${RUNNER_OS}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${BASE_ROOTFS_CACHE_HASH}" >> "$GITHUB_OUTPUT"
+
       - name: Prepare pi-gen work directory
         run: mkdir -p "${RUNNER_TEMP}/pigen-work"
 
@@ -178,7 +194,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/pigen-base-rootfs.tar
-          key: pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile', 'tools/prepare_pigen_build.py') }}
+          key: ${{ steps.base-rootfs-cache-key.outputs.key }}
+          restore-keys: |
+            pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
 
       - name: Prepare build caches
         uses: actions/cache@v4
@@ -202,8 +220,7 @@ jobs:
             sudo tar --numeric-owner --xattrs --acls -xpf "${RUNNER_TEMP}/pigen-base-rootfs.tar" -C "${RUNNER_TEMP}/pigen-work"
             touch pi-gen/stage0/SKIP pi-gen/stage1/SKIP pi-gen/stage2/SKIP pi-gen/stage-petcam-base/SKIP
           else
-            # A prefix restore is deliberately not configured: a rootfs built
-            # from different upstream inputs must never be treated as a hit.
+            # A compatible cache from an earlier commit is valid for this pinned base.
             rm -f "${RUNNER_TEMP}/pigen-base-rootfs.tar"
           fi
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then

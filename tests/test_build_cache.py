@@ -14,6 +14,12 @@ class BuildCacheContractTests(unittest.TestCase):
 
     def test_prepared_package_rootfs_is_cached_with_a_stable_explicit_epoch(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
+        self.assertEqual(workflow.count("id: base-rootfs-cache-key"), 2)
+        self.assertEqual(workflow.count("key: ${{ steps.base-rootfs-cache-key.outputs.key }}"), 3)
+        self.assertNotIn("needs: [validate, warm-base-cache]", workflow)
+        self.assertEqual(workflow.count("pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-"), 2)
+        self.assertEqual(workflow.count("restore-keys: |"), 4)
+        self.assertIn("github.ref_type == 'tag'", workflow)
         self.assertIn("id: base-rootfs-cache", workflow)
         self.assertIn("pigen-base-rootfs-v2-", workflow)
         self.assertIn("hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile', 'tools/prepare_pigen_build.py')", workflow)
