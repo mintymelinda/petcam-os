@@ -285,8 +285,8 @@ class ConfigDirectoryMigrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp) / "etc/petcam"
             directory.mkdir(parents=True)
-            with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=985)), \\
-                    mock.patch("updater.os.chown") as chown, \\
+            with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=985)), \
+                    mock.patch("updater.os.chown") as chown, \
                     mock.patch("updater.os.chmod") as chmod:
                 repair_config_directory_permissions(directory)
             chown.assert_called_once_with(directory, 0, 985)
@@ -295,8 +295,8 @@ class ConfigDirectoryMigrationTests(unittest.TestCase):
     def test_creates_missing_directory_with_restricted_permissions(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp) / "etc/petcam"
-            with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=985)), \\
-                    mock.patch("updater.os.chown") as chown, \\
+            with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=985)), \
+                    mock.patch("updater.os.chown") as chown, \
                     mock.patch("updater.os.chmod") as chmod:
                 repair_config_directory_permissions(directory)
             self.assertTrue(directory.is_dir())
