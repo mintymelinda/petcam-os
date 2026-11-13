@@ -100,8 +100,8 @@ jobs:
 
       # Cache the prepared OS and stable PetCam package root filesystem, not just
       # Docker's pi-gen builder image or individual downloaded .deb files.
-      # Bump pigen-base-rootfs-v1 when intentionally refreshing base OS packages.
-      - name: Restore reusable Raspberry Pi OS base root filesystem
+      # Bump pigen-base-rootfs-v1 when intentionally refreshing base OS or stable package versions.
+      - name: Restore reusable OS and package base root filesystem
         id: base-rootfs-cache
         uses: actions/cache@v4
         with:
@@ -112,7 +112,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/pigen-apt-cache
-          key: pigen-apt-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'stage-petcam/**') }}
+          key: pigen-apt-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'stage-petcam/**', 'stage-petcam-base/**') }}
           restore-keys: |
             pigen-apt-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
 
