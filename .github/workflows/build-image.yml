@@ -87,9 +87,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/pigen-apt-cache
-          key: pigen-apt-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'stage-petcam/**') }}
+          key: pigen-apt-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'stage-petcam/**') }}
           restore-keys: |
-            pigen-apt-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
+            pigen-apt-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
