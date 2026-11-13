@@ -243,6 +243,73 @@ class WebManagerTests(unittest.TestCase):
         finally:
             MODULE.camera_inventory = original
 
+    def test_camera_inventory_cache_reuses_recent_discovery_and_returns_copies(self):
+        camera = {"kind": "usb", "device": "/dev/video0", "modes": []}
+        MODULE._camera_inventory_cache = None
+        MODULE._camera_inventory_cache_at = 0.0
+        try:
+            with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]) as discover:
+                first = MODULE.cached_camera_inventory()
+                first[0]["device"] = "/dev/changed"
+                second = MODULE.cached_camera_inventory()
+            discover.assert_called_once_with()
+            self.assertEqual(second[0]["device"], "/dev/video0")
+        finally:
+            MODULE._camera_inventory_cache = None
+            MODULE._camera_inventory_cache_at = 0.0
+
+    def test_stream_proxy_uses_incremental_reads_without_explicit_flushes(self):
+        class Upstream:
+            status = 200
+            headers = {"Content-Type": "multipart/x-mixed-replace; boundary=frame"}
+
+            def __init__(self):
+                self.chunks = iter((b"frame-one", b"frame-two", b""))
+                self.read1_calls = 0
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read1(self, size):
+                self.read1_calls += 1
+                return next(self.chunks)
+
+            def read(self, _size):
+                raise AssertionError("proxy should prefer incremental read1")
+
+        class CountingWriter(io.BytesIO):
+            flush_calls = 0
+
+            def flush(self):
+                self.flush_calls += 1
+                super().flush()
+
+        class Handler:
+            def __init__(self):
+                self.wfile = CountingWriter()
+                self.headers_sent = []
+
+            def send_response(self, status):
+                self.status = status
+
+            def send_header(self, name, value):
+                self.headers_sent.append((name, value))
+
+            def end_headers(self):
+                pass
+
+        upstream = Upstream()
+        handler = Handler()
+        with mock.patch.object(MODULE.urllib.request, "urlopen", return_value=upstream):
+            MODULE.proxy_stream(handler, 8081)
+        self.assertEqual(handler.status, 200)
+        self.assertEqual(handler.wfile.getvalue(), b"frame-oneframe-two")
+        self.assertEqual(upstream.read1_calls, 3)
+        self.assertEqual(handler.wfile.flush_calls, 0)
+
     def test_camera_inventory_exposes_stable_identity_metadata(self):
         with mock.patch.object(MODULE, "run_camera", return_value={
             "usb_devices": [{"device": "/dev/v4l/by-id/usb-camera", "modes": []}],
