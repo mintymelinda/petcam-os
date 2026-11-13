@@ -106,7 +106,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/pigen-base-rootfs.tar
-          key: pigen-base-rootfs-v1-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'pi-gen/stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile') }}
+          key: pigen-base-rootfs-v1-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile') }}
 
       - name: Prepare build caches
         uses: actions/cache@v4
