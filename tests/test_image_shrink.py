@@ -34,8 +34,8 @@ class ImageShrinkContractTests(unittest.TestCase):
         result = subprocess.run(
             ["awk", "-F", ": ", parser],
             input=(
-                "diversion by libc6 from: /lib/arm-linux-gnueabihf/libc.so.6\\n"
-                "libc6:armhf: /usr/lib/arm-linux-gnueabihf/libc.so.6\\n"
+                "diversion by libc6 from: /lib/arm-linux-gnueabihf/libc.so.6\n"
+                "libc6:armhf: /usr/lib/arm-linux-gnueabihf/libc.so.6\n"
             ),
             text=True,
             capture_output=True,
