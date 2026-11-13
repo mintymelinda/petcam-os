@@ -24,14 +24,6 @@ from motion_detection import load_config as load_motion_config, save_config as s
 from web_auth import SESSION_TTL, get_session, initialize_password, invalidate_session, is_configured, new_session, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
-DEFAULT_STREAM_URL = "http://127.0.0.1:8081"
-
-
-def backend_stream_url():
-    try:
-        return f"http://127.0.0.1:{parse_config(CONFIG)['PORT']}"
-    except Exception:
-        return DEFAULT_STREAM_URL
 TLS_CERT = Path("/etc/petcam/web-manager.crt")
 TLS_KEY = Path("/etc/petcam/web-manager.key")
 HEALTH_FILE = Path("/var/lib/petcam/health.json")
