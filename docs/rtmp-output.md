@@ -8,7 +8,7 @@ The OBS feed is disabled by default. Enable it in **System → OBS Output**, sav
 rtsp://PETCAM_HOST:8554/petcam
 ```
 
-Replace `PETCAM_HOST` with the PetCam hostname or LAN IP address. The dashboard displays the address using the hostname currently used to open the manager. If OBS runs on another computer, use a hostname or IP address reachable from that computer.
+Replace `PETCAM_HOST` with the PetCam hostname or LAN IP address. The dashboard pre-fills the address using the hostname currently used to open the manager. The host portion is editable; if the manager was opened through a reverse proxy or OBS cannot resolve that hostname, replace it with the PetCam LAN IP or another address reachable from the OBS computer.
 
 ## Video path
 
