@@ -77,7 +77,8 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <label for="timelapse-free">Minimum free disk space (MiB)</label><input id="timelapse-free" type="number" min="64" max="102400" value="256">
 <label for="timelapse-width">Maximum image width (0 = live resolution)</label><input id="timelapse-width" type="number" min="0" max="4096" value="0">
 <label for="timelapse-quality">JPEG quality (0 = preserve source unless resizing; 1–95 = re-encode)</label><input id="timelapse-quality" type="number" min="0" max="95" value="85">
-<label for="timelapse-path">Storage directory (inside /var/lib/petcam)</label><input id="timelapse-path" type="text" value="/var/lib/petcam/timelapse/frames">
+<label for="timelapse-path">Storage directory</label><input id="timelapse-path" type="text" value="/var/lib/petcam/timelapse/frames">
+<p class="muted">Use a local folder under /var/lib/petcam, or mount an SMB/NFS share at /mnt/petcam-network and choose a folder beneath it. Network shares must be mounted by Linux first; see the Timelapse storage instructions. Captures pause if the network mount is unavailable rather than falling back to the SD card.</p>
 <p class="muted">Frames reuse the active MJPEG stream, so timelapse does not open another camera process. Optional resizing/re-encoding is performed only after a frame is received.</p>
 <div class="row"><button id="save-timelapse">Save timelapse settings</button></div></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Motion detection</h2><button id="refresh-motion">Refresh status</button></div>
