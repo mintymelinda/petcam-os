@@ -45,7 +45,7 @@ class ImageLayoutTests(unittest.TestCase):
 
     def test_timelapse_service_only_writes_to_managed_data_directory(self):
         service = TIMELAPSE_SERVICE.read_text()
-        self.assertIn("ReadWritePaths=/var/lib/petcam\\n", service)
+        self.assertIn("ReadWritePaths=/var/lib/petcam\n", service)
         self.assertNotIn("/mnt/petcam-network", service)
 
     def test_runtime_uses_stable_wrappers_and_active_release(self):
