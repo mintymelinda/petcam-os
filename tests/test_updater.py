@@ -418,6 +418,19 @@ class RecentReleaseDiscoveryTests(unittest.TestCase):
                 )
         self.assertEqual([item["manifest"]["version"] for item in found], ["1.5.0"])
 
+    def test_no_complete_release_is_a_nonfatal_empty_result(self):
+        config = {
+            "MANIFEST_URL": "https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json",
+        }
+        with mock.patch("updater.platform.machine", return_value="armv7l"), \\
+                mock.patch("updater.release_manifest_candidates", return_value=[]), \\
+                mock.patch("updater.current_version", return_value="1.4.0"):
+            result = check_update(config)
+        self.assertEqual(result["status"], "no-complete-release")
+        self.assertFalse(result["update_available"])
+        self.assertIsNone(result["available_version"])
+        self.assertEqual(result["releases"], [])
+
     def test_install_only_discovers_the_newest_valid_release(self):
         config = {"MANIFEST_URL": "https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json"}
         status = {
