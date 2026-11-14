@@ -354,22 +354,22 @@ class RecentReleaseDiscoveryTests(unittest.TestCase):
             {"tag_name": "v1.4.0", "draft": False, "prerelease": False, "published_at": "2026-11-12T00:00:00Z",
              "assets": [{"name": "petcam-update-manifest.json", "browser_download_url": "https://assets/good/manifest"},
                         {"name": "petcam-update-manifest.json.sig", "browser_download_url": "https://assets/good/signature"},
-                        {"name": "archive.tar.gz", "browser_download_url": "https://assets/good/archive", "size": 123}]},
+                        {"name": "archive.tar.gz", "browser_download_url": "https://assets/good/archive.tar.gz", "size": 123}]},
             {"tag_name": "v1.3.0", "draft": False, "prerelease": False, "published_at": "2026-11-11T00:00:00Z",
              "assets": [{"name": "petcam-update-manifest.json", "browser_download_url": "https://assets/older/manifest"},
                         {"name": "petcam-update-manifest.json.sig", "browser_download_url": "https://assets/older/signature"},
-                        {"name": "archive.tar.gz", "browser_download_url": "https://assets/older/archive", "size": 123}]},
+                        {"name": "archive.tar.gz", "browser_download_url": "https://assets/older/archive.tar.gz", "size": 123}]},
         ]
         payloads = {
             api_url: json.dumps(releases).encode(),
             "https://assets/bad/manifest": b"not json",
             "https://assets/bad/signature": b"bad",
-            "https://assets/good/manifest": self.manifest("1.4.0", "https://assets/good/archive"),
+            "https://assets/good/manifest": self.manifest("1.4.0", "https://assets/good/archive.tar.gz"),
             "https://assets/good/signature": b"valid-signature",
-            "https://assets/good/archive": b"archive",
-            "https://assets/older/manifest": self.manifest("1.3.0", "https://assets/older/archive"),
+            "https://assets/good/archive.tar.gz": b"archive",
+            "https://assets/older/manifest": self.manifest("1.3.0", "https://assets/older/archive.tar.gz"),
             "https://assets/older/signature": b"valid-signature",
-            "https://assets/older/archive": b"archive",
+            "https://assets/older/archive.tar.gz": b"archive",
         }
 
         def fake_fetch(url, limit):
