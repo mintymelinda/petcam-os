@@ -10,3 +10,4 @@ i2c-tools
 cifs-utils
 nfs-common
 iw
+ffmpeg
