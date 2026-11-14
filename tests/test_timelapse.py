@@ -31,6 +31,8 @@ class TimelapseTests(unittest.TestCase):
             MODULE.validate_config({"storage_path": "/etc/petcam"})
         with self.assertRaises(ValueError):
             MODULE.validate_config({"storage_path": "/mnt/petcam-network/../../etc"})
+        with self.assertRaises(ValueError):
+            MODULE.validate_config({"storage_path": "/mnt/petcam-network"})
 
     def test_network_storage_path_is_allowed_but_confined_to_mount_root(self):
         config = MODULE.validate_config({"storage_path": "/mnt/petcam-network/camera-a/timelapse"})
