@@ -358,7 +358,9 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("activeConfig", MODULE.PAGE)
         self.assertIn("refreshLivePreview", MODULE.PAGE)
         self.assertIn("if(livePreviewEnabled)", MODULE.PAGE)
-        self.assertIn("Legacy Browser Source", MODULE.PAGE)
+        self.assertIn("MJPEG delivered FPS", MODULE.PAGE)
+        self.assertIn("Stream FPS (RTMP)", MODULE.PAGE)
+        self.assertIn("Not configured", MODULE.PAGE)
         self.assertIn('id="live-preview"', MODULE.PAGE)
         self.assertIn("saved camera settings are selected", MODULE.PAGE)
 
