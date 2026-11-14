@@ -145,7 +145,7 @@ def main():
         ["ffmpeg", "-hide_banner", "-encoders"],
         capture_output=True, text=True, timeout=15, check=False,
     )
-    if encoders.returncode or not re.search(r"\\b" + re.escape(config["encoder"]) + r"\\b", encoders.stdout):
+    if encoders.returncode or not re.search(r"\b" + re.escape(config["encoder"]) + r"\b", encoders.stdout):
         raise SystemExit(f"Configured FFmpeg encoder is unavailable: {config['encoder']}")
     if args.check:
         print(json.dumps(public_config(config)))
@@ -163,7 +163,7 @@ def main():
             "fps": latest_fps, "updated_at": time.time(),
         }
         temporary = STATUS_PATH.with_name(STATUS_PATH.name + ".tmp")
-        temporary.write_text(json.dumps(payload) + "\\n", encoding="utf-8")
+        temporary.write_text(json.dumps(payload) + "\n", encoding="utf-8")
         os.replace(temporary, STATUS_PATH)
 
     def stop(_signum, _frame):
