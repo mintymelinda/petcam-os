@@ -189,18 +189,6 @@ chmod 1770 /etc/petcam
 chown petcam:petcam /etc/petcam/petcam.conf
 chmod 0640 /etc/petcam/petcam.conf
 
-cat > /etc/petcam/rtmp.json <<'JSON'
-{
-  "enabled": false,
-  "server_url": "",
-  "stream_key": "",
-  "encoder": "libx264",
-  "width": 1280,
-  "height": 720,
-  "fps": 30,
-  "bitrate_kbps": 2500
-}
-JSON
 chown petcam:petcam /etc/petcam/rtmp.json
 chmod 0640 /etc/petcam/rtmp.json
 
