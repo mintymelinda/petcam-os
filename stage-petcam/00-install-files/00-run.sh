@@ -37,6 +37,8 @@ install -m 0644 files/etc/systemd/system/petcam-rtmp.service "$RELEASE_DIR/syste
 install -D -m 0644 files/etc/systemd/system/petcam-rtmp.service "${ROOTFS_DIR}/etc/systemd/system/petcam-rtmp.service"
 install -m 0644 files/etc/systemd/system/mediamtx.service "$RELEASE_DIR/systemd/mediamtx.service"
 install -D -m 0644 files/etc/systemd/system/mediamtx.service "${ROOTFS_DIR}/etc/systemd/system/mediamtx.service"
+install -d -m 0755 "${ROOTFS_DIR}/etc/systemd/system/multi-user.target.wants"
+ln -sfn /etc/systemd/system/mediamtx.service "${ROOTFS_DIR}/etc/systemd/system/multi-user.target.wants/mediamtx.service"
 install -m 0644 files/etc/petcam/mediamtx.yml "$RELEASE_DIR/etc/petcam/mediamtx.yml"
 install -D -m 0644 files/etc/petcam/mediamtx.yml "${ROOTFS_DIR}/etc/petcam/mediamtx.yml"
 install -m 0640 files/etc/petcam/rtmp.json "$RELEASE_DIR/etc/petcam/rtmp.json"
