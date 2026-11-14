@@ -214,10 +214,10 @@ const isMenu=control.type==="menu"||control.type==="intmenu",isBoolean=control.t
 details.textContent="Current: "+(isMenu?(menuOption(control.value)?.label??"unknown"):(isBoolean?booleanLabel(control.value):(control.value===null?"unknown":control.value)))+(isMenu?" · Default: "+(menuOption(control.default)?.label??"unavailable")+" · Available: "+control.menu.map(option=>option.label).join(", "):" · Default: "+defaultLabel+(control.min!==null&&control.max!==null?" · Range: "+control.min+"–"+control.max:""))+(control.writable?"":" · Currently unavailable");
 editor.className="row";editor.style.cssText="align-items:center;gap:.4rem;justify-content:flex-end";
 let input,output,isRange=false;
-if(isBoolean){input=document.createElement("input");input.type="checkbox";input.checked=Number(control.value)===1;input.disabled=!control.writable}
-else if(isMenu){input=document.createElement("select");for(const option of control.menu){const choice=document.createElement("option");choice.value=option.value;choice.textContent=option.label;input.append(choice)}input.value=String(control.value);input.disabled=!control.writable;input.style.maxWidth="10rem"}
-else if(control.type==="int"&&control.min!==null&&control.max!==null&&control.max-control.min<=10000){isRange=true;input=document.createElement("input");input.type="range";input.min=control.min;input.max=control.max;input.step=control.step;input.value=control.value??control.min;input.disabled=!control.writable;input.style.maxWidth="8rem";output=document.createElement("output");output.textContent=input.value;input.oninput=()=>{output.textContent=input.value;updateCameraControlDirtyState(control,input,applyButton)}}
-else{input=document.createElement("input");input.type="number";if(control.min!==null)input.min=control.min;if(control.max!==null)input.max=control.max;input.step=control.step;input.value=control.value??"";input.disabled=!control.writable;input.style.width="6rem"}
+if(isBoolean){input=document.createElement("input");input.type="checkbox";input.checked=Number(control.value)===1;input.indeterminate=control.value===null;input.disabled=!control.writable}
+else if(isMenu){input=document.createElement("select");if(control.value===null){const unknown=document.createElement("option");unknown.value="";unknown.textContent="Unknown";unknown.disabled=true;input.append(unknown)}for(const option of control.menu){const choice=document.createElement("option");choice.value=option.value;choice.textContent=option.label;input.append(choice)}input.value=control.value===null?"":String(control.value);input.disabled=!control.writable;input.style.maxWidth="10rem"}
+else if(control.type==="int"&&control.value!==null&&control.min!==null&&control.max!==null&&control.max-control.min<=10000){isRange=true;input=document.createElement("input");input.type="range";input.min=control.min;input.max=control.max;input.step=control.step;input.value=control.value;input.disabled=!control.writable;input.style.maxWidth="8rem";output=document.createElement("output");output.textContent=input.value;input.oninput=()=>{output.textContent=input.value;updateCameraControlDirtyState(control,input,applyButton)}}
+else{input=document.createElement("input");input.type="number";if(control.min!==null)input.min=control.min;if(control.max!==null)input.max=control.max;input.step=control.step;input.value=control.value??"";input.placeholder=control.value===null?"Unknown":"";input.disabled=!control.writable;input.style.width="6rem"}
 if(output)editor.append(input,output);else editor.append(input);
 if(control.writable&&!isRange)input.addEventListener("change",()=>updateCameraControlDirtyState(control,input,applyButton));
 heading.append(label,details);row.append(heading,editor);
@@ -260,7 +260,7 @@ const autoCheck=$("auto-check");autoCheck.checked=localStorage.getItem("petcam-a
 autoCheck.onchange=()=>localStorage.setItem("petcam-auto-update-check",String(autoCheck.checked));
 let updateAvailable=false,updateBusy=false;
 async function updateStatus(){try{const s=await request("/api/update/status");const wasBusy=updateBusy;updateBusy=s.active;$("update-state").textContent=s.active?"Installing…":s.result==="failed"?"Last install failed":s.result==="success"?"Installed":"Idle";$("update-logs").textContent=s.logs||"";if(!s.active&&wasBusy){updateBusy=false;await refreshSystemInfo();await checkUpdates()}$("install-update").disabled=!updateAvailable||s.active}catch(e){$("update-message").textContent=e.message}}
-async function checkUpdates(){const b=$("check-updates");b.disabled=true;$("update-message").textContent="Checking signed release metadata…";try{const d=await request("/api/update/check");updateAvailable=d.update_available;$("update-state").textContent=updateAvailable?"Update available":"Up to date";$("update-message").textContent=updateAvailable?"A verified application release is available. Review the notes before installing.":"This device is running the latest published PetCam application."; const releaseList=(d.releases||[]).map(r=>r.version+" · "+Math.ceil(r.archive_size/1048576)+" MiB"+(r.update_available?" · update":" · installed/current")+(r.release_notes?"\n"+r.release_notes:"")).join("\n\n");$("update-details").textContent="Installed: "+(d.installed_version||"unknown")+" · Newest valid: "+d.available_version+"\n\nRecent verified releases\n"+(releaseList||"No valid releases found.");$("install-update").disabled=!updateAvailable||updateBusy}catch(e){$("update-state").textContent="Check failed";$("update-message").textContent=e.message}finally{b.disabled=false}}
+async function checkUpdates(){const b=$("check-updates");b.disabled=true;$("update-message").textContent="Checking signed release metadata…";try{const d=await request("/api/update/check");updateAvailable=d.update_available;if(d.status==="no-complete-release"){$("update-state").textContent="No complete release";$("update-message").textContent="No complete signed PetCam release is currently available. Incomplete releases are skipped automatically; try again later."}else{$("update-state").textContent=updateAvailable?"Update available":"Up to date";$("update-message").textContent=updateAvailable?"A verified application release is available. Review the notes before installing.":"This device is running the latest published PetCam application."}const releaseList=(d.releases||[]).map(r=>r.version+" · "+Math.ceil(r.archive_size/1048576)+" MiB"+(r.update_available?" · update":" · installed/current")+(r.release_notes?"\n"+r.release_notes:"")).join("\n\n");$("update-details").textContent="Installed: "+(d.installed_version||"unknown")+" · Newest valid: "+(d.available_version||"none")+"\n\nRecent verified releases\n"+(releaseList||"No complete signed releases found.");$("install-update").disabled=!updateAvailable||updateBusy}catch(e){$("update-state").textContent="Check failed";$("update-message").textContent=e.message}finally{b.disabled=false}}
 $("check-updates").onclick=checkUpdates;
 async function installUpdate(){if(!updateAvailable||updateBusy)return;$("update-confirmation").hidden=true;$("install-update").disabled=true;$("check-updates").disabled=true;$("update-message").textContent="Starting verified update…";try{await request("/api/update/install",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});updateBusy=true;$("update-state").textContent="Installing…";$("update-message").textContent="The update is downloading and staging. This page may briefly disconnect while services restart.";const poll=async()=>{await updateStatus();if(updateBusy)setTimeout(poll,2000)};setTimeout(poll,1500)}catch(e){$("update-message").textContent=e.message;$("install-update").disabled=false}finally{$("check-updates").disabled=false}}
 $("install-update").onclick=()=>{if(!updateAvailable||updateBusy)return;$("update-confirmation").hidden=false;$("confirm-update-install").focus()};
@@ -435,26 +435,30 @@ def parse_v4l2_controls(output):
                     "label": menu_match.group("label"),
                 })
     for control in controls:
-        default = control["default"]
-        if default is None:
-            continue
         control_type = control["type"]
-        if control_type == "bool":
-            valid_default = default in (0, 1)
-        elif control_type in ("menu", "intmenu"):
-            valid_default = default in {option["value"] for option in control["menu"]}
-        elif control_type == "int":
-            minimum = control["min"]
-            maximum = control["max"]
-            step = control["step"]
-            valid_default = (
-                (minimum is None or default >= minimum)
-                and (maximum is None or default <= maximum)
-                and (minimum is None or (default - minimum) % step == 0)
-            )
-        else:
-            valid_default = True
-        if not valid_default:
+        menu_values = {option["value"] for option in control["menu"]}
+
+        def is_valid(value):
+            if value is None:
+                return False
+            if control_type == "bool":
+                return value in (0, 1)
+            if control_type in ("menu", "intmenu"):
+                return value in menu_values
+            if control_type == "int":
+                minimum = control["min"]
+                maximum = control["max"]
+                step = control["step"]
+                return (
+                    (minimum is None or value >= minimum)
+                    and (maximum is None or value <= maximum)
+                    and (minimum is None or (value - minimum) % step == 0)
+                )
+            return True
+
+        if not is_valid(control["value"]):
+            control["value"] = None
+        if not is_valid(control["default"]):
             control["default"] = None
     return controls
 
@@ -702,7 +706,7 @@ def stream_metrics_snapshot():
 
 def installed_version():
     """Read the VERSION file belonging to the active, resolved application release."""
-    version_file = Path(__file__).resolve().parent / "VERSION"
+    version_file = Path(__file__).resolve().parent.parent / "VERSION"
     try:
         version = version_file.read_text(encoding="utf-8").strip()
         return version or None
