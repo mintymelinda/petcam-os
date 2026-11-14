@@ -31,3 +31,12 @@ sudo /usr/bin/python3 /opt/petcam/current/lib/rtmp_output.py --check
 ```
 
 The publisher is not an audio encoder and sends video only. It does not provide a microphone or audio-input path.
+
+
+## Native CSI H.264 path
+
+When RTMP is enabled for a CSI camera, the camera service switches to Picamera2 and opens the sensor only once. A main-stream MJPEG encoder continues to serve the established HTTP MJPEG endpoint, while a lores H.264 encoder produces the configured RTMP dimensions. Picamera2 sends the encoded H.264 packets through a local MPEG-TS/UDP hop. The RTMP publisher uses FFmpeg stream copy to mux those packets into FLV, avoiding a decode/re-encode cycle.
+
+Picamera2 is installed from Raspberry Pi OS packages. Raspberry Pi 4 and earlier can use dedicated H.264/MJPEG encoder hardware; Raspberry Pi 5 uses FFmpeg software encoders. USB cameras remain on the existing MJPEG-to-FFmpeg path. If Picamera2 cannot start or the selected capture/RTMP frame rates are incompatible, PetCam falls back to the existing MJPEG publisher instead of taking down the camera preview.
+
+Saving RTMP settings restarts the camera capture service to add or remove the secondary encoder. The MJPEG preview and OBS stream URL do not change.

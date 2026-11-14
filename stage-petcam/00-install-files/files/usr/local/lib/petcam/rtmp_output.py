@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -147,13 +148,17 @@ def build_ffmpeg_command(config, input_url="http://127.0.0.1:8081/stream", nativ
     return command
 
 
-def native_h264_available(status_url="http://127.0.0.1:8081/status"):
-    try:
-        with urllib.request.urlopen(status_url, timeout=2) as response:
-            status = json.loads(response.read(65536))
-        return isinstance(status, dict) and status.get("native_h264") is True
-    except (OSError, ValueError, urllib.error.URLError):
-        return False
+def native_h264_available(status_url="http://127.0.0.1:8081/status", timeout=25):
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            with urllib.request.urlopen(status_url, timeout=2) as response:
+                status = json.loads(response.read(65536))
+            return isinstance(status, dict) and status.get("native_h264") is True
+        except (OSError, ValueError, urllib.error.URLError):
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.25)
 
 
 def main():

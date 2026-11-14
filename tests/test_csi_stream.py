@@ -10,6 +10,15 @@ SPEC.loader.exec_module(MODULE)
 
 
 class CSIStreamTests(unittest.TestCase):
+    def test_source_retains_camera_mode_for_picamera2_backend(self):
+        source = MODULE.CSIFrameSource(1, 640, 480, 30, 70)
+        self.assertEqual(source.camera, 1)
+        self.assertEqual(source.width, 640)
+        self.assertEqual(source.height, 480)
+        self.assertEqual(source.fps, 30)
+        self.assertFalse(source.native_h264)
+        self.assertFalse(source.stop_event.is_set())
+
     def test_extracts_concatenated_jpeg_frames(self):
         first = b"\xff\xd8first\xff\xd9"
         second = b"\xff\xd8second\xff\xd9"

@@ -33,6 +33,10 @@ def extract_jpeg_frames(buffer):
 
 class CSIFrameSource:
     def __init__(self, camera, width, height, fps, quality):
+        self.camera = camera
+        self.width = width
+        self.height = height
+        self.fps = fps
         self.command = [
             "rpicam-vid", "--camera", str(camera), "--timeout", "0",
             "--nopreview", "--codec", "mjpeg", "--width", str(width),
