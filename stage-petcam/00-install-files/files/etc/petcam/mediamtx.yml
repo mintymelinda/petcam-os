@@ -1,0 +1,29 @@
+logLevel: info
+logDestinations: [stdout]
+rtsp: yes
+rtspAddress: :8554
+rtmp: no
+hls: no
+webrtc: no
+srt: no
+api: no
+metrics: no
+pprof: no
+playback: no
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass:
+    ips: ["127.0.0.1", "::1"]
+    permissions:
+      - action: publish
+        path: petcam
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: read
+        path: petcam
+paths:
+  petcam:
+    source: publisher
