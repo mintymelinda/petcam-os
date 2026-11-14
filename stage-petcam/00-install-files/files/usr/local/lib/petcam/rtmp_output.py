@@ -211,7 +211,6 @@ def main():
     config = load_config()
     if not config["enabled"]:
         raise SystemExit("OBS output is disabled.")
-    rtsp_server = start_rtsp_server()
     native_h264 = native_h264_available()
     command = build_ffmpeg_command(config, native_h264=native_h264)
     if not native_h264:
@@ -225,6 +224,7 @@ def main():
         print(json.dumps({**public_config(config), "source": "native_h264" if native_h264 else "mjpeg_transcode",
                           "rtsp_url": "rtsp://<petcam-host>:8554/petcam"}))
         return
+    rtsp_server = start_rtsp_server()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     logging.info("Starting OBS RTSP feed using %s", "Picamera2 native H.264 stream copy" if native_h264 else config["encoder"])
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
