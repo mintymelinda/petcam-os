@@ -16,6 +16,8 @@ BASE = Path("/var/lib/petcam/timelapse")
 CONFIG = BASE / "config.json"
 STATE = BASE / "status.json"
 FRAMES = BASE / "frames"
+NETWORK_ROOT = Path("/mnt/petcam-network")
+NETWORK_FILESYSTEMS = {"cifs", "nfs", "nfs4"}
 DEFAULTS = {
     "enabled": False,
     "interval_seconds": 300,
@@ -60,12 +62,13 @@ def validate_config(values):
         if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
             raise ValueError(f"{key} must be an integer between {low} and {high}.")
     result["storage_path"] = str(result["storage_path"])
-    storage_root = Path("/var/lib/petcam").resolve()
     storage_path = Path(result["storage_path"])
+    allowed_roots = (Path("/var/lib/petcam").resolve(), NETWORK_ROOT.resolve())
     if not storage_path.is_absolute() or ".." in storage_path.parts:
-        raise ValueError("storage_path must be an absolute path inside /var/lib/petcam.")
-    if not storage_path.resolve().is_relative_to(storage_root):
-        raise ValueError("storage_path must remain inside /var/lib/petcam.")
+        raise ValueError("storage_path must be an absolute path inside /var/lib/petcam or /mnt/petcam-network.")
+    resolved_path = storage_path.resolve()
+    if not any(resolved_path.is_relative_to(root) for root in allowed_roots):
+        raise ValueError("storage_path must remain inside /var/lib/petcam or /mnt/petcam-network.")
     for key, low, high in (("max_width", 0, 4096), ("jpeg_quality", 0, 95)):
         value = result[key]
         if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
@@ -130,6 +133,26 @@ def jpeg_frames(response, chunk_size=4096):
                 break
             yield bytes(buffer[start:end + 2])
             del buffer[:end + 2]
+
+
+def uses_network_storage(directory):
+    return Path(directory).resolve().is_relative_to(NETWORK_ROOT.resolve())
+
+
+def network_storage_ready(mounts_path="/proc/mounts"):
+    """Return true only when the dedicated mountpoint is an active SMB/NFS mount."""
+    if not os.path.ismount(NETWORK_ROOT):
+        return False
+    try:
+        for line in Path(mounts_path).read_text(encoding="utf-8").splitlines():
+            fields = line.split()
+            if len(fields) >= 3:
+                mountpoint = fields[1].replace("\\040", " ").replace("\\011", "\\t")
+                if mountpoint == str(NETWORK_ROOT) and fields[2] in NETWORK_FILESYSTEMS:
+                    return True
+    except OSError:
+        return False
+    return False
 
 
 def storage_status(directory=None):
@@ -263,6 +286,11 @@ def run():
                 time.sleep(min(2, max(0.2, next_capture - time.monotonic())))
                 continue
             directory = Path(config["storage_path"])
+            if uses_network_storage(directory) and not network_storage_ready():
+                last_error = "Network storage is not mounted at /mnt/petcam-network; capture is paused to protect the SD card."
+                write_state({"state": "network_storage_unavailable", "last_error": last_error})
+                time.sleep(5)
+                continue
             prune_frames(config, directory)
             enough_space, free = _free_space_ok(config, directory)
             if not enough_space:
