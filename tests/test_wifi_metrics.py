@@ -17,7 +17,6 @@ class WifiMetricsTests(unittest.TestCase):
 
     def test_parses_wifi_signal_link_rates_frequency_and_retries(self):
         outputs = [
-            '[{"dev":"wlan0","gateway":"192.168.1.1"}]',
             "Connected to aa:bb:cc:dd:ee:ff\n\tfreq: 5180\n\tsignal: -57 dBm\n\trx bitrate: 433.3 MBit/s\n\ttx bitrate: 390.0 MBit/s\n",
             "Station aa:bb:cc:dd:ee:ff (on wlan0)\n\tsignal avg: -59 dBm\n\ttx retries: 12\n\ttx failed: 2\n",
             "Interface wlan0\n\ttype managed\n\tchannel 36 (5180 MHz)\n",
