@@ -98,7 +98,17 @@ def collect_network_performance() -> dict[str, Any]:
                 tx_mbps = round(max(0, tx_bytes - previous["tx_bytes"]) * 8 / elapsed / 1_000_000, 3)
         _PREVIOUS[interface] = {"at": now, "rx_bytes": rx_bytes, "tx_bytes": tx_bytes}
 
-        wifi: dict[str, Any] = {"connected": None}
+        wifi: dict[str, Any] = {
+            "connected": None,
+            "signal_dbm": None,
+            "signal_avg_dbm": None,
+            "frequency_mhz": None,
+            "channel": None,
+            "rx_bitrate_mbps": None,
+            "tx_bitrate_mbps": None,
+            "tx_retries": None,
+            "tx_failed": None,
+        }
         if wireless:
             link = _command(["/usr/sbin/iw", "dev", interface, "link"])
             station = _command(["/usr/sbin/iw", "dev", interface, "station", "dump"])
