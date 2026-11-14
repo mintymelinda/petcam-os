@@ -16,6 +16,7 @@ REQUIRED_FILES = (
     "manifest.json",
     "lib/camera.py",
     "lib/csi_stream.py",
+    "lib/rtmp_output.py",
     "lib/web_manager.py",
     "lib/web_auth.py",
     "lib/health_monitor.py",
@@ -29,7 +30,9 @@ REQUIRED_FILES = (
     "systemd/petcam-home-assistant.service",
     "systemd/petcam-timelapse.service",
     "systemd/petcam-motion.service",
+    "systemd/petcam-rtmp.service",
     "etc/petcam/home-assistant.conf",
+    "etc/petcam/rtmp.json",
     "lib/start-stream.sh",
     "vendor/bin/ustreamer",
 )
