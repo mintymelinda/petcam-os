@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import http.client
 """Small, dependency-free PetCam camera management HTTP interface."""
 import copy
 import json
@@ -635,7 +636,7 @@ def proxy_stream(handler, port):
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             # The downstream OBS/browser client has gone away.
             return
-        except (OSError, urllib.error.URLError, TimeoutError):
+        except (OSError, urllib.error.URLError, TimeoutError, http.client.HTTPException):
             # The upstream camera service is temporarily unavailable. Keep the
             # downstream socket open and retry with a bounded backoff.
             retry_delay = min(2.0, retry_delay * 1.7)
