@@ -45,7 +45,11 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn('id="release-notes"', MODULE.PAGE)
         self.assertIn('id="install-update" hidden disabled', MODULE.PAGE)
         self.assertIn('Stream FPS (RTMP)', MODULE.PAGE)
-        self.assertIn('Not configured', MODULE.PAGE)
+        self.assertIn("rtmp.enabled", MODULE.PAGE)
+        self.assertIn("rtmp.state", MODULE.PAGE)
+        self.assertIn('id="rtmp-output"', MODULE.PAGE)
+        self.assertIn('id="rtmp-server-url"', MODULE.PAGE)
+        self.assertIn('id="rtmp-stream-key" type="password"', MODULE.PAGE)
         self.assertIn('MJPEG delivered FPS', MODULE.PAGE)
         self.assertIn('Network Up / Down', MODULE.PAGE)
         self.assertIn('Wi-Fi signal', MODULE.PAGE)
@@ -55,6 +59,20 @@ class WebManagerTests(unittest.TestCase):
         self.assertNotIn('/api/streams', MODULE.PAGE)
         self.assertNotIn('change-password', MODULE.PAGE)
         self.assertNotIn('/api/password', MODULE.PAGE)
+
+    def test_rtmp_status_reports_measured_fps_from_private_runtime_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            status_file = Path(directory) / "rtmp-status.json"
+            status_file.write_text(json.dumps({
+                "state": "publishing", "active": True, "fps": 29.8, "updated_at": MODULE.time.time()
+            }))
+            with mock.patch.object(MODULE, "RTMP_STATUS_FILE", status_file), \
+                    mock.patch.object(MODULE, "load_rtmp_config", return_value={"enabled": True}), \
+                    mock.patch.object(MODULE.subprocess, "run", return_value=mock.Mock(returncode=0)):
+                status = MODULE.rtmp_status_snapshot()
+        self.assertTrue(status["active"])
+        self.assertEqual(status["state"], "publishing")
+        self.assertEqual(status["fps"], 29.8)
 
     def test_admin_reauthentication_uses_masked_password_dialog_not_prompt(self):
         self.assertIn('<dialog id="login-dialog"', MODULE.PAGE)
@@ -360,7 +378,11 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("if(livePreviewEnabled)", MODULE.PAGE)
         self.assertIn("MJPEG delivered FPS", MODULE.PAGE)
         self.assertIn("Stream FPS (RTMP)", MODULE.PAGE)
-        self.assertIn("Not configured", MODULE.PAGE)
+        self.assertIn("rtmp.enabled", MODULE.PAGE)
+        self.assertIn("rtmp.state", MODULE.PAGE)
+        self.assertIn('id="rtmp-output"', MODULE.PAGE)
+        self.assertIn('id="rtmp-server-url"', MODULE.PAGE)
+        self.assertIn('id="rtmp-stream-key" type="password"', MODULE.PAGE)
         self.assertIn('id="live-preview"', MODULE.PAGE)
         self.assertIn("saved camera settings are selected", MODULE.PAGE)
 

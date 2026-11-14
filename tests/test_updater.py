@@ -172,20 +172,29 @@ class UpdateArchiveTests(unittest.TestCase):
             (release / "systemd/petcam-home-assistant.service").write_text("[Service]\nExecStart=petcam\n")
             (release / "systemd/petcam-timelapse.service").write_text("[Service]\nExecStart=timelapse\n")
             (release / "systemd/petcam-motion.service").write_text("[Service]\nExecStart=motion\n")
+            (release / "systemd/petcam-rtmp.service").write_text("[Service]\nExecStart=rtmp\n")
             (release / "etc/petcam/home-assistant.conf").write_text("MQTT_ENABLED=false\n")
+            (release / "etc/petcam/rtmp.json").write_text("{\"enabled\":false}\n")
             config_path = etc_root / "petcam/home-assistant.conf"
             config_path.parent.mkdir(parents=True)
             config_path.write_text("MQTT_ENABLED=true\nMQTT_PASSWORD=preserve-me\n")
+            rtmp_config_path = etc_root / "petcam/rtmp.json"
+            rtmp_config_path.write_text("{\"enabled\":true,\"stream_key\":\"keep-this-secret\"}\n")
             with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=1000)), \
-                    mock.patch("updater.os.geteuid", return_value=1000):
+                    mock.patch("updater.pwd.getpwnam", return_value=mock.Mock(pw_uid=1001)), \
+                    mock.patch("updater.os.chown") as chown, \
+                    mock.patch("updater.os.geteuid", return_value=0):
                 install_runtime_integration_files(release, etc_root)
+            chown.assert_any_call(rtmp_config_path, 1001, 1000)
             self.assertEqual(
                 (etc_root / "systemd/system/petcam-home-assistant.service").read_text(),
                 "[Service]\nExecStart=petcam\n",
             )
             self.assertEqual(config_path.read_text(), "MQTT_ENABLED=true\nMQTT_PASSWORD=preserve-me\n")
+            self.assertEqual(rtmp_config_path.read_text(), "{\"enabled\":true,\"stream_key\":\"keep-this-secret\"}\n")
             self.assertEqual((etc_root / "systemd/system/petcam-timelapse.service").read_text(), "[Service]\nExecStart=timelapse\n")
             self.assertEqual((etc_root / "systemd/system/petcam-motion.service").read_text(), "[Service]\nExecStart=motion\n")
+            self.assertEqual((etc_root / "systemd/system/petcam-rtmp.service").read_text(), "[Service]\nExecStart=rtmp\n")
             self.assertEqual(config_path.stat().st_mode & 0o777, 0o640)
 
     def test_installs_default_home_assistant_config_when_missing(self):
@@ -197,17 +206,24 @@ class UpdateArchiveTests(unittest.TestCase):
             (release / "systemd/petcam-home-assistant.service").write_text("[Service]\n")
             (release / "systemd/petcam-timelapse.service").write_text("[Service]\n")
             (release / "systemd/petcam-motion.service").write_text("[Service]\n")
+            (release / "systemd/petcam-rtmp.service").write_text("[Service]\n")
             (release / "etc/petcam/home-assistant.conf").write_text("MQTT_ENABLED=false\n")
+            (release / "etc/petcam/rtmp.json").write_text("{\"enabled\":false}\n")
             with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=1000)), \
                     mock.patch("updater.os.geteuid", return_value=1000):
                 install_runtime_integration_files(release, root / "etc")
             config = root / "etc/petcam/home-assistant.conf"
             self.assertEqual(config.read_text(), "MQTT_ENABLED=false\n")
             self.assertEqual(config.stat().st_mode & 0o777, 0o640)
+            rtmp_config = root / "etc/petcam/rtmp.json"
+            self.assertEqual(rtmp_config.read_text(), "{\"enabled\":false}\n")
+            self.assertEqual(rtmp_config.stat().st_mode & 0o777, 0o640)
 
-    def test_restart_services_restarts_optional_mqtt_only_when_active(self):
+    def test_restart_services_restarts_optional_workers_only_when_active(self):
         results = [
             mock.Mock(returncode=0, stderr=""),
+            mock.Mock(returncode=0, stderr=""),
+            mock.Mock(returncode=0),
             mock.Mock(returncode=0, stderr=""),
             mock.Mock(returncode=0),
             mock.Mock(returncode=0, stderr=""),
@@ -218,8 +234,8 @@ class UpdateArchiveTests(unittest.TestCase):
         ]
         with mock.patch("updater.subprocess.run", side_effect=results) as run:
             self.assertEqual(restart_services(), "")
-        self.assertEqual(run.call_count, 8)
-        self.assertEqual(run.call_args_list[-1].args[0], ["systemctl", "restart", "petcam-motion.service"])
+        self.assertEqual(run.call_count, 10)
+        self.assertEqual(run.call_args_list[-1].args[0], ["systemctl", "restart", "petcam-rtmp.service"])
 
     def test_validates_required_release_files_and_embedded_version(self):
         files = {
@@ -227,6 +243,7 @@ class UpdateArchiveTests(unittest.TestCase):
             "manifest.json": json.dumps({"application": "petcam-os", "version": "1.2.3"}).encode(),
             "lib/camera.py": b"# camera",
             "lib/csi_stream.py": b"# csi",
+            "lib/rtmp_output.py": b"# rtmp",
             "lib/web_manager.py": b"# web",
             "lib/web_auth.py": b"# authentication",
             "lib/health_monitor.py": b"# health monitor",
@@ -240,7 +257,9 @@ class UpdateArchiveTests(unittest.TestCase):
             "systemd/petcam-home-assistant.service": b"[Service]\nExecStart=/usr/bin/python3 /opt/petcam/current/lib/home_assistant.py\n",
             "systemd/petcam-timelapse.service": b"[Service]\nExecStart=/usr/bin/python3 /opt/petcam/current/lib/timelapse.py\n",
             "systemd/petcam-motion.service": b"[Service]\nExecStart=/usr/bin/python3 /opt/petcam/current/lib/motion_detection.py\n",
+            "systemd/petcam-rtmp.service": b"[Service]\nExecStart=/usr/bin/python3 /opt/petcam/current/lib/rtmp_output.py\n",
             "etc/petcam/home-assistant.conf": b"MQTT_ENABLED=false\n",
+            "etc/petcam/rtmp.json": b"{\"enabled\":false}\n",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"binary",
         }

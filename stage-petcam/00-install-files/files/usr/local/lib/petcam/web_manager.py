@@ -24,12 +24,14 @@ from wifi_metrics import collect_network_performance
 from timelapse import load_config as load_timelapse_config, save_config as save_timelapse_config, state_snapshot as timelapse_snapshot
 from motion_detection import load_config as load_motion_config, save_config as save_motion_config, state_snapshot as motion_snapshot, FRAMES as MOTION_FRAMES
 from light_sensor import load_config as load_light_config, save_config as save_light_config, read_status as light_sensor_status
+from rtmp_output import load_config as load_rtmp_config, save_config as save_rtmp_config, public_config as public_rtmp_config
 from web_auth import SESSION_TTL, get_session, initialize_password, invalidate_session, is_configured, new_session, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
 TLS_CERT = Path("/etc/petcam/web-manager.crt")
 TLS_KEY = Path("/etc/petcam/web-manager.key")
 HEALTH_FILE = Path("/var/lib/petcam/health.json")
+RTMP_STATUS_FILE = Path("/run/petcam/rtmp-status.json")
 _login_attempts = {}
 _login_lock = threading.Lock()
 _STREAM_METRICS_LOCK = threading.Lock()
@@ -115,6 +117,17 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <label style="display:flex;gap:.5rem;align-items:center"><input id="auto-check" type="checkbox"> Check automatically when opening this page</label>
 <details><summary>Update details and diagnostics</summary><p id="update-details" class="muted">No update information yet.</p><pre id="update-logs" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
 </section></section>
+<section id="rtmp-output"><h2>RTMP Output</h2>
+<p class="muted">Optional publishing to an RTMP/RTMPS destination. This runs as a separate service and reuses the existing local MJPEG camera feed; it does not change the browser preview or OBS feed. Encoding adds CPU load. Start with a conservative resolution and bitrate on smaller Raspberry Pi models.</p>
+<label style="display:flex;gap:.5rem;align-items:center"><input id="rtmp-enabled" type="checkbox"> Enable RTMP publishing</label>
+<label for="rtmp-server-url">RTMP server URL</label><input id="rtmp-server-url" type="url" placeholder="rtmps://live.example.com/app" autocomplete="off">
+<label for="rtmp-stream-key">Stream key</label><input id="rtmp-stream-key" type="password" placeholder="Leave blank to keep the saved key" autocomplete="new-password">
+<label for="rtmp-encoder">Video encoder</label><select id="rtmp-encoder"><option value="libx264">Software H.264 (libx264)</option><option value="h264_v4l2m2m">Hardware H.264 (V4L2 M2M, if supported)</option></select>
+<div class="camera-select-grid"><div><label for="rtmp-resolution">Output resolution</label><select id="rtmp-resolution"><option value="640x360">640 × 360</option><option value="854x480">854 × 480</option><option value="960x540">960 × 540</option><option value="1280x720">1280 × 720</option></select></div><div><label for="rtmp-fps">Output FPS</label><select id="rtmp-fps"><option value="15">15</option><option value="10">10</option><option value="25">25</option><option value="30">30</option></select></div></div>
+<label for="rtmp-bitrate">Video bitrate (Kbps)</label><input id="rtmp-bitrate" type="number" min="250" max="12000" step="250" value="750">
+<p id="rtmp-status" class="muted" role="status">Checking RTMP output…</p>
+<div class="row"><button id="save-rtmp" type="button">Save RTMP settings</button><button id="refresh-rtmp" type="button">Refresh status</button></div>
+</section>
 <section><h2>Stream Health</h2><div id="system-health-grid" class="stats-grid"><p class="muted">Waiting for telemetry…</p></div><p id="statistics-updated" class="muted" role="status">Collecting system statistics…</p><div id="frame-statistics" hidden></div><div id="viewer-statistics" hidden></div><div id="network-statistics" hidden></div><button id="refresh-statistics" type="button">Refresh</button></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Stream health</h2><button id="refresh-health">Refresh</button></div><p id="health-state" role="status">Checking stream health…</p><p id="health-reason" class="muted"></p><small id="health-details" class="muted"></small></section><section><div class="row" style="justify-content:space-between;align-items:center"><h2>Network and OBS diagnostics</h2><button id="refresh-diagnostics">Run checks</button></div><p id="diagnostic-summary" role="status">Diagnostics have not been run yet.</p><p id="diagnostic-details" class="muted"></p><div class="row"><button id="download-support-bundle">Download redacted support bundle</button></div></section><section><div class="row" style="justify-content:space-between;align-items:center"><h2>Ambient light sensor</h2><button id="refresh-light-sensor" type="button">Refresh status</button></div>
 <p id="light-sensor-status" role="status">Loading light sensor status…</p>
@@ -156,6 +169,7 @@ for(const button of tabButtons){
   });
 }
 activateTab("camera");
+refreshRTMP();
 
 function modesFor(camera){return camera.kind==="usb"?camera.modes.filter(m=>["MJPG","MJPEG","JPEG","YUYV","YVYU","UYVY","YUV420","YVU420","RGB565","RGB24","GREY"].includes(m.format)):camera.modes}
 function projectedPixelRate(mode){return mode.width*mode.height*mode.fps}
@@ -168,8 +182,12 @@ function renderCaptureStatus(){const fps=Number(captureStatus.latest_captured_fp
 async function refreshLiveStatus(){try{const d=await request("/api/live-status");refreshStatistics(d);captureStatus=d.capture_status||{};renderCaptureStatus();const updated=new Date(d.capture_status_updated_at*1000);$("capture-status-freshness").textContent="Capture status refreshes every 5 seconds · last updated "+updated.toLocaleTimeString()}catch(error){$("capture-status-freshness").textContent="Live status unavailable: "+error.message}}
 let livePreviewEnabled=localStorage.getItem("petcam-preview-enabled")!=="false";function setLivePreviewEnabled(enabled){livePreviewEnabled=enabled;const preview=$("live-preview");if(enabled){preview.src="/stream?client=dashboard-preview&refresh="+Date.now();preview.hidden=false;$("preview-disabled").hidden=true;$("toggle-live-preview").checked=true}else{preview.removeAttribute("src");preview.hidden=true;$("preview-disabled").hidden=false;$("toggle-live-preview").checked=false}localStorage.setItem("petcam-preview-enabled",String(enabled))}$("toggle-live-preview").onchange=()=>setLivePreviewEnabled($("toggle-live-preview").checked);setLivePreviewEnabled(livePreviewEnabled);function refreshLivePreview(){if(livePreviewEnabled){const preview=$("live-preview");preview.src="/stream?client=dashboard-preview&refresh="+Date.now()}}
 async function refreshSystemInfo(){try{const data=await request("/api/system");$("installed-version").textContent="Installed version: "+(data.installed_version||"unknown")}catch(error){$("installed-version").textContent="Installed version unavailable: "+error.message}}
+
+async function refreshRTMP(){try{const data=await request("/api/rtmp"),config=data.config||{};$("rtmp-enabled").checked=!!config.enabled;$("rtmp-server-url").value=config.server_url||"";$("rtmp-stream-key").value="";$("rtmp-stream-key").placeholder=config.stream_key_configured?"Saved key retained; enter a new key to replace it":"Enter stream key";$("rtmp-encoder").value=config.encoder||"libx264";$("rtmp-resolution").value=String(config.width||640)+"x"+String(config.height||360);$("rtmp-fps").value=String(config.fps||15);$("rtmp-bitrate").value=String(config.bitrate_kbps||750);$("rtmp-status").textContent=!data.status?.ffmpeg_available?"FFmpeg is missing. Install it with sudo apt-get install ffmpeg.":data.status?.active?"RTMP publisher is running.":("RTMP publisher: "+(data.status?.state||"stopped")+".")}catch(error){$("rtmp-status").textContent="RTMP status unavailable: "+error.message}}
+async function saveRTMP(){const [width,height]=$("rtmp-resolution").value.split("x").map(Number);const data={enabled:$("rtmp-enabled").checked,server_url:$("rtmp-server-url").value.trim(),stream_key:$("rtmp-stream-key").value,encoder:$("rtmp-encoder").value,width,height,fps:Number($("rtmp-fps").value),bitrate_kbps:Number($("rtmp-bitrate").value)};$("save-rtmp").disabled=true;$("rtmp-status").textContent="Saving settings…";try{const result=await request("/api/rtmp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});$("rtmp-stream-key").value="";$("rtmp-stream-key").placeholder=result.config.stream_key_configured?"Saved key retained; enter a new key to replace it":"Enter stream key";$("rtmp-status").textContent=result.status?.active?"Settings saved; RTMP publisher started.":("Settings saved; RTMP publisher: "+(result.status?.state||"stopped")+".")}catch(error){$("rtmp-status").textContent="Unable to save RTMP settings: "+error.message}finally{$("save-rtmp").disabled=false}}
+$("save-rtmp").onclick=saveRTMP;$("refresh-rtmp").onclick=refreshRTMP;
 function renderStatCards(root,items){root.replaceChildren();for(const [label,value] of items){const card=document.createElement("div"),name=document.createElement("small"),reading=document.createElement("strong");card.style.cssText="background:#1a1d22;border:1px solid #383e47;border-radius:8px;padding:.7rem;min-width:0";name.className="muted";name.textContent=label;reading.style.cssText="display:block;font-size:1.05rem;overflow-wrap:anywhere;margin-top:.2rem";reading.textContent=value===null||value===undefined||value===""?"Not available":String(value);card.append(name,reading);root.append(card)}}
-async function refreshStatistics(data=null){try{const d=data||await request("/api/live-status"),capture=d.capture_status||{},stream=d.stream_metrics||{},network=d.network_status||{},clients=stream.clients||[],system=d.system_metrics||{},wifi=network.wifi||{};const fps=capture.latest_captured_fps,delivered=clients.length?Math.max(...clients.map(client=>Number(client.average_fps||client.window_fps||0))):null,signal=wifi.signal_dbm;const bars=!wifi.connected?0:signal===null||signal===undefined?null:signal>=-50?5:signal>=-60?4:signal>=-67?3:signal>=-75?2:1;const labels=["none","weak","poor","good","excellent"];const reception=bars===null?"unknown":labels[bars];const metrics=[["Camera FPS",fps?Number(fps).toFixed(1):"Not reported"],["Stream FPS (RTMP)","Not configured"],["MJPEG delivered FPS (forwarded JPEG FPS)",delivered===null?"No active viewers":delivered.toFixed(1)],["Wi-Fi signal",reception+(signal===null||signal===undefined?"":" · "+signal+" dBm")+" · "+(bars===null?"—":"▮".repeat(bars)+"▯".repeat(5-bars))],["CPU",system.cpu_percent===null||system.cpu_percent===undefined?"Not available":Number(system.cpu_percent).toFixed(1)+"%"],["Memory",system.memory_used_mb===undefined?"Not available":system.memory_used_mb+" / "+system.memory_total_mb+" MiB"],["Network Up / Down",network.tx_mbps===undefined?"Not available":Number(network.tx_mbps).toFixed(2)+" / "+Number(network.rx_mbps||0).toFixed(2)+" Mbps"]];renderStatCards($("system-health-grid"),metrics);$("statistics-updated").textContent="Updated "+new Date(d.capture_status_updated_at*1000).toLocaleTimeString()+" · RTMP output is not configured; MJPEG delivery is measured separately."}catch(error){$("statistics-updated").textContent="Statistics unavailable: "+error.message}}
+async function refreshStatistics(data=null){try{const d=data||await request("/api/live-status"),capture=d.capture_status||{},stream=d.stream_metrics||{},network=d.network_status||{},clients=stream.clients||[],system=d.system_metrics||{},wifi=network.wifi||{};const fps=capture.latest_captured_fps,delivered=clients.length?Math.max(...clients.map(client=>Number(client.average_fps||client.window_fps||0))):null,signal=wifi.signal_dbm,rtmp=d.rtmp_output_status||{};const bars=!wifi.connected?0:signal===null||signal===undefined?null:signal>=-50?5:signal>=-60?4:signal>=-67?3:signal>=-75?2:1;const labels=["none","weak","poor","good","excellent"];const reception=bars===null?"unknown":labels[bars];const metrics=[["Camera FPS",fps?Number(fps).toFixed(1):"Not reported"],["Stream FPS (RTMP)",rtmp.active&&rtmp.fps!==null&&rtmp.fps!==undefined&&Number.isFinite(Number(rtmp.fps))?Number(rtmp.fps).toFixed(1):rtmp.enabled?(rtmp.state==="stalled"?"No recent output telemetry":rtmp.state):"Disabled"],["MJPEG delivered FPS (forwarded JPEG FPS)",delivered===null?"No active viewers":delivered.toFixed(1)],["Wi-Fi signal",reception+(signal===null||signal===undefined?"":" · "+signal+" dBm")+" · "+(bars===null?"—":"▮".repeat(bars)+"▯".repeat(5-bars))],["CPU",system.cpu_percent===null||system.cpu_percent===undefined?"Not available":Number(system.cpu_percent).toFixed(1)+"%"],["Memory",system.memory_used_mb===undefined?"Not available":system.memory_used_mb+" / "+system.memory_total_mb+" MiB"],["Network Up / Down",network.tx_mbps===undefined?"Not available":Number(network.tx_mbps).toFixed(2)+" / "+Number(network.rx_mbps||0).toFixed(2)+" Mbps"]];renderStatCards($("system-health-grid"),metrics);$("statistics-updated").textContent="Updated "+new Date(d.capture_status_updated_at*1000).toLocaleTimeString()+" · RTMP output: "+(rtmp.enabled?(rtmp.state||"starting"):"disabled")+"; MJPEG delivery is measured separately."}catch(error){$("statistics-updated").textContent="Statistics unavailable: "+error.message}}
 $("refresh-statistics").onclick=refreshStatistics;
 async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;activeConfig=d.active_config;captureStatus=d.capture_status||{};$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});const activeIndex=inventory.findIndex(c=>activeCameraMatches(c,activeConfig));if(activeIndex>=0){$("camera").value=String(activeIndex);$("camera").options[activeIndex].textContent+=" · current"}if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{const selected=activeIndex>=0?activeConfig:null;const selectedCamera=activeIndex>=0?inventory[activeIndex]:null;const currentResolution=selected&&selected.RESOLUTION!=="auto"?selected.RESOLUTION:captureStatus.active_resolution;const currentFps=selected&&selected.FPS!=="auto"?Number(selected.FPS):Number(captureStatus.latest_captured_fps);let currentFormat=selected&&selected.FORMAT!=="auto"?selected.FORMAT:(captureStatus.active_capture_format||"CSI");if(currentFormat==="MJPEG"||currentFormat==="JPEG")currentFormat="MJPG";if(selectedCamera?.kind==="csi")currentFormat="CSI";const preferred=currentResolution&&currentResolution!=="auto"&&Number.isFinite(currentFps)&&currentFps>0?{width:Number(currentResolution.split("x")[0]),height:Number(currentResolution.split("x")[1]),fps:currentFps,format:currentFormat}:null;$("message").textContent=inventory.length+" camera(s) found. Current saved camera settings are selected.";fillModes(preferred)}renderCaptureStatus();await refreshCameraControls()}catch(e){$("message").textContent=e.message}}
 
@@ -1019,10 +1037,17 @@ class Handler(BaseHTTPRequestHandler):
                 "stream_metrics": stream_metrics_snapshot(),
                 "network_status": collect_network_performance(),
                 "system_metrics": system_resource_metrics(),
+                "rtmp_output_status": rtmp_status_snapshot(),
             })
             return
         if path == "/api/system":
             self.send_json(200, {"installed_version": installed_version()})
+            return
+        if path == "/api/rtmp":
+            try:
+                self.send_json(200, {"config": public_rtmp_config(load_rtmp_config()), "status": rtmp_status_snapshot()})
+            except Exception as error:
+                self.send_json(503, {"error": str(error)})
             return
         if path == "/api/health":
             try:
@@ -1140,6 +1165,26 @@ class Handler(BaseHTTPRequestHandler):
                 updated = save_light_config(data)
                 self.send_json(200, {"ok": True, "config": updated})
                 return
+            if path == "/api/rtmp":
+                if data.get("enabled") and not Path("/usr/bin/ffmpeg").is_file():
+                    raise RuntimeError("FFmpeg is not installed. Run sudo apt-get update && sudo apt-get install ffmpeg, then save these settings again.")
+                current = load_rtmp_config()
+                was_active = subprocess.run(
+                    ["systemctl", "is-active", "--quiet", "petcam-rtmp.service"],
+                    check=False, timeout=5,
+                ).returncode == 0
+                if not data.get("stream_key"):
+                    data["stream_key"] = current["stream_key"]
+                updated = save_rtmp_config({**current, **data})
+                action = ("restart" if was_active else "enable") if updated["enabled"] else "disable"
+                result = subprocess.run(
+                    ["sudo", "/usr/local/sbin/petcam-rtmp-service", action],
+                    capture_output=True, text=True, timeout=30, check=False,
+                )
+                if result.returncode:
+                    raise RuntimeError(result.stderr.strip() or "Unable to update RTMP service state.")
+                self.send_json(200, {"ok": True, "config": public_rtmp_config(updated), "status": rtmp_status_snapshot()})
+                return
             if path == "/api/logout":
                 invalidate_session(_cookie(self))
                 self.send_json(200, {"ok": True}, {
@@ -1177,6 +1222,32 @@ class StreamHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         pass
+
+
+def rtmp_status_snapshot():
+    config = load_rtmp_config()
+    active_service = subprocess.run(
+        ["systemctl", "is-active", "--quiet", "petcam-rtmp.service"],
+        check=False, timeout=5,
+    ).returncode == 0
+    status = {}
+    try:
+        status = json.loads(RTMP_STATUS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+    updated_at = status.get("updated_at")
+    fresh = isinstance(updated_at, (int, float)) and time.time() - updated_at <= 10
+    state = status.get("state", "starting") if active_service else "stopped"
+    if active_service and updated_at is not None and not fresh:
+        state = "stalled"
+    return {
+        "enabled": config["enabled"],
+        "ffmpeg_available": Path("/usr/bin/ffmpeg").is_file(),
+        "active": active_service and state == "publishing",
+        "state": state,
+        "fps": status.get("fps") if fresh else None,
+        "updated_at": updated_at,
+    }
 
 
 def health_monitor_loop():
