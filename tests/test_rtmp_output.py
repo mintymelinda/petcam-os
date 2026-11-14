@@ -64,7 +64,7 @@ class RTMPOutputTests(unittest.TestCase):
         self.assertIn("http://127.0.0.1:8081/stream", command)
         self.assertIn("mpjpeg", command)
         self.assertIn("libx264", command)
-        self.assertEqual(command[-2:], ["-f", "flv"])
+        self.assertEqual(command[-3:-1], ["-f", "flv"])
         self.assertEqual(command[-1], "rtmps://live.example.test/app/secret-stream-key")
 
     def test_disabled_output_cannot_build_publisher_command(self):
