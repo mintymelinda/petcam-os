@@ -62,7 +62,7 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <label for="mode">Capture mode</label><select id="mode"></select>
 <div class="row" style="margin-top:1rem"><button id="apply">Apply selected camera and mode</button></div>
 <p class="muted">Only advertised camera modes are offered.</p></section>
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera controls</h2><button id="refresh-camera-controls" type="button">Refresh controls</button></div>
+<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera controls</h2><div class="row" style="gap:.5rem"><button id="apply-camera-controls" type="button" disabled>Apply changes</button><button id="refresh-camera-controls" type="button">Refresh</button></div></div>
 <p id="camera-controls-status" class="muted" role="status">Controls for the active camera will appear here.</p>
 <p class="muted">Controls are discovered from the connected camera. Some settings may be unavailable while automatic modes are active. Dynamic framerate can reduce the actual captured FPS when enabled.</p>
 <div id="camera-controls-list" class="muted">No camera controls loaded.</div></section>
@@ -167,33 +167,59 @@ function refreshLivePreview(){const preview=$("live-preview");preview.src="/stre
 async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;activeConfig=d.active_config;captureStatus=d.capture_status||{};$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});const activeIndex=inventory.findIndex(c=>activeCameraMatches(c,activeConfig));if(activeIndex>=0){$("camera").value=String(activeIndex);$("camera").options[activeIndex].textContent+=" · current"}if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{const selected=activeIndex>=0?activeConfig:null;const selectedCamera=activeIndex>=0?inventory[activeIndex]:null;const currentResolution=selected&&selected.RESOLUTION!=="auto"?selected.RESOLUTION:captureStatus.active_resolution;const currentFps=selected&&selected.FPS!=="auto"?Number(selected.FPS):Number(captureStatus.latest_captured_fps);let currentFormat=selected&&selected.FORMAT!=="auto"?selected.FORMAT:(captureStatus.active_capture_format||"CSI");if(currentFormat==="MJPEG"||currentFormat==="JPEG")currentFormat="MJPG";if(selectedCamera?.kind==="csi")currentFormat="CSI";const preferred=currentResolution&&currentResolution!=="auto"&&Number.isFinite(currentFps)&&currentFps>0?{width:Number(currentResolution.split("x")[0]),height:Number(currentResolution.split("x")[1]),fps:currentFps,format:currentFormat}:null;$("message").textContent=inventory.length+" camera(s) found. Current saved camera settings are selected.";fillModes(preferred)}renderCaptureStatus();await refreshCameraControls()}catch(e){$("message").textContent=e.message}}
 
 function cameraControlLabel(name){const labels={auto_exposure:"Auto exposure",exposure_time_absolute:"Exposure time",exposure_dynamic_framerate:"Dynamic framerate",white_balance_automatic:"Automatic white balance",white_balance_temperature:"White balance temperature",power_line_frequency:"Power-line frequency",backlight_compensation:"Backlight compensation",focus_automatic_continuous:"Continuous autofocus",focus_absolute:"Focus"};return labels[name]||name.replaceAll("_"," ").replace(/\b\w/g,letter=>letter.toUpperCase())}
+const pendingCameraControlChanges=new Map();
+function updateCameraControlDirtyState(control,input,applyButton){
+const value=control.type==="bool"?(input.checked?1:0):Number(input.value),original=Number(control.value);
+if(control.value!==null&&Number.isFinite(original)&&value===original)pendingCameraControlChanges.delete(control.name);
+else pendingCameraControlChanges.set(control.name,value);
+applyButton.disabled=pendingCameraControlChanges.size===0
+}
+async function applyCameraControlChanges(){
+const button=$("apply-camera-controls"),status=$("camera-controls-status");
+if(!pendingCameraControlChanges.size)return;
+button.disabled=true;status.textContent="Applying camera control changes…";
+try{
+for(const [name,value] of pendingCameraControlChanges){
+await request("/api/camera-controls",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,value})});
+pendingCameraControlChanges.delete(name)
+}
+status.textContent="Camera controls updated.";await refreshCameraControls()
+}catch(error){
+status.textContent="Could not apply all camera controls: "+error.message;
+button.disabled=pendingCameraControlChanges.size===0
+}
+}
 async function refreshCameraControls(){
-const root=$("camera-controls-list"),status=$("camera-controls-status");root.replaceChildren();status.textContent="Reading active camera controls…";
+const root=$("camera-controls-list"),status=$("camera-controls-status"),applyButton=$("apply-camera-controls");
+pendingCameraControlChanges.clear();applyButton.disabled=true;root.replaceChildren();
+root.style.cssText="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:.45rem";
+status.textContent="Reading active camera controls…";
 try{
 const data=await request("/api/camera-controls");
 if(!data.supported){status.textContent=data.message||"Camera controls are unavailable.";root.textContent="";return}
 status.textContent="Controls for "+data.label+" · "+data.device;
 if(!data.controls.length){root.textContent="This camera did not report any controls.";return}
 for(const control of data.controls){
-const row=document.createElement("div"),label=document.createElement("label"),details=document.createElement("small"),editor=document.createElement("div"),apply=document.createElement("button");
-row.style.cssText="border-top:1px solid #383e47;padding:.65rem 0";
-label.textContent=cameraControlLabel(control.name);details.className="muted";details.style.display="block";
+const row=document.createElement("div"),heading=document.createElement("div"),label=document.createElement("label"),details=document.createElement("small"),editor=document.createElement("div");
+row.style.cssText="border:1px solid #383e47;border-radius:.5rem;padding:.45rem .6rem;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.2rem .65rem;align-items:center";
+heading.style.minWidth="0";label.style.margin="0";label.textContent=cameraControlLabel(control.name);details.className="muted";details.style.cssText="display:block;font-size:.78rem;line-height:1.25";
 const isMenu=control.type==="menu"||control.type==="intmenu",isBoolean=control.type==="bool",menuOption=value=>control.menu.find(option=>option.value===value),booleanLabel=value=>value===null?"unknown":Number(value)===1?"Enabled":"Disabled";
 details.textContent="Current: "+(isMenu?(menuOption(control.value)?.label??"unknown"):(isBoolean?booleanLabel(control.value):(control.value===null?"unknown":control.value)))+(isMenu?(menuOption(control.default)?" · Default: "+menuOption(control.default).label:"")+" · Available: "+control.menu.map(option=>option.label).join(", "):(control.default!==null?" · Default: "+(isBoolean?booleanLabel(control.default):control.default):"")+(control.min!==null&&control.max!==null?" · Range: "+control.min+"–"+control.max:""))+(control.writable?"":" · Currently unavailable");
-editor.className="row";editor.style.alignItems="center";
-let input,output;
-if(control.type==="bool"){input=document.createElement("input");input.type="checkbox";input.checked=Number(control.value)===1;input.disabled=!control.writable}
-else if(control.type==="menu"||control.type==="intmenu"){input=document.createElement("select");for(const option of control.menu){const choice=document.createElement("option");choice.value=option.value;choice.textContent=option.label;input.append(choice)}input.value=String(control.value);input.disabled=!control.writable}
-else if(control.type==="int"&&control.min!==null&&control.max!==null&&control.max-control.min<=10000){input=document.createElement("input");input.type="range";input.min=control.min;input.max=control.max;input.step=control.step;input.value=control.value??control.min;input.disabled=!control.writable;output=document.createElement("output");output.textContent=input.value;input.oninput=()=>output.textContent=input.value}
-else{input=document.createElement("input");input.type="number";if(control.min!==null)input.min=control.min;if(control.max!==null)input.max=control.max;input.step=control.step;input.value=control.value??"";input.disabled=!control.writable}
+editor.className="row";editor.style.cssText="align-items:center;gap:.4rem;justify-content:flex-end";
+let input,output,isRange=false;
+if(isBoolean){input=document.createElement("input");input.type="checkbox";input.checked=Number(control.value)===1;input.disabled=!control.writable}
+else if(isMenu){input=document.createElement("select");for(const option of control.menu){const choice=document.createElement("option");choice.value=option.value;choice.textContent=option.label;input.append(choice)}input.value=String(control.value);input.disabled=!control.writable;input.style.maxWidth="10rem"}
+else if(control.type==="int"&&control.min!==null&&control.max!==null&&control.max-control.min<=10000){isRange=true;input=document.createElement("input");input.type="range";input.min=control.min;input.max=control.max;input.step=control.step;input.value=control.value??control.min;input.disabled=!control.writable;input.style.maxWidth="8rem";output=document.createElement("output");output.textContent=input.value;input.oninput=()=>{output.textContent=input.value;updateCameraControlDirtyState(control,input,applyButton)}}
+else{input=document.createElement("input");input.type="number";if(control.min!==null)input.min=control.min;if(control.max!==null)input.max=control.max;input.step=control.step;input.value=control.value??"";input.disabled=!control.writable;input.style.width="6rem"}
 if(output)editor.append(input,output);else editor.append(input);
-apply.type="button";apply.textContent="Apply";apply.disabled=!control.writable;apply.onclick=async()=>{apply.disabled=true;status.textContent="Updating "+cameraControlLabel(control.name)+"…";try{const value=control.type==="bool"?(input.checked?1:0):Number(input.value);await request("/api/camera-controls",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:control.name,value})});await refreshCameraControls();status.textContent=cameraControlLabel(control.name)+" updated."}catch(error){status.textContent=error.message;apply.disabled=false}};
-editor.append(apply);row.append(label,details,editor);
-if(control.name==="exposure_dynamic_framerate"){const note=document.createElement("small");note.className="muted";note.textContent="When enabled, the camera may lower its delivered frame rate to accommodate exposure. Disable it if you need a stable frame-rate target.";row.append(note)}
+if(control.writable&&!isRange)input.addEventListener("change",()=>updateCameraControlDirtyState(control,input,applyButton));
+heading.append(label,details);row.append(heading,editor);
+if(control.name==="exposure_dynamic_framerate"){const note=document.createElement("small");note.className="muted";note.style.gridColumn="1 / -1";note.textContent="When enabled, the camera may lower its delivered frame rate to accommodate exposure. Disable it if you need a stable frame-rate target.";row.append(note)}
 root.append(row)
 }
 }catch(error){status.textContent="Camera controls unavailable: "+error.message}
 }
+$("apply-camera-controls").onclick=applyCameraControlChanges;
 $("refresh-camera-controls").onclick=refreshCameraControls;
 $("refresh").onclick=refresh;$("camera").onchange=fillModes;
 $("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;const mode=JSON.parse(m),override=confirmPerformanceOverride(c,mode);if(exceedsPerformanceBudget(c,mode)&&!override)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,camera_id:c.id,device:c.device,physical_path:c.physical_path,device_path:c.device_path,camera:c.camera,mode,allow_performance_override:override})});await refresh();refreshLivePreview();$("message").textContent="Camera settings saved. The live preview has been reconnected."}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
