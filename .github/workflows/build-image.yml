@@ -52,13 +52,13 @@ jobs:
 
       - name: Validate PetCam scripts
         run: |
-          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_auth.py stage-petcam/00-install-files/files/usr/local/lib/petcam/health_monitor.py stage-petcam/00-install-files/files/usr/local/lib/petcam/config.py stage-petcam/00-install-files/files/usr/local/lib/petcam/network_diagnostics.py stage-petcam/00-install-files/files/usr/local/lib/petcam/factory_reset.py stage-petcam/00-install-files/files/usr/local/lib/petcam/home_assistant.py stage-petcam/00-install-files/files/usr/local/lib/petcam/timelapse.py stage-petcam/00-install-files/files/usr/local/lib/petcam/motion_detection.py tools/create_imager_os_list.py stage-petcam/00-install-files/files/usr/local/lib/petcam/updater.py tools/create_update_release.py tools/prepare_pigen_build.py
+          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py stage-petcam/00-install-files/files/usr/local/lib/petcam/rtmp_output.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_auth.py stage-petcam/00-install-files/files/usr/local/lib/petcam/health_monitor.py stage-petcam/00-install-files/files/usr/local/lib/petcam/config.py stage-petcam/00-install-files/files/usr/local/lib/petcam/network_diagnostics.py stage-petcam/00-install-files/files/usr/local/lib/petcam/factory_reset.py stage-petcam/00-install-files/files/usr/local/lib/petcam/home_assistant.py stage-petcam/00-install-files/files/usr/local/lib/petcam/timelapse.py stage-petcam/00-install-files/files/usr/local/lib/petcam/motion_detection.py tools/create_imager_os_list.py stage-petcam/00-install-files/files/usr/local/lib/petcam/updater.py tools/create_update_release.py tools/prepare_pigen_build.py
           bash -n stage-petcam-base/prerun.sh stage-petcam/prerun.sh stage-petcam/00-install-files/00-run.sh stage-petcam/02-configure-petcam/00-run-chroot.sh stage-petcam-base/02-build-ustreamer/00-run-chroot.sh
 
       - name: Install test-only image processing dependency
         run: sudo apt-get update && sudo apt-get install -y python3-pil
 
-      - name: Test camera, updater, timelapse, motion detection, and Imager catalogue generation
+      - name: Test camera, RTMP output, updater, timelapse, motion detection, and Imager catalogue generation
         run: python3 -m unittest discover -s tests -v
 
   warm-base-cache:
