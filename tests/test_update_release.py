@@ -29,6 +29,9 @@ class SignedReleasePublisherTests(unittest.TestCase):
             elif relative.startswith("systemd/") and relative.endswith(".service"):
                 source = systemd_source_dir / Path(relative).name
                 install_line = f'install -m 0644 files/etc/systemd/system/{source.name} "$RELEASE_DIR/{relative}"'
+            elif relative == "etc/petcam/rtmp.json":
+                source = repo / "stage-petcam/00-install-files/files/etc/petcam/rtmp.json"
+                install_line = 'install -m 0640 files/etc/petcam/rtmp.json "$RELEASE_DIR/etc/petcam/rtmp.json"'
             else:
                 continue
             self.assertTrue(source.is_file(), f"Missing staged source for {relative}")
@@ -40,6 +43,7 @@ class SignedReleasePublisherTests(unittest.TestCase):
             "manifest.json": b'{"application":"petcam-os","version":"1.2.3"}\n',
             "lib/camera.py": b"# camera\n",
             "lib/csi_stream.py": b"# csi\n",
+            "lib/rtmp_output.py": b"# RTMP publisher\n",
             "lib/web_manager.py": b"# web\n",
             "lib/web_auth.py": b"# authentication\n",
             "lib/health_monitor.py": b"# health monitor\n",
@@ -53,7 +57,9 @@ class SignedReleasePublisherTests(unittest.TestCase):
             "systemd/petcam-home-assistant.service": b"[Service]\nExecStart=petcam\n",
             "systemd/petcam-timelapse.service": b"[Service]\nExecStart=timelapse\n",
             "systemd/petcam-motion.service": b"[Service]\nExecStart=motion\n",
+            "systemd/petcam-rtmp.service": b"[Service]\nExecStart=rtmp\n",
             "etc/petcam/home-assistant.conf": b"MQTT_ENABLED=false\n",
+            "etc/petcam/rtmp.json": b"{\"enabled\":false}\n",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"fake armhf binary",
         }
