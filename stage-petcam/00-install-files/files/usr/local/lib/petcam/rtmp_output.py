@@ -12,6 +12,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -151,9 +152,17 @@ def main():
         return
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     logging.info("Starting RTMP publisher using %s; destination credentials are redacted", config["encoder"])
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True, bufsize=1)
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
     stopping = False
     latest_fps = None
+
+    def forward_stderr():
+        for raw_line in process.stderr:
+            safe_line = raw_line.replace(config["stream_key"], "[redacted]")
+            logging.warning("FFmpeg: %s", safe_line.rstrip())
+
+    stderr_reader = threading.Thread(target=forward_stderr, name="rtmp-ffmpeg-logs", daemon=True)
+    stderr_reader.start()
 
     def write_status(state):
         STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -197,6 +206,7 @@ def main():
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
+        stderr_reader.join(timeout=2)
         if stopping:
             write_status("stopped")
 
