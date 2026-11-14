@@ -26,6 +26,12 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn('id="panel-system"', MODULE.PAGE)
         self.assertIn("activateTab", MODULE.PAGE)
         self.assertIn("Apply selected camera and mode", MODULE.PAGE)
+        self.assertIn('id="apply-camera-controls" type="button" disabled>Apply changes</button>', MODULE.PAGE)
+        self.assertIn("pendingCameraControlChanges", MODULE.PAGE)
+        self.assertIn("applyCameraControlChanges", MODULE.PAGE)
+        self.assertIn("grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))", MODULE.PAGE)
+        self.assertNotIn('apply.textContent="Apply"', MODULE.PAGE)
+        self.assertNotIn('apply.onclick=async()=>', MODULE.PAGE)
         self.assertIn('" · Available: "+control.menu.map(option=>option.label).join(", ")', MODULE.PAGE)
         self.assertIn('(control.min!==null&&control.max!==null?" · Range: "', MODULE.PAGE)
         self.assertIn("above device estimate", MODULE.PAGE)
@@ -599,7 +605,7 @@ exposure_dynamic_framerate 0x009a0903 (bool) : default=0 value=1
         self.assertIn("actual captured FPS", MODULE.PAGE)
 
     def test_all_camera_control_editor_types_are_added_to_the_editor(self):
-        self.assertIn('let input,output;', MODULE.PAGE)
+        self.assertIn('let input,output,isRange=false;', MODULE.PAGE)
         self.assertIn('if(output)editor.append(input,output);else editor.append(input);', MODULE.PAGE)
         self.assertIn('input.type="checkbox"', MODULE.PAGE)
         self.assertIn('input.type="range"', MODULE.PAGE)
