@@ -31,6 +31,7 @@ CONFIG = Path("/etc/petcam/petcam.conf")
 TLS_CERT = Path("/etc/petcam/web-manager.crt")
 TLS_KEY = Path("/etc/petcam/web-manager.key")
 HEALTH_FILE = Path("/var/lib/petcam/health.json")
+RTMP_STATUS_FILE = Path("/run/petcam/rtmp-status.json")
 _login_attempts = {}
 _login_lock = threading.Lock()
 _STREAM_METRICS_LOCK = threading.Lock()
@@ -1036,6 +1037,7 @@ class Handler(BaseHTTPRequestHandler):
                 "stream_metrics": stream_metrics_snapshot(),
                 "network_status": collect_network_performance(),
                 "system_metrics": system_resource_metrics(),
+                "rtmp_output_status": rtmp_status_snapshot(),
             })
             return
         if path == "/api/system":
@@ -1043,12 +1045,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/rtmp":
             try:
-                config = load_rtmp_config()
-                active = subprocess.run(
-                    ["systemctl", "is-active", "--quiet", "petcam-rtmp.service"],
-                    check=False, timeout=5,
-                ).returncode == 0
-                self.send_json(200, {"config": public_rtmp_config(config), "active": active})
+                self.send_json(200, {"config": public_rtmp_config(load_rtmp_config()), "status": rtmp_status_snapshot()})
             except Exception as error:
                 self.send_json(503, {"error": str(error)})
             return
@@ -1169,7 +1166,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"ok": True, "config": updated})
                 return
             if path == "/api/rtmp":
-                updated = save_rtmp_config({**load_rtmp_config(), **data})
+                current = load_rtmp_config()
+                if not data.get("stream_key"):
+                    data["stream_key"] = current["stream_key"]
+                updated = save_rtmp_config({**current, **data})
                 action = "enable" if updated["enabled"] else "disable"
                 result = subprocess.run(
                     ["sudo", "/usr/local/sbin/petcam-rtmp-service", action],
@@ -1177,7 +1177,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 if result.returncode:
                     raise RuntimeError(result.stderr.strip() or "Unable to update RTMP service state.")
-                self.send_json(200, {"ok": True, "config": public_rtmp_config(updated), "active": updated["enabled"]})
+                self.send_json(200, {"ok": True, "config": public_rtmp_config(updated), "status": rtmp_status_snapshot()})
                 return
             if path == "/api/logout":
                 invalidate_session(_cookie(self))
@@ -1216,6 +1216,31 @@ class StreamHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         pass
+
+
+def rtmp_status_snapshot():
+    config = load_rtmp_config()
+    active_service = subprocess.run(
+        ["systemctl", "is-active", "--quiet", "petcam-rtmp.service"],
+        check=False, timeout=5,
+    ).returncode == 0
+    status = {}
+    try:
+        status = json.loads(RTMP_STATUS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+    updated_at = status.get("updated_at")
+    fresh = isinstance(updated_at, (int, float)) and time.time() - updated_at <= 10
+    state = status.get("state", "starting") if active_service else "stopped"
+    if active_service and not fresh:
+        state = "stalled"
+    return {
+        "enabled": config["enabled"],
+        "active": active_service and state == "publishing",
+        "state": state,
+        "fps": status.get("fps") if fresh else None,
+        "updated_at": updated_at,
+    }
 
 
 def health_monitor_loop():
