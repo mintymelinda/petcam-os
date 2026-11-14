@@ -420,12 +420,12 @@ class RecentReleaseDiscoveryTests(unittest.TestCase):
                 raise AssertionError(f"Unexpected URL fetched after reaching the release limit: {url}")
             return payloads[url]
 
-        with mock.patch("updater.fetch", side_effect=fake_fetch) as fetch_mock, \\
-                mock.patch("updater.verify_signature"):
-            found = release_manifest_candidates(
-                "https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json",
-                Path("/trusted/key.pem"),
-            )
+        with mock.patch("updater.fetch", side_effect=fake_fetch) as fetch_mock:
+            with mock.patch("updater.verify_signature"):
+                found = release_manifest_candidates(
+                    "https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json",
+                    Path("/trusted/key.pem"),
+                )
 
         self.assertEqual(len(found), 10)
         self.assertEqual(fetch_mock.call_count, 21)
