@@ -320,8 +320,7 @@ class WebManagerTests(unittest.TestCase):
         first = Upstream((b"frame-one", b""))
         second = Upstream((b"frame-two", b"frame-three"))
         handler = Handler()
-        with mock.patch.object(MODULE.urllib.request, "urlopen", side_effect=(first, second)) as open_stream, \\
-                mock.patch.object(MODULE.time, "sleep"):
+        with mock.patch.object(MODULE.urllib.request, "urlopen", side_effect=(first, second)) as open_stream, mock.patch.object(MODULE.time, "sleep"):
             MODULE.proxy_stream(handler, 8081)
         self.assertEqual(handler.status, 200)
         self.assertEqual(handler.wfile.getvalue(), b"frame-oneframe-two")
