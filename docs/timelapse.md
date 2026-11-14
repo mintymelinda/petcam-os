@@ -29,10 +29,10 @@ Install/configure the share on the Pi (SSH or your normal system provisioning wo
 2. Add an `/etc/fstab` entry, replacing the server and share names:
 
    ```fstab
-   //nas.example.local/camera /mnt/petcam-network cifs credentials=/etc/petcam/smb-credentials,uid=petcam,gid=petcam,iocharset=utf8,vers=3.0,_netdev,nofail,x-systemd.automount 0 0
+   //nas.example.local/camera /mnt/petcam-network cifs credentials=/etc/petcam/smb-credentials,uid=petcam,gid=petcam,iocharset=utf8,vers=3.0,_netdev,nofail 0 0
    ```
 
-3. Reload systemd and start the mount (`sudo systemctl daemon-reload && sudo mount /mnt/petcam-network`). Confirm the share is mounted with `findmnt /mnt/petcam-network` and that `sudo -u petcam test -w /mnt/petcam-network` succeeds.
+3. Reload systemd and start the mount (`sudo systemctl daemon-reload && sudo mount /mnt/petcam-network`). The timelapse worker starts independently if the share is unavailable and reports the missing mount; it will resume when the share is mounted. Confirm the share is mounted with `findmnt /mnt/petcam-network` and that `sudo -u petcam test -w /mnt/petcam-network` succeeds.
 4. In the PetCam manager, set Storage directory to a folder such as `/mnt/petcam-network/petcam/timelapse` and save.
 
 For NFS, mount the export at the same `/mnt/petcam-network` mountpoint and grant the Pi's `petcam` account write access on the export. Do not configure a remote share directly as a `//server/share` or `nfs://` storage path; Linux must mount it first.
