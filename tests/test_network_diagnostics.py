@@ -101,7 +101,7 @@ class NetworkDiagnosticsTests(unittest.TestCase):
                         "password=another-secret\n",
                         "Authorization: Bearer journal-secret\n",
                     ]):
-                bundle = MODULE.create_support_bundle()
+                bundle = MODULE.create_support_bundle(performance={"frame_rate": 29.8})
         with tarfile.open(fileobj=io.BytesIO(bundle), mode="r:gz") as archive:
             contents = "\n".join(
                 archive.extractfile(member).read().decode()
@@ -110,6 +110,8 @@ class NetworkDiagnosticsTests(unittest.TestCase):
         for secret in ("topsecret", "private-token", "another-secret", "journal-secret"):
             self.assertNotIn(secret, contents)
         self.assertIn("[REDACTED]", contents)
+        self.assertIn('"frame_rate": 29.8', contents)
+        self.assertIn("performance.json", contents)
 
 
 if __name__ == "__main__":

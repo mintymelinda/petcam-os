@@ -102,7 +102,7 @@ def collect_network_performance() -> dict[str, Any]:
                 "signal_avg_dbm": _number(r"signal avg:\s*(-?\d+)\s*dBm", station, int),
                 "frequency_mhz": _number(r"freq:\s*(\d+)", link, int) or _number(r"channel\s+\d+\s+\((\d+)\s+MHz\)", info, int),
                 "rx_bitrate_mbps": _number(r"rx bitrate:\s*([\d.]+)", link),
-                "tx_bitrate_mbps": _number(r"tx bitrate:\s*([\d.]+)", link),
+                "tx_bitrate_mbps": _number(r"tx bitrate:\s*([\d.]+)", station) or _number(r"tx bitrate:\s*([\d.]+)", link),
                 "tx_retries": _number(r"tx retries:\s*(\d+)", station, int),
                 "tx_failed": _number(r"tx failed:\s*(\d+)", station, int),
             }
