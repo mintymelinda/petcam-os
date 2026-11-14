@@ -69,7 +69,7 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <button id="logout" type="button" class="sign-out">Sign out</button>
 </nav>
 <main id="tab-panels">
-<main id="tab-panels"><div id="panel-camera" class="tab-panel active" role="tabpanel" aria-labelledby="tab-camera" tabindex="0">
+<div id="panel-camera" class="tab-panel active" role="tabpanel" aria-labelledby="tab-camera" tabindex="0">
 <section><div class="camera-select-grid"><div><label for="camera">Camera</label><select id="camera"></select></div><div><label for="mode">Capture mode</label><select id="mode"></select></div></div><p id="message" role="status" class="muted">Discovering cameras…</p><p class="muted">Only advertised camera modes are offered.</p></section>
 <section><div class="preview-heading"><h2>Live preview</h2><label class="preview-toggle"><input id="toggle-live-preview" type="checkbox"> Enabled</label></div><div class="preview-frame"><img id="live-preview" alt="Live camera preview"><p id="preview-disabled" class="muted" hidden>Preview is disabled. The camera feed remains active.</p></div><p id="capture-rate" class="muted">Checking actual capture rate…</p><p id="capture-status-freshness" class="muted">Capture status refreshes every 5 seconds.</p></section>
 <div class="camera-actions"><button id="advanced-camera-open" type="button">Advanced</button><div class="camera-actions-right"><button id="apply">Apply</button><button id="refresh" type="button" title="Refresh cameras">Refresh</button></div></div>
