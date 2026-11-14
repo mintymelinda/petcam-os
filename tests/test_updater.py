@@ -178,6 +178,8 @@ class UpdateArchiveTests(unittest.TestCase):
             config_path = etc_root / "petcam/home-assistant.conf"
             config_path.parent.mkdir(parents=True)
             config_path.write_text("MQTT_ENABLED=true\nMQTT_PASSWORD=preserve-me\n")
+            rtmp_config_path = etc_root / "petcam/rtmp.json"
+            rtmp_config_path.write_text("{\"enabled\":true,\"stream_key\":\"keep-this-secret\"}\n")
             with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=1000)), \
                     mock.patch("updater.os.geteuid", return_value=1000):
                 install_runtime_integration_files(release, etc_root)
@@ -186,6 +188,7 @@ class UpdateArchiveTests(unittest.TestCase):
                 "[Service]\nExecStart=petcam\n",
             )
             self.assertEqual(config_path.read_text(), "MQTT_ENABLED=true\nMQTT_PASSWORD=preserve-me\n")
+            self.assertEqual(rtmp_config_path.read_text(), "{\"enabled\":true,\"stream_key\":\"keep-this-secret\"}\n")
             self.assertEqual((etc_root / "systemd/system/petcam-timelapse.service").read_text(), "[Service]\nExecStart=timelapse\n")
             self.assertEqual((etc_root / "systemd/system/petcam-motion.service").read_text(), "[Service]\nExecStart=motion\n")
             self.assertEqual((etc_root / "systemd/system/petcam-rtmp.service").read_text(), "[Service]\nExecStart=rtmp\n")
