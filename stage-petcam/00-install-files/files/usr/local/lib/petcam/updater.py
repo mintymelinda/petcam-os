@@ -449,12 +449,14 @@ def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc
         os.replace(config_temporary, config_destination)
     elif config_destination.is_symlink() or not config_destination.is_file():
         raise UpdateError("Refusing to use a non-regular Home Assistant configuration file.")
+    if rtmp_config_destination.is_symlink():
+        raise UpdateError("Refusing to use a symlinked RTMP configuration file.")
     if not rtmp_config_destination.exists():
         rtmp_temporary = rtmp_config_destination.with_name(rtmp_config_destination.name + ".new")
         shutil.copyfile(rtmp_config_source, rtmp_temporary)
         os.chmod(rtmp_temporary, 0o640)
         os.replace(rtmp_temporary, rtmp_config_destination)
-    elif rtmp_config_destination.is_symlink() or not rtmp_config_destination.is_file():
+    elif not rtmp_config_destination.is_file():
         raise UpdateError("Refusing to use a non-regular RTMP configuration file.")
     os.chmod(config_destination, 0o640)
     os.chmod(rtmp_config_destination, 0o640)
