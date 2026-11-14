@@ -388,6 +388,19 @@ class WebManagerTests(unittest.TestCase):
             with mock.patch.object(MODULE, "__file__", str(lib_directory / "web_manager.py")):
                 self.assertEqual(MODULE.installed_version(), "9.8.7")
 
+    def test_system_resource_metrics_reports_procfs_memory_and_cpu(self):
+        metrics = MODULE.system_resource_metrics()
+        self.assertIn("cpu_percent", metrics)
+        self.assertIn("memory_used_mb", metrics)
+        self.assertIn("memory_total_mb", metrics)
+        if metrics["cpu_percent"] is not None:
+            self.assertGreaterEqual(metrics["cpu_percent"], 0)
+            self.assertLessEqual(metrics["cpu_percent"], 100)
+        if metrics["memory_total_mb"] is not None:
+            self.assertGreater(metrics["memory_total_mb"], 0)
+            self.assertGreaterEqual(metrics["memory_used_mb"], 0)
+            self.assertLessEqual(metrics["memory_used_mb"], metrics["memory_total_mb"])
+
     def test_stream_metrics_count_jpeg_frames_across_chunk_boundaries(self):
         client_id = MODULE.register_stream_client("browser_source")
         parser_state = {
