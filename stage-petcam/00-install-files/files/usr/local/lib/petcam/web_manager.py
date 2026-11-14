@@ -47,31 +47,35 @@ button{cursor:pointer}button:disabled{opacity:.5}label{display:block;margin:.7re
 video,img{display:block;width:100%;max-height:55vh;object-fit:contain;background:#090a0b;border-radius:6px}.motion-event{display:flex;gap:.75rem;align-items:center;margin:.6rem 0}.motion-event img{width:160px;max-height:110px;object-fit:cover}
 small,.muted{color:#aeb7c2}#message{min-height:1.5em;color:#b9d8ff}.row{display:flex;gap:.5rem;flex-wrap:wrap}
 dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;color:inherit;border:1px solid #59616d;border-radius:10px;padding:1.25rem}dialog::backdrop{background:#000b}dialog form{display:grid;gap:.5rem}dialog input{width:100%;box-sizing:border-box}#login-password{-webkit-text-security:disc!important}#login-message{min-height:1.4em;color:#ffb4a9}
-.tab-nav{display:flex;gap:.4rem;overflow-x:auto;padding:.35rem;background:#22262c;border:1px solid #383e47;border-radius:10px;position:sticky;top:.5rem;z-index:5;scrollbar-width:thin}.tab-nav button{flex:0 0 auto;border-color:transparent;background:transparent;color:#aeb7c2;font-weight:600}.tab-nav button[aria-selected="true"]{background:#3b4654;border-color:#68788c;color:#fff}.tab-panel{display:none}.tab-panel.active{display:block}.tab-panel[hidden]{display:none}.tab-panel>section:first-child{margin-top:1rem}.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:.5rem}@media(max-width:560px){body{margin:1rem auto;padding:0 .75rem}.tab-nav{position:sticky;top:0}.tab-nav button{padding:.55rem .65rem;font-size:.9rem}}</style>
+.tab-nav{display:flex;gap:.4rem;overflow-x:auto;padding:.35rem;background:#22262c;border:1px solid #383e47;border-radius:10px;position:sticky;top:.5rem;z-index:5;scrollbar-width:thin}.tab-nav button{flex:0 0 auto;border-color:transparent;background:transparent;color:#aeb7c2;font-weight:600}.tab-nav button[aria-selected="true"]{background:#3b4654;border-color:#68788c;color:#fff}.tab-panel{display:none}.tab-panel.active{display:block}.tab-panel[hidden]{display:none}.tab-panel>section:first-child{margin-top:1rem}.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:.5rem}@media(max-width:560px){body{margin:1rem auto;padding:0 .75rem}.tab-nav{position:sticky;top:0}.tab-nav button{padding:.55rem .65rem;font-size:.9rem}}.tab-nav .sign-out{margin-left:auto;background:#303741;border-color:#59616d;color:#eee}
+.camera-select-grid{display:grid;grid-template-columns:2fr 1fr;gap:1rem;align-items:end}.camera-select-grid label{margin-top:0}
+.preview-heading,.dialog-heading{display:flex;justify-content:space-between;align-items:center;gap:1rem}.preview-heading h2,.dialog-heading h2{margin:.2rem 0}
+.preview-toggle{display:flex;align-items:center;gap:.5rem;margin:0;white-space:nowrap}.preview-toggle input{width:auto}
+.preview-frame{aspect-ratio:16/9;width:100%;background:#090a0b;border-radius:8px;overflow:hidden;display:grid;place-items:center}.preview-frame img{width:100%;height:100%;max-height:none;object-fit:contain}.preview-frame p{padding:1rem}
+.camera-actions{display:flex;justify-content:space-between;align-items:center;margin:1rem 0}.camera-actions-right{display:flex;gap:.5rem}
+.advanced-dialog{max-width:min(760px,calc(100% - 2rem));max-height:85vh;overflow:auto}.advanced-dialog section{margin:.75rem 0}
+.release-notes{white-space:pre-wrap;line-height:1.5;background:#1a1d22;border-radius:8px;padding:.85rem;max-height:18rem;overflow:auto}
+@media(max-width:600px){.camera-select-grid{grid-template-columns:1fr}.tab-nav{gap:.2rem}.tab-nav button{font-size:.85rem;padding:.5rem}}</style>
 <body><h1>PetCam <small>Camera</small></h1>
 <section id="first-run" hidden><h2>Welcome to PetCam</h2><p>Create the administrator password for this camera. You can do this from your browser; SSH is not required.</p><form id="first-run-form"><label for="setup-password">Administrator password (12–1024 characters)</label><input id="setup-password" type="password" minlength="12" maxlength="1024" autocomplete="new-password" required><label for="setup-password-confirm">Confirm password</label><input id="setup-password-confirm" type="password" minlength="12" maxlength="1024" autocomplete="new-password" required><p id="setup-message" role="status" aria-live="polite"></p><button id="setup-submit" type="submit">Create administrator password</button></form></section>
 <dialog id="login-dialog" aria-labelledby="login-title"><form id="login-form"><h2 id="login-title">Sign in to PetCam</h2><label for="login-password">Administrator password</label><input id="login-password" type="password" autocomplete="current-password" required><p id="login-message" role="alert" aria-live="polite"></p><button id="login-submit" type="submit">Sign in</button></form></dialog>
 <nav id="manager-tabs" class="tab-nav" role="tablist" aria-label="PetCam sections">
-<button id="tab-live" type="button" role="tab" aria-controls="panel-live" aria-selected="true" tabindex="0" data-tab="live">Live</button>
-<button id="tab-camera-settings" type="button" role="tab" aria-controls="panel-camera-settings" aria-selected="false" tabindex="-1" data-tab="camera-settings">Camera Settings</button>
+<button id="tab-camera" type="button" role="tab" aria-controls="panel-camera" aria-selected="true" tabindex="0" data-tab="camera">Camera</button>
+<button id="tab-timelapse" type="button" role="tab" aria-controls="panel-timelapse" aria-selected="false" tabindex="-1" data-tab="timelapse">Time-Lapse</button>
+<button id="tab-motion" type="button" role="tab" aria-controls="panel-motion" aria-selected="false" tabindex="-1" data-tab="motion">Motion Detection</button>
 <button id="tab-system" type="button" role="tab" aria-controls="panel-system" aria-selected="false" tabindex="-1" data-tab="system">System</button>
-</nav>
+<button id="logout" type="button" class="sign-out">Sign out</button>
+</nav></nav>
 <main id="tab-panels">
-<div id="panel-live" class="tab-panel active" role="tabpanel" aria-labelledby="tab-live" tabindex="0">
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Live preview</h2><div class="row"><button id="toggle-live-preview" type="button">Disable preview</button><button id="copy-media-source" type="button">Copy OBS Media Source URL</button></div></div><img id="live-preview" alt="Live camera preview"><p id="preview-disabled" class="muted" hidden>Dashboard preview is disabled. The camera feed remains active for OBS.</p><p id="capture-rate" class="muted">Checking actual capture rate…</p><p id="capture-status-freshness" class="muted">Capture status refreshes every 5 seconds.</p><p id="stream-delivery-metrics" class="muted">Waiting for stream delivery metrics…</p><p class="muted">Use the direct Media Source in OBS for lower overhead. Disable or remove any OBS Browser Source manually; PetCam keeps this MJPEG feed available.</p></section>
-</div>
-<div id="panel-camera-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-camera-settings" tabindex="0" hidden>
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera selection</h2><button id="refresh">Refresh cameras</button></div>
-<p id="message" role="status">Discovering cameras…</p>
-<label for="camera">Camera</label><select id="camera"></select>
-<label for="mode">Capture mode</label><select id="mode"></select>
-<div class="row" style="margin-top:1rem"><button id="apply">Apply selected camera and mode</button></div>
-<p class="muted">Only advertised camera modes are offered.</p></section>
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera controls</h2><div class="row" style="gap:.5rem"><button id="apply-camera-controls" type="button" disabled>Apply changes</button><button id="refresh-camera-controls" type="button">Refresh</button></div></div>
+<main id="tab-panels"><div id="panel-camera" class="tab-panel active" role="tabpanel" aria-labelledby="tab-camera" tabindex="0">
+<section><div class="camera-select-grid"><div><label for="camera">Camera</label><select id="camera"></select></div><div><label for="mode">Capture mode</label><select id="mode"></select></div></div><p id="message" role="status" class="muted">Discovering cameras…</p><p class="muted">Only advertised camera modes are offered.</p></section>
+<section><div class="preview-heading"><h2>Preview</h2><label class="preview-toggle"><input id="toggle-live-preview" type="checkbox"> Enabled</label></div><div class="preview-frame"><img id="live-preview" alt="Live camera preview"><p id="preview-disabled" class="muted" hidden>Preview is disabled. The camera feed remains active.</p></div><p id="capture-rate" class="muted">Checking actual capture rate…</p><p id="capture-status-freshness" class="muted">Capture status refreshes every 5 seconds.</p></section>
+<div class="camera-actions"><button id="advanced-camera-open" type="button">Advanced</button><div class="camera-actions-right"><button id="apply">Apply</button><button id="refresh" type="button">Refresh</button></div></div>
+<dialog id="advanced-camera-dialog" class="advanced-dialog"><div class="dialog-heading"><h2>Advanced camera controls</h2><button id="advanced-camera-close" type="button">Close</button></div><p class="muted">Edits apply automatically. Controls are refreshed every 60 seconds while this dialog is open.</p><section><div class="row" style="justify-content:space-between;align-items:center"><h2>Available controls</h2><div class="row" style="gap:.5rem"><button id="refresh-camera-controls" type="button">Refresh</button></div></div>
 <p id="camera-controls-status" class="muted" role="status">Controls for the active camera will appear here.</p>
 <p class="muted">Controls are discovered from the connected camera. Some settings may be unavailable while automatic modes are active. Dynamic framerate can reduce the actual captured FPS when enabled.</p>
-<div id="camera-controls-list" class="muted">No camera controls loaded.</div></section>
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Timelapse</h2><button id="refresh-timelapse">Refresh status</button></div>
+<div id="camera-controls-list" class="muted">No camera controls loaded.</div></dialog>
+</div><div id="panel-timelapse" class="tab-panel" role="tabpanel" aria-labelledby="tab-timelapse" tabindex="0" hidden><section><div class="row" style="justify-content:space-between;align-items:center"><h2>Timelapse</h2><button id="refresh-timelapse">Refresh status</button></div>
 <p id="timelapse-status" role="status">Loading timelapse status…</p>
 <label style="display:flex;gap:.5rem;align-items:center"><input id="timelapse-enabled" type="checkbox"> Enable periodic captures</label>
 <label for="timelapse-interval">Capture interval (seconds)</label><input id="timelapse-interval" type="number" min="60" max="86400" value="300">
@@ -85,8 +89,7 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <label for="timelapse-path">Storage directory</label><input id="timelapse-path" type="text" value="/var/lib/petcam/timelapse/frames">
 <p class="muted">Use a local folder under /var/lib/petcam, or mount an SMB/NFS share at /mnt/petcam-network and choose a folder beneath it. Network shares must be mounted by Linux first; see the Timelapse storage instructions. Captures pause if the network mount is not mounted rather than falling back to the SD card.</p>
 <p class="muted">Frames reuse the active MJPEG stream, so timelapse does not open another camera process. Optional resizing/re-encoding is performed only after a frame is received.</p>
-<div class="row"><button id="save-timelapse">Save timelapse settings</button></div></section>
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Motion detection</h2><button id="refresh-motion">Refresh status</button></div>
+<div class="row"><button id="save-timelapse">Save timelapse settings</button></div></div><div id="panel-motion" class="tab-panel" role="tabpanel" aria-labelledby="tab-motion" tabindex="0" hidden><section><div class="row" style="justify-content:space-between;align-items:center"><h2>Motion detection</h2><button id="refresh-motion">Refresh status</button></div>
 <p id="motion-status" role="status">Loading motion status…</p>
 <label style="display:flex;gap:.5rem;align-items:center"><input id="motion-enabled" type="checkbox"> Enable motion snapshots</label>
 <label for="motion-sensitivity">Sensitivity (higher detects smaller changes)</label><input id="motion-sensitivity" type="range" min="1" max="100" value="50">
@@ -102,35 +105,22 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <label for="motion-free">Minimum free disk space (MiB)</label><input id="motion-free" type="number" min="64" max="102400" value="256">
 <p class="muted">Motion samples reuse the active camera MJPEG stream. Frames are reduced to 160×120 grayscale for comparison; no second camera process or continuous video recording is used. The worker runs with a strict CPU and memory limit. Disabled by default.</p>
 <div class="row"><button id="save-motion">Save motion settings</button></div>
-<h3>Recent motion events</h3><div id="motion-events" class="muted">No motion events recorded.</div></section>
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Ambient light sensor</h2><button id="refresh-light-sensor" type="button">Refresh status</button></div>
+<h3>Recent motion events</h3><div id="motion-events" class="muted">No motion events recorded.</div></div><div id="panel-system" class="tab-panel" role="tabpanel" aria-labelledby="tab-system" tabindex="0" hidden>
+<section id="system-info"><h2>System Info</h2><p id="installed-version" role="status">Checking installed PetCam version…</p><div class="row"><button id="check-updates">Check for updates</button><button id="install-update" hidden disabled>Install</button><span id="update-state" class="muted">Not checked</span></div><p id="update-message" class="muted" role="status">Check for signed PetCam application releases.</p><h3>Release notes</h3><div id="release-notes" class="release-notes">No release notes loaded yet.</div><section id="updates"><div class="row" style="justify-content:space-between;align-items:center"><h3>Update details</h3></div>
+
+
+<div id="update-confirmation" hidden aria-labelledby="update-confirmation-title"><p id="update-confirmation-title"><strong>Install this signed update?</strong></p><p class="muted">The camera stream and web interface will briefly restart while PetCam installs the verified application release.</p><div class="row"><button id="cancel-update-install" type="button">Cancel</button><button id="confirm-update-install" type="button">Install update</button></div></div>
+<label style="display:flex;gap:.5rem;align-items:center"><input id="auto-check" type="checkbox"> Check automatically when opening this page</label>
+<details><summary>Update details and diagnostics</summary><p id="update-details" class="muted">No update information yet.</p><pre id="update-logs" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
+</section>
+<section><h2>Stream Health</h2><div id="system-health-grid" class="stats-grid"><p class="muted">Waiting for telemetry…</p></div><p id="statistics-updated" class="muted" role="status">Collecting system statistics…</p><div id="frame-statistics" hidden></div><div id="viewer-statistics" hidden></div><div id="network-statistics" hidden></div><button id="refresh-statistics" type="button">Refresh</button></section>
+<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Stream health</h2><button id="refresh-health">Refresh</button></div><p id="health-state" role="status">Checking stream health…</p><p id="health-reason" class="muted"></p><small id="health-details" class="muted"></small><section><div class="row" style="justify-content:space-between;align-items:center"><h2>Network and OBS diagnostics</h2><button id="refresh-diagnostics">Run checks</button></div><p id="diagnostic-summary" role="status">Diagnostics have not been run yet.</p><p id="diagnostic-details" class="muted"></p><div class="row"><button id="download-support-bundle">Download redacted support bundle</button></div><section><div class="row" style="justify-content:space-between;align-items:center"><h2>Ambient light sensor</h2><button id="refresh-light-sensor" type="button">Refresh status</button></div>
 <p id="light-sensor-status" role="status">Loading light sensor status…</p>
 <label style="display:flex;gap:.5rem;align-items:center"><input id="light-sensor-enabled" type="checkbox"> Enable TSL2591 light sensor</label>
 <label for="light-bright-threshold">Bright threshold (lux)</label><input id="light-bright-threshold" type="number" min="0.01" max="100000" step="0.1" value="100">
 <label for="light-dark-threshold">Dark threshold (lux)</label><input id="light-dark-threshold" type="number" min="0" max="99999" step="0.1" value="30">
 <p class="muted">Connect over I²C using SDA, SCL, 3.3V and GND. Bright is reached at or above its threshold; dark is reached at or below its threshold. Between thresholds, the previous state is retained to prevent flicker.</p>
-<div class="row"><button id="save-light-sensor" type="button">Save light sensor settings</button></div></section>
-</div>
-<div id="panel-system" class="tab-panel" role="tabpanel" aria-labelledby="tab-system" tabindex="0" hidden>
-<section><h2>Installed software</h2><p id="installed-version" role="status">Checking installed PetCam version…</p><small class="muted">Version of the active PetCam application installed on this device.</small></section>
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Performance statistics</h2><button id="refresh-statistics" type="button">Refresh</button></div>
-<p id="statistics-updated" class="muted" role="status">Collecting frame and network statistics…</p>
-<h3>Frame pipeline</h3><div id="frame-statistics" class="stats-grid"><p class="muted">Waiting for telemetry…</p></div>
-<h3>Viewer delivery</h3><div id="viewer-statistics" class="stats-grid"><p class="muted">Waiting for telemetry…</p></div>
-<h3>Network link</h3><div id="network-statistics" class="stats-grid"><p class="muted">Waiting for telemetry…</p></div>
-<p class="muted">Rates are measured over the latest polling window where available. Link speed is the negotiated Wi-Fi PHY rate, not internet throughput. Queue depth and hardware frame-drop counters are shown only when the active backend exposes them.</p></section>
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Network and OBS diagnostics</h2><button id="refresh-diagnostics">Run checks</button></div><p id="diagnostic-summary" role="status">Diagnostics have not been run yet.</p><p id="diagnostic-details" class="muted"></p><div class="row"><button id="download-support-bundle">Download redacted support bundle</button></div></section>
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Stream health</h2><button id="refresh-health">Refresh</button></div><p id="health-state" role="status">Checking stream health…</p><p id="health-reason" class="muted"></p><small id="health-details" class="muted"></small></section>
-<section id="updates"><div class="row" style="justify-content:space-between;align-items:center"><h2>Software updates</h2><span id="update-state" class="muted">Not checked</span></div>
-<p id="update-message" role="status" class="muted">Check for signed PetCam application releases. Operating system and firmware updates are managed separately.</p>
-<div class="row"><button id="check-updates">Check for updates</button><button id="install-update" disabled>Install update</button></div>
-<div id="update-confirmation" hidden aria-labelledby="update-confirmation-title"><p id="update-confirmation-title"><strong>Install this signed update?</strong></p><p class="muted">The camera stream and web interface will briefly restart while PetCam installs the verified application release.</p><div class="row"><button id="cancel-update-install" type="button">Cancel</button><button id="confirm-update-install" type="button">Install update</button></div></div>
-<label style="display:flex;gap:.5rem;align-items:center"><input id="auto-check" type="checkbox"> Check automatically when opening this page</label>
-<details><summary>Update details and diagnostics</summary><p id="update-details" class="muted">No update information yet.</p><pre id="update-logs" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
-</section>
-<section><h2>Account security</h2><p class="muted">Sign out of this manager.</p><button id="logout">Sign out</button></section>
-</div>
-</main>
+<div class="row"><button id="save-light-sensor" type="button">Save light sensor settings</button></div></div></main>
 <footer style="text-align:center;padding:1rem 0 2rem"><small>Enjoying PetCam? <a href="https://www.paypal.me/kimmynightmare" target="_blank" rel="noopener noreferrer" style="color:#b9d8ff">Support development with PayPal</a></small></footer>
 <script>
 const $=id=>document.getElementById(id);let inventory=[],activeConfig=null,captureStatus={};
