@@ -39,6 +39,7 @@ REQUIRED_FILES = (
     "manifest.json",
     "lib/camera.py",
     "lib/csi_stream.py",
+    "lib/rtmp_output.py",
     "lib/web_manager.py",
     "lib/web_auth.py",
     "lib/health_monitor.py",
@@ -50,9 +51,11 @@ REQUIRED_FILES = (
     "lib/timelapse.py",
     "lib/motion_detection.py",
     "systemd/petcam-motion.service",
+    "systemd/petcam-rtmp.service",
     "systemd/petcam-home-assistant.service",
     "systemd/petcam-timelapse.service",
     "etc/petcam/home-assistant.conf",
+    "etc/petcam/rtmp.json",
     "lib/start-stream.sh",
     "vendor/bin/ustreamer",
 )
@@ -411,10 +414,16 @@ def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc
     timelapse_destination = etc_root / "systemd/system/petcam-timelapse.service"
     motion_source = release / "systemd/petcam-motion.service"
     motion_destination = etc_root / "systemd/system/petcam-motion.service"
+    rtmp_service_source = release / "systemd/petcam-rtmp.service"
+    rtmp_service_destination = etc_root / "systemd/system/petcam-rtmp.service"
+    rtmp_config_source = release / "etc/petcam/rtmp.json"
+    rtmp_config_destination = etc_root / "petcam/rtmp.json"
     service_destination.parent.mkdir(parents=True, exist_ok=True)
     config_destination.parent.mkdir(parents=True, exist_ok=True)
     timelapse_destination.parent.mkdir(parents=True, exist_ok=True)
     motion_destination.parent.mkdir(parents=True, exist_ok=True)
+    rtmp_service_destination.parent.mkdir(parents=True, exist_ok=True)
+    rtmp_config_destination.parent.mkdir(parents=True, exist_ok=True)
 
     service_temporary = service_destination.with_name(service_destination.name + ".new")
     shutil.copyfile(service_source, service_temporary)
@@ -428,6 +437,10 @@ def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc
     shutil.copyfile(motion_source, motion_temporary)
     os.chmod(motion_temporary, 0o644)
     os.replace(motion_temporary, motion_destination)
+    rtmp_service_temporary = rtmp_service_destination.with_name(rtmp_service_destination.name + ".new")
+    shutil.copyfile(rtmp_service_source, rtmp_service_temporary)
+    os.chmod(rtmp_service_temporary, 0o644)
+    os.replace(rtmp_service_temporary, rtmp_service_destination)
     config_destination_is_new = not config_destination.exists()
     if config_destination_is_new:
         config_temporary = config_destination.with_name(config_destination.name + ".new")
@@ -436,14 +449,24 @@ def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc
         os.replace(config_temporary, config_destination)
     elif config_destination.is_symlink() or not config_destination.is_file():
         raise UpdateError("Refusing to use a non-regular Home Assistant configuration file.")
+    if not rtmp_config_destination.exists():
+        rtmp_temporary = rtmp_config_destination.with_name(rtmp_config_destination.name + ".new")
+        shutil.copyfile(rtmp_config_source, rtmp_temporary)
+        os.chmod(rtmp_temporary, 0o640)
+        os.replace(rtmp_temporary, rtmp_config_destination)
+    elif rtmp_config_destination.is_symlink() or not rtmp_config_destination.is_file():
+        raise UpdateError("Refusing to use a non-regular RTMP configuration file.")
     os.chmod(config_destination, 0o640)
+    os.chmod(rtmp_config_destination, 0o640)
     try:
         group_id = grp.getgrnam("petcam").gr_gid
         if os.geteuid() == 0:
             os.chown(service_destination, 0, 0)
             os.chown(timelapse_destination, 0, 0)
             os.chown(motion_destination, 0, 0)
+            os.chown(rtmp_service_destination, 0, 0)
             os.chown(config_destination, 0, group_id)
+            os.chown(rtmp_config_destination, 0, group_id)
     except KeyError as error:
         raise UpdateError("The PetCam system group is missing; cannot secure Home Assistant configuration.") from error
 
@@ -525,6 +548,17 @@ def restart_services() -> str:
         )
         if motion.returncode:
             warnings.append("Motion worker did not restart; check petcam-motion.service logs")
+    rtmp_active = subprocess.run(
+        ["systemctl", "is-active", "--quiet", "petcam-rtmp.service"],
+        check=False,
+    )
+    if rtmp_active.returncode == 0:
+        rtmp = subprocess.run(
+            ["systemctl", "restart", "petcam-rtmp.service"],
+            capture_output=True, text=True, check=False,
+        )
+        if rtmp.returncode:
+            warnings.append("RTMP publisher did not restart; check petcam-rtmp.service logs")
     return "; ".join(warnings)
 
 
