@@ -6,6 +6,7 @@ libbsd-dev
 libv4l-dev
 openssl
 python3-pil
+python3-picamera2
 i2c-tools
 cifs-utils
 nfs-common

@@ -72,6 +72,27 @@ class RTMPOutputTests(unittest.TestCase):
         self.assertEqual(command[-3:-1], ["-f", "flv"])
         self.assertEqual(command[-1], "rtmps://live.example.test/app/secret-stream-key")
 
+    def test_native_h264_path_uses_mpegts_and_stream_copy_without_transcoding(self):
+        config = MODULE.validate_config(self.valid_config())
+        with patch.object(MODULE.shutil, "which", return_value="/usr/bin/ffmpeg"):
+            command = MODULE.build_ffmpeg_command(config, native_h264=True)
+        self.assertIn("mpegts", command)
+        self.assertIn("udp://127.0.0.1:10000?fifo_size=1000000&overrun_nonfatal=1", command)
+        self.assertIn("copy", command)
+        self.assertNotIn("mpjpeg", command)
+        self.assertNotIn("libx264", command)
+        self.assertNotIn("-vf", command)
+        self.assertEqual(command[-1], "rtmps://live.example.test/app/secret-stream-key")
+
+    def test_native_h264_detection_reads_capture_status(self):
+        response = type("Response", (), {
+            "__enter__": lambda self: self,
+            "__exit__": lambda self, *args: None,
+            "read": lambda self, size: b'{"native_h264":true}',
+        })()
+        with patch.object(MODULE.urllib.request, "urlopen", return_value=response):
+            self.assertTrue(MODULE.native_h264_available(timeout=0))
+
     def test_disabled_output_cannot_build_publisher_command(self):
         config = MODULE.validate_config({"enabled": False})
         with patch.object(MODULE.shutil, "which", return_value="/usr/bin/ffmpeg"):
