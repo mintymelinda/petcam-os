@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -108,7 +109,7 @@ def public_config(config):
     }
 
 
-def build_ffmpeg_command(config, input_url="http://127.0.0.1:8081/stream"):
+def build_ffmpeg_command(config, input_url="http://127.0.0.1:8081/stream", native_h264=False):
     config = validate_config(config)
     if not config["enabled"]:
         raise RTMPConfigError("RTMP output is disabled.")
@@ -117,20 +118,42 @@ def build_ffmpeg_command(config, input_url="http://127.0.0.1:8081/stream"):
     output_url = config["server_url"] + "/" + config["stream_key"]
     command = [
         "ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin",
-        "-rw_timeout", "15000000", "-f", "mpjpeg", "-i", input_url,
-        "-progress", "pipe:1", "-stats_period", "1", "-nostats",
-        "-an", "-vf",
-        f"fps={config['fps']},scale={config['width']}:{config['height']}:force_original_aspect_ratio=decrease,pad={config['width']}:{config['height']}:(ow-iw)/2:(oh-ih)/2",
-        "-pix_fmt", "yuv420p", "-c:v", config["encoder"],
-        "-b:v", f"{config['bitrate_kbps']}k",
-        "-maxrate", f"{config['bitrate_kbps']}k",
-        "-bufsize", f"{config['bitrate_kbps'] * 2}k",
-        "-g", str(config["fps"] * 2),
+        "-rw_timeout", "15000000",
     ]
-    if config["encoder"] == "libx264":
-        command.extend(["-preset", "ultrafast", "-tune", "zerolatency"])
-    command.extend(["-f", "flv", output_url])
+    if native_h264:
+        command.extend([
+            "-thread_queue_size", "512", "-probesize", "32",
+            "-analyzeduration", "0", "-f", "mpegts", "-i",
+            "udp://127.0.0.1:10000?fifo_size=1000000&overrun_nonfatal=1",
+            "-map", "0:v:0", "-an", "-c:v", "copy",
+        ])
+    else:
+        command.extend([
+            "-f", "mpjpeg", "-i", input_url,
+            "-an", "-vf",
+            f"fps={config['fps']},scale={config['width']}:{config['height']}:force_original_aspect_ratio=decrease,pad={config['width']}:{config['height']}:(ow-iw)/2:(oh-ih)/2",
+            "-pix_fmt", "yuv420p", "-c:v", config["encoder"],
+            "-b:v", f"{config['bitrate_kbps']}k",
+            "-maxrate", f"{config['bitrate_kbps']}k",
+            "-bufsize", f"{config['bitrate_kbps'] * 2}k",
+            "-g", str(config["fps"] * 2),
+        ])
+        if config["encoder"] == "libx264":
+            command.extend(["-preset", "ultrafast", "-tune", "zerolatency"])
+    command.extend([
+        "-progress", "pipe:1", "-stats_period", "1", "-nostats",
+        "-flvflags", "no_duration_filesize", "-f", "flv", output_url,
+    ])
     return command
+
+
+def native_h264_available(status_url="http://127.0.0.1:8081/status"):
+    try:
+        with urllib.request.urlopen(status_url, timeout=2) as response:
+            status = json.loads(response.read(65536))
+        return isinstance(status, dict) and status.get("native_h264") is True
+    except (OSError, ValueError, urllib.error.URLError):
+        return False
 
 
 def main():
@@ -140,18 +163,23 @@ def main():
     config = load_config()
     if not config["enabled"]:
         raise SystemExit("RTMP output is disabled.")
-    command = build_ffmpeg_command(config)
-    encoders = subprocess.run(
-        ["ffmpeg", "-hide_banner", "-encoders"],
-        capture_output=True, text=True, timeout=15, check=False,
-    )
-    if encoders.returncode or not re.search(r"\b" + re.escape(config["encoder"]) + r"\b", encoders.stdout):
-        raise SystemExit(f"Configured FFmpeg encoder is unavailable: {config['encoder']}")
+    native_h264 = native_h264_available()
+    command = build_ffmpeg_command(config, native_h264=native_h264)
+    if not native_h264:
+        encoders = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"],
+            capture_output=True, text=True, timeout=15, check=False,
+        )
+        if encoders.returncode or not re.search(r"\b" + re.escape(config["encoder"]) + r"\b", encoders.stdout):
+            raise SystemExit(f"Configured FFmpeg encoder is unavailable: {config['encoder']}")
     if args.check:
-        print(json.dumps(public_config(config)))
+        print(json.dumps({**public_config(config), "source": "native_h264" if native_h264 else "mjpeg_transcode"}))
         return
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    logging.info("Starting RTMP publisher using %s; destination credentials are redacted", config["encoder"])
+    logging.info(
+        "Starting RTMP publisher using %s; destination credentials are redacted",
+        "Picamera2 native H.264 stream copy" if native_h264 else config["encoder"],
+    )
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
     stopping = False
     latest_fps = None
@@ -169,6 +197,7 @@ def main():
         payload = {
             "state": state, "active": state == "publishing",
             "fps": latest_fps, "updated_at": time.time(),
+            "source": "native_h264" if native_h264 else "mjpeg_transcode",
         }
         temporary = STATUS_PATH.with_name(STATUS_PATH.name + ".tmp")
         temporary.write_text(json.dumps(payload) + "\n", encoding="utf-8")

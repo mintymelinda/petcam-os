@@ -118,7 +118,7 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <details><summary>Update details and diagnostics</summary><p id="update-details" class="muted">No update information yet.</p><pre id="update-logs" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
 </section></section>
 <section id="rtmp-output"><h2>RTMP Output</h2>
-<p class="muted">Optional publishing to an RTMP/RTMPS destination. This runs as a separate service and reuses the existing local MJPEG camera feed; it does not change the browser preview or OBS feed. Encoding adds CPU load. Start with a conservative resolution and bitrate on smaller Raspberry Pi models.</p>
+<p class="muted">Optional RTMP/RTMPS publishing. CSI cameras use one Picamera2 session for the existing MJPEG preview and a separate H.264 encoder; RTMP sends that H.264 stream without re-encoding. USB cameras and unsupported CSI configurations fall back to FFmpeg encoding. The browser preview and OBS feed remain MJPEG.</p>
 <label style="display:flex;gap:.5rem;align-items:center"><input id="rtmp-enabled" type="checkbox"> Enable RTMP publishing</label>
 <label for="rtmp-server-url">RTMP server URL</label><input id="rtmp-server-url" type="url" placeholder="rtmps://live.example.com/app" autocomplete="off">
 <label for="rtmp-stream-key">Stream key</label><input id="rtmp-stream-key" type="password" placeholder="Leave blank to keep the saved key" autocomplete="new-password">
@@ -1177,6 +1177,14 @@ class Handler(BaseHTTPRequestHandler):
                     data["stream_key"] = current["stream_key"]
                 updated = save_rtmp_config({**current, **data})
                 action = ("restart" if was_active else "enable") if updated["enabled"] else "disable"
+                capture_restart = subprocess.run(
+                    ["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
+                    capture_output=True, text=True, timeout=45, check=False,
+                )
+                if capture_restart.returncode:
+                    raise RuntimeError(
+                        capture_restart.stderr.strip() or "Unable to restart the camera with the saved RTMP settings."
+                    )
                 result = subprocess.run(
                     ["sudo", "/usr/local/sbin/petcam-rtmp-service", action],
                     capture_output=True, text=True, timeout=30, check=False,
@@ -1247,6 +1255,7 @@ def rtmp_status_snapshot():
         "state": state,
         "fps": status.get("fps") if fresh else None,
         "updated_at": updated_at,
+        "source": status.get("source") if fresh else None,
     }
 
 
