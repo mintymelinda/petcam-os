@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 CONFIG_PATH = Path(os.environ.get("PETCAM_RTMP_CONFIG", "/etc/petcam/rtmp.json"))
-CAMERA_CONFIG = Path(os.environ.get("PETCAM_CONFIG_PATH", "/etc/petcam/petcam.conf"))
+STATUS_PATH = Path(os.environ.get("PETCAM_RTMP_STATUS", "/run/petcam/rtmp-status.json"))
 DEFAULTS = {
     "enabled": False,
     "server_url": "",
@@ -118,6 +118,7 @@ def build_ffmpeg_command(config, input_url="http://127.0.0.1:8081/stream"):
     command = [
         "ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin",
         "-rw_timeout", "15000000", "-f", "mpjpeg", "-i", input_url,
+        "-progress", "pipe:1", "-stats_period", "1", "-nostats",
         "-an", "-vf",
         f"fps={config['fps']},scale={config['width']}:{config['height']}:force_original_aspect_ratio=decrease,pad={config['width']}:{config['height']}:(ow-iw)/2:(oh-ih)/2",
         "-pix_fmt", "yuv420p", "-c:v", config["encoder"],
@@ -140,13 +141,30 @@ def main():
     if not config["enabled"]:
         raise SystemExit("RTMP output is disabled.")
     command = build_ffmpeg_command(config)
+    encoders = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-encoders"],
+        capture_output=True, text=True, timeout=15, check=False,
+    )
+    if encoders.returncode or not re.search(r"\\b" + re.escape(config["encoder"]) + r"\\b", encoders.stdout):
+        raise SystemExit(f"Configured FFmpeg encoder is unavailable: {config['encoder']}")
     if args.check:
         print(json.dumps(public_config(config)))
         return
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     logging.info("Starting RTMP publisher using %s; destination credentials are redacted", config["encoder"])
-    process = subprocess.Popen(command)
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True, bufsize=1)
     stopping = False
+    latest_fps = None
+
+    def write_status(state):
+        STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "state": state, "active": state == "publishing",
+            "fps": latest_fps, "updated_at": time.time(),
+        }
+        temporary = STATUS_PATH.with_name(STATUS_PATH.name + ".tmp")
+        temporary.write_text(json.dumps(payload) + "\\n", encoding="utf-8")
+        os.replace(temporary, STATUS_PATH)
 
     def stop(_signum, _frame):
         nonlocal stopping
@@ -156,12 +174,22 @@ def main():
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
+    write_status("starting")
     try:
-        while not stopping:
-            code = process.poll()
-            if code is not None:
-                raise SystemExit(code or 0)
-            time.sleep(1)
+        for raw_line in process.stdout:
+            line = raw_line.strip()
+            if line.startswith("fps="):
+                try:
+                    latest_fps = float(line.split("=", 1)[1])
+                except ValueError:
+                    latest_fps = None
+                write_status("publishing")
+            elif line.startswith("progress="):
+                write_status("publishing" if line.endswith(("continue", "end")) else "starting")
+        code = process.wait()
+        write_status("stopped" if stopping and code == 0 else "failed" if code else "stopped")
+        if code and not stopping:
+            raise SystemExit(code)
     finally:
         if process.poll() is None:
             process.terminate()
@@ -170,6 +198,8 @@ def main():
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
+        if stopping:
+            write_status("stopped")
 
 
 if __name__ == "__main__":
