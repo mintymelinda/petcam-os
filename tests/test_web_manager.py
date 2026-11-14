@@ -369,7 +369,7 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("actual ", MODULE.PAGE)
         self.assertIn("setInterval(refreshLiveStatus,5000)", MODULE.PAGE)
         self.assertIn("Capture status refreshes every 5 seconds", MODULE.PAGE)
-        self.assertIn("unique JPEG FPS", MODULE.PAGE)
+        self.assertIn("forwarded JPEG FPS", MODULE.PAGE)
         self.assertIn('id="capture-status-freshness"', MODULE.PAGE)
 
     def test_system_tab_displays_the_installed_application_version(self):
