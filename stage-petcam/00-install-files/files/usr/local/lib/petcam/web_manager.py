@@ -626,13 +626,13 @@ def unregister_stream_client(client_id):
 
 def record_stream_chunk(client_id, chunk, parser_state):
     """Count JPEG marker pairs using bytes.find; never decode or copy image data."""
-    data = (b"\\xff" if parser_state["previous_byte"] == 0xFF else b"") + chunk
+    data = (b"\xff" if parser_state["previous_byte"] == 0xFF else b"") + chunk
     cursor = 0
     frames = 0
     last_frame_at = None
     while True:
-        start = data.find(b"\\xff\\xd8", cursor)
-        end = data.find(b"\\xff\\xd9", cursor)
+        start = data.find(b"\xff\xd8", cursor)
+        end = data.find(b"\xff\xd9", cursor)
         if start < 0 and end < 0:
             break
         if start >= 0 and (end < 0 or start < end):
