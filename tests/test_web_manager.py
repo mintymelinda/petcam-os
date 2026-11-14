@@ -60,6 +60,20 @@ class WebManagerTests(unittest.TestCase):
         self.assertNotIn('change-password', MODULE.PAGE)
         self.assertNotIn('/api/password', MODULE.PAGE)
 
+    def test_rtmp_status_reports_measured_fps_from_private_runtime_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            status_file = Path(directory) / "rtmp-status.json"
+            status_file.write_text(json.dumps({
+                "state": "publishing", "active": True, "fps": 29.8, "updated_at": MODULE.time.time()
+            }))
+            with mock.patch.object(MODULE, "RTMP_STATUS_FILE", status_file), \
+                    mock.patch.object(MODULE, "load_rtmp_config", return_value={"enabled": True}), \
+                    mock.patch.object(MODULE.subprocess, "run", return_value=mock.Mock(returncode=0)):
+                status = MODULE.rtmp_status_snapshot()
+        self.assertTrue(status["active"])
+        self.assertEqual(status["state"], "publishing")
+        self.assertEqual(status["fps"], 29.8)
+
     def test_admin_reauthentication_uses_masked_password_dialog_not_prompt(self):
         self.assertIn('<dialog id="login-dialog"', MODULE.PAGE)
         self.assertIn('id="login-password" type="password"', MODULE.PAGE)
