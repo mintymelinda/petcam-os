@@ -534,6 +534,32 @@ exposure_dynamic_framerate 0x009a0903 (bool) : default=0 value=1
         self.assertFalse(by_name["exposure_time_absolute"]["writable"])
         self.assertTrue(by_name["exposure_dynamic_framerate"]["writable"])
 
+    def test_parser_marks_invalid_defaults_unavailable_and_preserves_valid_defaults(self):
+        output = """brightness 0x00980900 (int) : min=0 max=255 step=1 default=-8193 value=128
+contrast 0x00980901 (int) : min=0 max=255 step=1 default=57343 value=128
+focus_absolute 0x009a090a (int) : min=0 max=250 step=1 default=8189 value=0
+zoom_absolute 0x009a090d (int) : min=100 max=500 step=1 default=57343 value=100
+white_balance_automatic 0x0098090c (bool) : default=1 value=1
+power_line_frequency 0x00980918 (menu) : min=0 max=2 default=2 value=2 (60 Hz)
+        0: Disabled
+        1: 50 Hz
+        2: 60 Hz
+auto_exposure 0x009a0901 (menu) : min=0 max=3 default=0 value=3 (Aperture Priority Mode)
+        1: Manual Mode
+        3: Aperture Priority Mode
+"""
+        controls = {control["name"]: control for control in MODULE.parse_v4l2_controls(output)}
+        for name in ("brightness", "contrast", "focus_absolute", "zoom_absolute", "auto_exposure"):
+            with self.subTest(control=name):
+                self.assertIsNone(controls[name]["default"])
+        self.assertEqual(controls["white_balance_automatic"]["default"], 1)
+        self.assertEqual(controls["power_line_frequency"]["default"], 2)
+
+    def test_camera_control_ui_labels_invalid_defaults_as_unavailable(self):
+        self.assertIn('defaultLabel=control.default===null?"unavailable"', MODULE.PAGE)
+        self.assertIn('" · Default: "+defaultLabel', MODULE.PAGE)
+        self.assertIn('" · Default: "+(menuOption(control.default)?.label??"unavailable")', MODULE.PAGE)
+
     def test_active_usb_camera_is_resolved_from_saved_physical_identity(self):
         camera = {
             "kind": "usb",

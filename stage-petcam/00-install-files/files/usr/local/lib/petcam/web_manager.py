@@ -210,8 +210,8 @@ for(const control of data.controls){
 const row=document.createElement("div"),heading=document.createElement("div"),label=document.createElement("label"),details=document.createElement("small"),editor=document.createElement("div");
 row.style.cssText="border:1px solid #383e47;border-radius:.5rem;padding:.45rem .6rem;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.2rem .65rem;align-items:center";
 heading.style.minWidth="0";label.style.margin="0";label.textContent=cameraControlLabel(control.name);details.className="muted";details.style.cssText="display:block;font-size:.78rem;line-height:1.25";
-const isMenu=control.type==="menu"||control.type==="intmenu",isBoolean=control.type==="bool",menuOption=value=>control.menu.find(option=>option.value===value),booleanLabel=value=>value===null?"unknown":Number(value)===1?"Enabled":"Disabled";
-details.textContent="Current: "+(isMenu?(menuOption(control.value)?.label??"unknown"):(isBoolean?booleanLabel(control.value):(control.value===null?"unknown":control.value)))+(isMenu?(menuOption(control.default)?" · Default: "+menuOption(control.default).label:"")+" · Available: "+control.menu.map(option=>option.label).join(", "):(control.default!==null?" · Default: "+(isBoolean?booleanLabel(control.default):control.default):"")+(control.min!==null&&control.max!==null?" · Range: "+control.min+"–"+control.max:""))+(control.writable?"":" · Currently unavailable");
+const isMenu=control.type==="menu"||control.type==="intmenu",isBoolean=control.type==="bool",menuOption=value=>control.menu.find(option=>option.value===value),booleanLabel=value=>value===null?"unknown":Number(value)===1?"Enabled":"Disabled",defaultLabel=control.default===null?"unavailable":(isBoolean?booleanLabel(control.default):control.default);
+details.textContent="Current: "+(isMenu?(menuOption(control.value)?.label??"unknown"):(isBoolean?booleanLabel(control.value):(control.value===null?"unknown":control.value)))+(isMenu?" · Default: "+(menuOption(control.default)?.label??"unavailable")+" · Available: "+control.menu.map(option=>option.label).join(", "):" · Default: "+defaultLabel+(control.min!==null&&control.max!==null?" · Range: "+control.min+"–"+control.max:""))+(control.writable?"":" · Currently unavailable");
 editor.className="row";editor.style.cssText="align-items:center;gap:.4rem;justify-content:flex-end";
 let input,output,isRange=false;
 if(isBoolean){input=document.createElement("input");input.type="checkbox";input.checked=Number(control.value)===1;input.disabled=!control.writable}
@@ -434,6 +434,28 @@ def parse_v4l2_controls(output):
                     "value": int(menu_match.group("value")),
                     "label": menu_match.group("label"),
                 })
+    for control in controls:
+        default = control["default"]
+        if default is None:
+            continue
+        control_type = control["type"]
+        if control_type == "bool":
+            valid_default = default in (0, 1)
+        elif control_type in ("menu", "intmenu"):
+            valid_default = default in {option["value"] for option in control["menu"]}
+        elif control_type == "int":
+            minimum = control["min"]
+            maximum = control["max"]
+            step = control["step"]
+            valid_default = (
+                (minimum is None or default >= minimum)
+                and (maximum is None or default <= maximum)
+                and (minimum is None or (default - minimum) % step == 0)
+            )
+        else:
+            valid_default = True
+        if not valid_default:
+            control["default"] = None
     return controls
 
 
