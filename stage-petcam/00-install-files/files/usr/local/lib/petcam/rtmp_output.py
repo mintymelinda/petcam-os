@@ -79,7 +79,7 @@ def load_config(path=CONFIG_PATH):
     config = validate_config(values)
     # Migrate existing RTMP installations and remove the now-unneeded external
     # destination and stream key from persistent configuration.
-    if any(key not in DEFAULTS for key in values):
+    if isinstance(values, dict) and any(key not in DEFAULTS for key in values):
         _write_config(config, path)
     return config
 
@@ -176,6 +176,8 @@ authInternalUsers:
     permissions:
       - action: publish
         path: petcam
+      - action: read
+        path: petcam
   - user: any
     pass:
     ips: []
@@ -186,9 +188,10 @@ paths:
   petcam:
     source: publisher
 """, encoding="utf-8")
+    if not os.access(binary, os.X_OK):
+        raise SystemExit("Bundled MediaMTX RTSP server is not executable.")
     process = subprocess.Popen(
         [str(binary), str(runtime_config)],
-        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
         start_new_session=True,
     )
     deadline = time.monotonic() + 10
@@ -221,6 +224,9 @@ def main():
         if encoders.returncode or not re.search(r"\b" + re.escape(config["encoder"]) + r"\b", encoders.stdout):
             raise SystemExit(f"Configured FFmpeg encoder is unavailable: {config['encoder']}")
     if args.check:
+        binary = Path(__file__).resolve().parents[1] / "bin" / "mediamtx"
+        if not binary.is_file() or not os.access(binary, os.X_OK):
+            raise SystemExit("Bundled MediaMTX RTSP server is missing or not executable.")
         print(json.dumps({**public_config(config), "source": "native_h264" if native_h264 else "mjpeg_transcode",
                           "rtsp_url": "rtsp://<petcam-host>:8554/petcam"}))
         return
