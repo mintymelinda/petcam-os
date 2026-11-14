@@ -12,7 +12,7 @@ Open **System → RTMP Output** and configure:
 - **RTMP server URL** — the server/application URL, such as `rtmps://stream.example.net/live`. Do not include the stream key in this URL.
 - **Stream key** — stored in `/etc/petcam/rtmp.json`; the manager never returns the saved key to the browser. Leave the field blank to retain the existing key.
 - **Video encoder** — used by the MJPEG fallback path. Native CSI publishing uses Picamera2's platform-selected H.264 encoder automatically.
-- **Output resolution, FPS, and bitrate** — output is scaled to the selected dimensions while preserving aspect ratio.
+- **Output resolution, FPS, and bitrate** — the MJPEG fallback is scaled to the selected dimensions while preserving aspect ratio. Native CSI H.264 uses the selected output dimensions directly; its resolution cannot exceed the camera capture mode, and its FPS must divide the capture FPS evenly.
 
 Only RTMP and RTMPS URLs are accepted. The stream key is restricted to URL-safe characters. Settings are validated before the service is changed.
 
