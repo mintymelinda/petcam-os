@@ -61,6 +61,18 @@ def prepare_pigen(pigen_dir: Path) -> None:
         raise SystemExit("pi-gen export cleanup no longer ends with the expected chroot heredoc")
     export_cleanup.write_text(content + cleanup_config, encoding="utf-8")
 
+    # pi-gen's finalise stage pre-populates apt-listchanges' database by
+    # walking changelogs for the entire installed package set. That scan is
+    # expensive in image builds and has no reader; retain timer disablement
+    # but leave apt-listchanges itself available for later interactive APT use.
+    finalise = pigen_dir / "export-image" / "05-finalise" / "01-run.sh"
+    replace_once(
+        finalise,
+        '\t\tpython3 -m apt_listchanges.populate_database --profile apt\\n',
+        "",
+        "apt-listchanges changelog database population",
+    )
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
