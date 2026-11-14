@@ -49,6 +49,18 @@ if [ "$action" = disable ]; then exec /usr/bin/systemctl disable --now "petcam-s
 exec /usr/bin/systemctl "$action" "petcam-stream@$profile.service"
 SCRIPT
 chmod 0755 /usr/local/sbin/petcam-stream-service
+
+cat > /usr/local/sbin/petcam-rtmp-service <<'SCRIPT'
+#!/bin/sh
+set -eu
+case "${1:-}" in
+    enable) exec /usr/bin/systemctl enable --now petcam-rtmp.service ;;
+    disable) exec /usr/bin/systemctl disable --now petcam-rtmp.service ;;
+    restart) exec /usr/bin/systemctl restart petcam-rtmp.service ;;
+    *) echo "Usage: petcam-rtmp-service enable|disable|restart" >&2; exit 2 ;;
+esac
+SCRIPT
+chmod 0755 /usr/local/sbin/petcam-rtmp-service
 cat > /usr/local/bin/petcam-diagnostics <<'SCRIPT'
 #!/bin/sh
 exec python3 /opt/petcam/current/lib/network_diagnostics.py "$@"
@@ -177,6 +189,21 @@ chmod 1770 /etc/petcam
 chown petcam:petcam /etc/petcam/petcam.conf
 chmod 0640 /etc/petcam/petcam.conf
 
+cat > /etc/petcam/rtmp.json <<'JSON'
+{
+  "enabled": false,
+  "server_url": "",
+  "stream_key": "",
+  "encoder": "libx264",
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "bitrate_kbps": 2500
+}
+JSON
+chown petcam:petcam /etc/petcam/rtmp.json
+chmod 0640 /etc/petcam/rtmp.json
+
 chown root:petcam /etc/petcam/home-assistant.conf
 chmod 0640 /etc/petcam/home-assistant.conf
 
@@ -245,6 +272,7 @@ systemctl enable petcam-stream.service
 
 cat > /etc/sudoers.d/petcam-web <<'SUDO'
 petcam ALL=(root) NOPASSWD: /usr/bin/systemctl restart petcam-stream.service, /usr/local/sbin/petcam-stream-service, /usr/local/bin/petcam-update check, /usr/bin/systemctl start petcam-update.service, /usr/bin/journalctl -u petcam-update.service -n 20 --no-pager -o cat
+petcam ALL=(root) NOPASSWD: /usr/local/sbin/petcam-rtmp-service enable, /usr/local/sbin/petcam-rtmp-service disable, /usr/local/sbin/petcam-rtmp-service restart
 SUDO
 chmod 0440 /etc/sudoers.d/petcam-web
 visudo -cf /etc/sudoers.d/petcam-web
