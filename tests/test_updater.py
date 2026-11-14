@@ -419,6 +419,48 @@ class RecentReleaseDiscoveryTests(unittest.TestCase):
                 )
         self.assertEqual([item["manifest"]["version"] for item in found], ["1.5.0"])
 
+    def test_http_404_for_one_release_does_not_block_older_complete_release(self):
+        api_url = "https://api.github.com/repos/mintymelinda/petcam-os/releases?per_page=30"
+        releases = [
+            {
+                "tag_name": "v1.6.0", "draft": False, "prerelease": False,
+                "assets": [
+                    {"name": "petcam-update-manifest.json", "browser_download_url": "https://assets/new/manifest"},
+                    {"name": "petcam-update-manifest.json.sig", "browser_download_url": "https://assets/new/signature"},
+                    {"name": "archive.tar.gz", "browser_download_url": "https://assets/new/archive.tar.gz", "size": 123},
+                ],
+            },
+            {
+                "tag_name": "v1.5.0", "draft": False, "prerelease": False,
+                "assets": [
+                    {"name": "petcam-update-manifest.json", "browser_download_url": "https://assets/old/manifest"},
+                    {"name": "petcam-update-manifest.json.sig", "browser_download_url": "https://assets/old/signature"},
+                    {"name": "archive.tar.gz", "browser_download_url": "https://assets/old/archive.tar.gz", "size": 123},
+                ],
+            },
+        ]
+
+        def fake_fetch(url, limit):
+            if url == api_url:
+                return json.dumps(releases).encode()
+            if url == "https://assets/new/manifest":
+                return self.manifest("1.6.0", "https://assets/new/archive.tar.gz")
+            if url == "https://assets/new/signature":
+                raise UpdateError("Unable to download update data: HTTP Error 404: Not Found")
+            if url == "https://assets/old/manifest":
+                return self.manifest("1.5.0", "https://assets/old/archive.tar.gz")
+            if url == "https://assets/old/signature":
+                return b"valid-signature"
+            raise AssertionError(f"Unexpected URL: {url}")
+
+        with mock.patch("updater.fetch", side_effect=fake_fetch):
+            with mock.patch("updater.verify_signature"):
+                found = release_manifest_candidates(
+                    "https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json",
+                    Path("/trusted/key.pem"),
+                )
+        self.assertEqual([item["manifest"]["version"] for item in found], ["1.5.0"])
+
     def test_no_complete_release_is_a_nonfatal_empty_result(self):
         config = {
             "MANIFEST_URL": "https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json",
