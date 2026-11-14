@@ -360,7 +360,11 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("if(livePreviewEnabled)", MODULE.PAGE)
         self.assertIn("MJPEG delivered FPS", MODULE.PAGE)
         self.assertIn("Stream FPS (RTMP)", MODULE.PAGE)
-        self.assertIn("Not configured", MODULE.PAGE)
+        self.assertIn("rtmp.enabled", MODULE.PAGE)
+        self.assertIn("rtmp.state", MODULE.PAGE)
+        self.assertIn('id="rtmp-output"', MODULE.PAGE)
+        self.assertIn('id="rtmp-server-url"', MODULE.PAGE)
+        self.assertIn('id="rtmp-stream-key" type="password"', MODULE.PAGE)
         self.assertIn('id="live-preview"', MODULE.PAGE)
         self.assertIn("saved camera settings are selected", MODULE.PAGE)
 
