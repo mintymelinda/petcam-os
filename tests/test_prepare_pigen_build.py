@@ -51,7 +51,7 @@ class PreparePigenBuildTests(unittest.TestCase):
             self.assertIn("apt-get clean", export)
             self.assertIn("99-pigen-archive-cache", export)
             self.assertNotIn("apt_listchanges.populate_database", finalise_content)
-            self.assertIn("systemctl disable apt-listchanges.timer", finalise_content)
+            self.assertNotIn("systemctl disable apt-listchanges.timer", finalise_content)
 
     def test_rejects_unexpected_pi_gen_source_instead_of_silently_skipping_cache_patch(self):
         with tempfile.TemporaryDirectory() as temporary:
