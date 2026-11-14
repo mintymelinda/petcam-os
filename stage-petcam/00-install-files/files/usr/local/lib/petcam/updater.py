@@ -8,6 +8,7 @@ import grp
 import hashlib
 import json
 import os
+import pwd
 import platform
 import re
 import ssl
@@ -468,7 +469,7 @@ def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc
             os.chown(motion_destination, 0, 0)
             os.chown(rtmp_service_destination, 0, 0)
             os.chown(config_destination, 0, group_id)
-            os.chown(rtmp_config_destination, 0, group_id)
+            os.chown(rtmp_config_destination, pwd.getpwnam("petcam").pw_uid, group_id)
     except KeyError as error:
         raise UpdateError("The PetCam system group is missing; cannot secure Home Assistant configuration.") from error
 
