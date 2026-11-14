@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import threading
 import time
@@ -149,6 +150,60 @@ def native_h264_available(status_url="http://127.0.0.1:8081/status", timeout=25)
             time.sleep(0.25)
 
 
+def start_rtsp_server():
+    binary = Path(__file__).resolve().parents[1] / "bin" / "mediamtx"
+    if not binary.is_file():
+        raise SystemExit("Bundled MediaMTX RTSP server is missing from this PetCam release.")
+    runtime_config = STATUS_PATH.parent / "mediamtx.yml"
+    runtime_config.parent.mkdir(parents=True, exist_ok=True)
+    runtime_config.write_text("""logLevel: info
+logDestinations: [stdout]
+rtsp: yes
+rtspAddress: :8554
+rtmp: no
+hls: no
+webrtc: no
+srt: no
+api: no
+metrics: no
+pprof: no
+playback: no
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass:
+    ips: ["127.0.0.1", "::1"]
+    permissions:
+      - action: publish
+        path: petcam
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: read
+        path: petcam
+paths:
+  petcam:
+    source: publisher
+""", encoding="utf-8")
+    process = subprocess.Popen(
+        [str(binary), str(runtime_config)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise SystemExit(f"MediaMTX exited during startup with status {process.returncode}.")
+        try:
+            with socket.create_connection(("127.0.0.1", 8554), timeout=0.5):
+                return process
+        except OSError:
+            time.sleep(0.2)
+    process.terminate()
+    raise SystemExit("MediaMTX did not open the local RTSP listener within 10 seconds.")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="validate OBS output settings and FFmpeg availability")
@@ -156,6 +211,7 @@ def main():
     config = load_config()
     if not config["enabled"]:
         raise SystemExit("OBS output is disabled.")
+    rtsp_server = start_rtsp_server()
     native_h264 = native_h264_available()
     command = build_ffmpeg_command(config, native_h264=native_h264)
     if not native_h264:
@@ -228,6 +284,13 @@ def main():
         stderr_reader.join(timeout=2)
         if stopping:
             write_status("stopped")
+        if rtsp_server.poll() is None:
+            rtsp_server.terminate()
+            try:
+                rtsp_server.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                rtsp_server.kill()
+                rtsp_server.wait()
 
 
 if __name__ == "__main__":
