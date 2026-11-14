@@ -587,6 +587,11 @@ exposure_dynamic_framerate 0x009a0903 (bool) : default=0 value=1
                 MODULE.set_camera_control({"name": "brightness", "value": 100})
         run.assert_not_called()
 
+    def test_boolean_camera_controls_use_enabled_and_disabled_labels(self):
+        self.assertIn('booleanLabel=value=>value===null?"unknown":Number(value)===1?"Enabled":"Disabled"', MODULE.PAGE)
+        self.assertIn('isBoolean?booleanLabel(control.value)', MODULE.PAGE)
+        self.assertIn('isBoolean?booleanLabel(control.default)', MODULE.PAGE)
+
     def test_management_page_exposes_dynamic_camera_controls(self):
         self.assertIn('id="camera-controls-list"', MODULE.PAGE)
         self.assertIn("/api/camera-controls", MODULE.PAGE)
