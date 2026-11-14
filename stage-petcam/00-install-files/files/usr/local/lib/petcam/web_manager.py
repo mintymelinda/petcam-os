@@ -177,8 +177,8 @@ for(const control of data.controls){
 const row=document.createElement("div"),label=document.createElement("label"),details=document.createElement("small"),editor=document.createElement("div"),apply=document.createElement("button");
 row.style.cssText="border-top:1px solid #383e47;padding:.65rem 0";
 label.textContent=cameraControlLabel(control.name);details.className="muted";details.style.display="block";
-const isMenu=control.type==="menu"||control.type==="intmenu",menuOption=value=>control.menu.find(option=>option.value===value);
-details.textContent="Current: "+(isMenu?(menuOption(control.value)?.label??"unknown"):(control.value===null?"unknown":control.value))+(isMenu?(menuOption(control.default)?" · Default: "+menuOption(control.default).label:"")+" · Available: "+control.menu.map(option=>option.label).join(", "):(control.default!==null?" · Default: "+control.default:"")+(control.min!==null&&control.max!==null?" · Range: "+control.min+"–"+control.max:""))+(control.writable?"":" · Currently unavailable");
+const isMenu=control.type==="menu"||control.type==="intmenu",isBoolean=control.type==="bool",menuOption=value=>control.menu.find(option=>option.value===value),booleanLabel=value=>value===null?"unknown":Number(value)===1?"Enabled":"Disabled";
+details.textContent="Current: "+(isMenu?(menuOption(control.value)?.label??"unknown"):(isBoolean?booleanLabel(control.value):(control.value===null?"unknown":control.value)))+(isMenu?(menuOption(control.default)?" · Default: "+menuOption(control.default).label:"")+" · Available: "+control.menu.map(option=>option.label).join(", "):(control.default!==null?" · Default: "+(isBoolean?booleanLabel(control.default):control.default):"")+(control.min!==null&&control.max!==null?" · Range: "+control.min+"–"+control.max:""))+(control.writable?"":" · Currently unavailable");
 editor.className="row";editor.style.alignItems="center";
 let input,output;
 if(control.type==="bool"){input=document.createElement("input");input.type="checkbox";input.checked=Number(control.value)===1;input.disabled=!control.writable}
