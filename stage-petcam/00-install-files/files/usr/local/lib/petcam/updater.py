@@ -44,6 +44,7 @@ REQUIRED_FILES = (
     "lib/health_monitor.py",
     "lib/config.py",
     "lib/network_diagnostics.py",
+    "lib/factory_reset.py",
     "lib/home_assistant.py",
     "lib/timelapse.py",
     "lib/motion_detection.py",
