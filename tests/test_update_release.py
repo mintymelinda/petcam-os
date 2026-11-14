@@ -20,6 +20,10 @@ class SignedReleasePublisherTests(unittest.TestCase):
         stage_script = repo / "stage-petcam/00-install-files/00-run.sh"
         source_dir = repo / "stage-petcam/00-install-files/files/usr/local/lib/petcam"
         script = stage_script.read_text(encoding="utf-8")
+        self.assertIn("curl --fail --location --retry 3", script)
+        self.assertIn('--output "$MEDIAMTX_TMP/$MEDIAMTX_ARCHIVE"', script)
+        self.assertIn('echo "$MEDIAMTX_SHA256  $MEDIAMTX_TMP/$MEDIAMTX_ARCHIVE" | sha256sum --check', script)
+        self.assertNotIn('python3 - "$MEDIAMTX_TMP/$MEDIAMTX_ARCHIVE"', script)
         from create_update_release import REQUIRED_FILES
         systemd_source_dir = repo / "stage-petcam/00-install-files/files/etc/systemd/system"
         for relative in REQUIRED_FILES:
