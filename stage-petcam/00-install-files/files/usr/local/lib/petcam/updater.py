@@ -245,12 +245,17 @@ def release_manifest_candidates(
         assets = release.get("assets")
         if not isinstance(assets, list):
             continue
-        asset_urls = {
-            asset.get("name"): asset.get("browser_download_url")
-            for asset in assets if isinstance(asset, dict)
+        release_assets = {
+            asset.get("name"): asset
+            for asset in assets
+            if isinstance(asset, dict) and asset.get("state", "uploaded") == "uploaded"
         }
-        candidate_url = asset_urls.get(manifest_name)
-        signature_url = asset_urls.get(manifest_name + ".sig")
+        manifest_asset = release_assets.get(manifest_name)
+        signature_asset = release_assets.get(manifest_name + ".sig")
+        if not manifest_asset or not signature_asset:
+            continue
+        candidate_url = manifest_asset.get("browser_download_url")
+        signature_url = signature_asset.get("browser_download_url")
         if not isinstance(candidate_url, str) or not isinstance(signature_url, str):
             continue
         try:
@@ -258,6 +263,14 @@ def release_manifest_candidates(
             signature = fetch(signature_url, 4096)
             verify_signature(raw, signature, Path(key_path))
             manifest = parse_manifest(raw)
+            archive_url = str(manifest["archive_url"])
+            archive_name = PurePosixPath(urllib.parse.urlparse(archive_url).path).name
+            archive_asset = release_assets.get(archive_name)
+            if not archive_asset or archive_asset.get("browser_download_url") != archive_url:
+                raise UpdateError("Release is missing the signed application archive asset")
+            archive_asset_size = archive_asset.get("size")
+            if archive_asset_size is not None and archive_asset_size != manifest["archive_size"]:
+                raise UpdateError("Release archive asset size does not match its signed manifest")
             version = str(manifest["version"])
             if release.get("tag_name") not in (None, "", "v" + version, version):
                 raise UpdateError("Release tag does not match its signed manifest version")
