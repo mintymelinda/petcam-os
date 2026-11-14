@@ -1,7 +1,9 @@
 import importlib.util
 import io
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location(
@@ -364,6 +366,37 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("latest_captured_fps", MODULE.PAGE)
         self.assertIn("configured:", MODULE.PAGE)
         self.assertIn("actual ", MODULE.PAGE)
+        self.assertIn("setInterval(refreshLiveStatus,5000)", MODULE.PAGE)
+        self.assertIn("Capture status refreshes every 5 seconds", MODULE.PAGE)
+        self.assertIn("unique JPEG FPS", MODULE.PAGE)
+        self.assertIn('id="capture-status-freshness"', MODULE.PAGE)
+
+    def test_system_tab_displays_the_installed_application_version(self):
+        self.assertIn('id="installed-version"', MODULE.PAGE)
+        self.assertIn("/api/system", MODULE.PAGE)
+        with tempfile.TemporaryDirectory() as directory:
+            version_file = Path(directory) / "VERSION"
+            version_file.write_text("9.8.7\\n", encoding="utf-8")
+            with mock.patch.object(MODULE, "__file__", str(Path(directory) / "web_manager.py")):
+                self.assertEqual(MODULE.installed_version(), "9.8.7")
+
+    def test_stream_metrics_count_jpeg_frames_across_chunk_boundaries(self):
+        client_id = MODULE.register_stream_client("browser_source")
+        parser_state = {
+            "previous_byte": None,
+            "in_jpeg": False,
+            "last_frame_monotonic": None,
+        }
+        try:
+            MODULE.record_stream_chunk(client_id, b"\\xff\\xd8first\\xff", parser_state)
+            MODULE.record_stream_chunk(client_id, b"\\xd9\\xff\\xd8second\\xff\\xd9", parser_state)
+            snapshot = MODULE.stream_metrics_snapshot()
+            self.assertEqual(snapshot["active_clients"], 1)
+            self.assertEqual(snapshot["clients"][0]["frames"], 2)
+            self.assertEqual(snapshot["clients"][0]["source"], "browser_source")
+            self.assertGreater(snapshot["clients"][0]["bytes"], 0)
+        finally:
+            MODULE.unregister_stream_client(client_id)
 
     def test_camera_performance_warning_uses_single_capture_budget(self):
         self.assertIn("projectedPixelRate", MODULE.PAGE)
