@@ -53,7 +53,7 @@ def validate_config(values):
             raise RTMPConfigError("RTMP server URL must use rtmp:// or rtmps:// and include a host.")
         if parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise RTMPConfigError("Put the stream key in its own field; URL credentials, query strings, and fragments are not allowed.")
-        if any(char in server for char in ("\\r", "\\n", " ", "\\t")):
+        if any(char in server for char in ("\r", "\n", " ", "\t")):
             raise RTMPConfigError("RTMP server URL contains invalid whitespace.")
     if len(key) > MAX_KEY_LENGTH or any(ord(char) < 33 or ord(char) > 126 for char in key):
         raise RTMPConfigError("Stream key must contain printable non-space ASCII characters and be at most 512 characters.")
@@ -88,7 +88,7 @@ def save_config(values, path=CONFIG_PATH):
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(target.name + ".tmp")
-    temporary.write_text(json.dumps(config, indent=2) + "\\n", encoding="utf-8")
+    temporary.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
     os.chmod(temporary, 0o640)
     try:
         import grp
