@@ -129,6 +129,8 @@ class CSIFrameSource:
         capture_fps = float(self.fps)
         fps_ratio = capture_fps / output_fps
         frame_skip = max(1, round(fps_ratio))
+        if output_width > self.width or output_height > self.height:
+            raise RuntimeError("Native H.264 output cannot exceed the selected CSI capture resolution.")
         if output_fps > capture_fps or abs(fps_ratio - frame_skip) > 0.05:
             raise RuntimeError(
                 "Native H.264 requires RTMP FPS to be an integer divisor of the selected CSI capture FPS."

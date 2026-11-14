@@ -155,6 +155,12 @@ def native_h264_available(status_url="http://127.0.0.1:8081/status", timeout=25)
             with urllib.request.urlopen(status_url, timeout=2) as response:
                 status = json.loads(response.read(65536))
             return isinstance(status, dict) and status.get("native_h264") is True
+        except urllib.error.HTTPError as error:
+            if error.code in (404, 405):
+                return False
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.25)
         except (OSError, ValueError, urllib.error.URLError):
             if time.monotonic() >= deadline:
                 return False
