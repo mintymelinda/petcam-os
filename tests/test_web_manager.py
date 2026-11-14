@@ -267,13 +267,13 @@ class WebManagerTests(unittest.TestCase):
             MODULE._camera_inventory_cache = None
             MODULE._camera_inventory_cache_at = 0.0
 
-    def test_stream_proxy_uses_incremental_reads_without_explicit_flushes(self):
+    def test_stream_proxy_reconnects_upstream_without_ending_obs_response(self):
         class Upstream:
             status = 200
             headers = {"Content-Type": "multipart/x-mixed-replace; boundary=frame"}
 
-            def __init__(self):
-                self.chunks = iter((b"frame-one", b"frame-two", b""))
+            def __init__(self, chunks):
+                self.chunks = iter(chunks)
                 self.read1_calls = 0
 
             def __enter__(self):
@@ -282,7 +282,7 @@ class WebManagerTests(unittest.TestCase):
             def __exit__(self, *_args):
                 return False
 
-            def read1(self, size):
+            def read1(self, _size):
                 self.read1_calls += 1
                 return next(self.chunks)
 
@@ -291,6 +291,13 @@ class WebManagerTests(unittest.TestCase):
 
         class CountingWriter(io.BytesIO):
             flush_calls = 0
+            writes = 0
+
+            def write(self, payload):
+                self.writes += 1
+                if self.writes > 2:
+                    raise BrokenPipeError("OBS disconnected")
+                return super().write(payload)
 
             def flush(self):
                 self.flush_calls += 1
@@ -310,14 +317,22 @@ class WebManagerTests(unittest.TestCase):
             def end_headers(self):
                 pass
 
-        upstream = Upstream()
+        first = Upstream((b"frame-one", b""))
+        second = Upstream((b"frame-two", b"frame-three"))
         handler = Handler()
-        with mock.patch.object(MODULE.urllib.request, "urlopen", return_value=upstream):
+        with mock.patch.object(MODULE.urllib.request, "urlopen", side_effect=(first, second)) as open_stream, \\
+                mock.patch.object(MODULE.time, "sleep"):
             MODULE.proxy_stream(handler, 8081)
         self.assertEqual(handler.status, 200)
         self.assertEqual(handler.wfile.getvalue(), b"frame-oneframe-two")
-        self.assertEqual(upstream.read1_calls, 3)
+        self.assertEqual(open_stream.call_count, 2)
+        self.assertEqual(first.read1_calls, 2)
+        self.assertEqual(second.read1_calls, 2)
         self.assertEqual(handler.wfile.flush_calls, 0)
+        self.assertEqual(
+            [value for name, value in handler.headers_sent if name == "Content-Type"],
+            ["multipart/x-mixed-replace; boundary=frame"],
+        )
 
     def test_camera_inventory_exposes_stable_identity_metadata(self):
         with mock.patch.object(MODULE, "run_camera", return_value={
