@@ -32,6 +32,10 @@ class WifiMetricsTests(unittest.TestCase):
         self.assertEqual(result["wifi"]["tx_retries"], 12)
         self.assertEqual(result["wifi"]["channel"], 36)
 
+    def test_image_installs_iw_for_wireless_link_metrics(self):
+        packages = Path("stage-petcam-base/01-install-packages/00-packages").read_text()
+        self.assertIn("\niw\n", "\n" + packages.strip() + "\n")
+
     def test_reports_wired_link_without_claiming_wifi_data(self):
         with mock.patch.object(MODULE, "_command", return_value='[{"dev":"eth0"}]'), \
                 mock.patch.object(MODULE.Path, "exists", return_value=False), \
