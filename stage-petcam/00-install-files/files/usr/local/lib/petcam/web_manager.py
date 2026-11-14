@@ -216,8 +216,8 @@ editor.className="row";editor.style.cssText="align-items:center;gap:.4rem;justif
 let input,output,isRange=false;
 if(isBoolean){input=document.createElement("input");input.type="checkbox";input.checked=Number(control.value)===1;input.disabled=!control.writable}
 else if(isMenu){input=document.createElement("select");for(const option of control.menu){const choice=document.createElement("option");choice.value=option.value;choice.textContent=option.label;input.append(choice)}input.value=String(control.value);input.disabled=!control.writable;input.style.maxWidth="10rem"}
-else if(control.type==="int"&&control.min!==null&&control.max!==null&&control.max-control.min<=10000){isRange=true;input=document.createElement("input");input.type="range";input.min=control.min;input.max=control.max;input.step=control.step;input.value=control.value??control.min;input.disabled=!control.writable;input.style.maxWidth="8rem";output=document.createElement("output");output.textContent=input.value;input.oninput=()=>{output.textContent=input.value;updateCameraControlDirtyState(control,input,applyButton)}}
-else{input=document.createElement("input");input.type="number";if(control.min!==null)input.min=control.min;if(control.max!==null)input.max=control.max;input.step=control.step;input.value=control.value??"";input.disabled=!control.writable;input.style.width="6rem"}
+else if(control.type==="int"&&control.value!==null&&control.min!==null&&control.max!==null&&control.max-control.min<=10000){isRange=true;input=document.createElement("input");input.type="range";input.min=control.min;input.max=control.max;input.step=control.step;input.value=control.value;input.disabled=!control.writable;input.style.maxWidth="8rem";output=document.createElement("output");output.textContent=input.value;input.oninput=()=>{output.textContent=input.value;updateCameraControlDirtyState(control,input,applyButton)}}
+else{input=document.createElement("input");input.type="number";if(control.min!==null)input.min=control.min;if(control.max!==null)input.max=control.max;input.step=control.step;input.value=control.value??"";input.placeholder=control.value===null?"Unknown":"";input.disabled=!control.writable;input.style.width="6rem"}
 if(output)editor.append(input,output);else editor.append(input);
 if(control.writable&&!isRange)input.addEventListener("change",()=>updateCameraControlDirtyState(control,input,applyButton));
 heading.append(label,details);row.append(heading,editor);
@@ -435,26 +435,30 @@ def parse_v4l2_controls(output):
                     "label": menu_match.group("label"),
                 })
     for control in controls:
-        default = control["default"]
-        if default is None:
-            continue
         control_type = control["type"]
-        if control_type == "bool":
-            valid_default = default in (0, 1)
-        elif control_type in ("menu", "intmenu"):
-            valid_default = default in {option["value"] for option in control["menu"]}
-        elif control_type == "int":
-            minimum = control["min"]
-            maximum = control["max"]
-            step = control["step"]
-            valid_default = (
-                (minimum is None or default >= minimum)
-                and (maximum is None or default <= maximum)
-                and (minimum is None or (default - minimum) % step == 0)
-            )
-        else:
-            valid_default = True
-        if not valid_default:
+        menu_values = {option["value"] for option in control["menu"]}
+
+        def is_valid(value):
+            if value is None:
+                return False
+            if control_type == "bool":
+                return value in (0, 1)
+            if control_type in ("menu", "intmenu"):
+                return value in menu_values
+            if control_type == "int":
+                minimum = control["min"]
+                maximum = control["max"]
+                step = control["step"]
+                return (
+                    (minimum is None or value >= minimum)
+                    and (maximum is None or value <= maximum)
+                    and (minimum is None or (value - minimum) % step == 0)
+                )
+            return True
+
+        if not is_valid(control["value"]):
+            control["value"] = None
+        if not is_valid(control["default"]):
             control["default"] = None
     return controls
 
@@ -702,7 +706,7 @@ def stream_metrics_snapshot():
 
 def installed_version():
     """Read the VERSION file belonging to the active, resolved application release."""
-    version_file = Path(__file__).resolve().parent / "VERSION"
+    version_file = Path(__file__).resolve().parent.parent / "VERSION"
     try:
         version = version_file.read_text(encoding="utf-8").strip()
         return version or None
