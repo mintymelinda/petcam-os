@@ -42,15 +42,22 @@ def _default_interface() -> str | None:
         routes = json.loads(raw)
     except (TypeError, ValueError):
         routes = []
+    route_interface = None
     for route in routes if isinstance(routes, list) else []:
         name = route.get("dev") if isinstance(route, dict) else None
         if isinstance(name, str) and _INTERFACE_RE.fullmatch(name) and name != "lo":
-            return name
+            route_interface = name
+            break
     try:
-        names = sorted(path.name for path in Path("/sys/class/net").glob("*") if path.name != "lo")
+        interfaces = sorted(path.name for path in Path("/sys/class/net").glob("*") if path.name != "lo")
+        wireless = [name for name in interfaces if (Path("/sys/class/net") / name / "wireless").exists()]
     except OSError:
-        names = []
-    return names[0] if names else None
+        interfaces, wireless = [], []
+    if route_interface in wireless:
+        return route_interface
+    if wireless:
+        return wireless[0]
+    return route_interface or (interfaces[0] if interfaces else None)
 
 
 def _read_counter(interface: str, name: str) -> int | None:
