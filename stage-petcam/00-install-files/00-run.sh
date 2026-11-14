@@ -17,11 +17,10 @@ MEDIAMTX_SHA256="cbacd828dd7c8bb67954eee2b0b5590b1f1f6994faa6fcd86a3cf0ba5021309
 MEDIAMTX_ARCHIVE="mediamtx_v${MEDIAMTX_VERSION}_linux_${MEDIAMTX_ARCH}.tar.gz"
 MEDIAMTX_TMP="$(mktemp -d)"
 trap 'rm -rf "$MEDIAMTX_TMP"' EXIT
-python3 - "$MEDIAMTX_TMP/$MEDIAMTX_ARCHIVE" "https://github.com/bluenviron/mediamtx/releases/download/v${MEDIAMTX_VERSION}/${MEDIAMTX_ARCHIVE}" <<'PY'
-import sys
-import urllib.request
-urllib.request.urlretrieve(sys.argv[2], sys.argv[1])
-PY
+curl --fail --location --retry 3 --retry-delay 2 --connect-timeout 15 \
+    --silent --show-error \
+    --output "$MEDIAMTX_TMP/$MEDIAMTX_ARCHIVE" \
+    "https://github.com/bluenviron/mediamtx/releases/download/v${MEDIAMTX_VERSION}/${MEDIAMTX_ARCHIVE}"
 echo "$MEDIAMTX_SHA256  $MEDIAMTX_TMP/$MEDIAMTX_ARCHIVE" | sha256sum --check
 tar -xzf "$MEDIAMTX_TMP/$MEDIAMTX_ARCHIVE" -C "$MEDIAMTX_TMP" mediamtx
 install -m 0755 "$MEDIAMTX_TMP/mediamtx" "$RELEASE_DIR/bin/mediamtx"
