@@ -15,6 +15,8 @@ install -m 0644 files/usr/local/lib/petcam/csi_stream.py "$RELEASE_DIR/lib/csi_s
 install -m 0644 files/usr/local/lib/petcam/rtmp_output.py "$RELEASE_DIR/lib/rtmp_output.py"
 install -m 0644 files/etc/systemd/system/petcam-rtmp.service "$RELEASE_DIR/systemd/petcam-rtmp.service"
 install -D -m 0644 files/etc/systemd/system/petcam-rtmp.service "${ROOTFS_DIR}/etc/systemd/system/petcam-rtmp.service"
+install -m 0640 files/etc/petcam/rtmp.json "$RELEASE_DIR/etc/petcam/rtmp.json"
+install -D -m 0640 files/etc/petcam/rtmp.json "${ROOTFS_DIR}/etc/petcam/rtmp.json"
 install -m 0644 files/usr/local/lib/petcam/timelapse.py "$RELEASE_DIR/lib/timelapse.py"
 install -m 0644 files/usr/local/lib/petcam/motion_detection.py "$RELEASE_DIR/lib/motion_detection.py"
 install -m 0644 files/etc/systemd/system/petcam-motion.service "$RELEASE_DIR/systemd/petcam-motion.service"
