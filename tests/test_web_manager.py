@@ -378,7 +378,9 @@ class WebManagerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             version_file = Path(directory) / "VERSION"
             version_file.write_text("9.8.7\n", encoding="utf-8")
-            with mock.patch.object(MODULE, "__file__", str(Path(directory) / "web_manager.py")):
+            lib_directory = Path(directory) / "lib"
+            lib_directory.mkdir()
+            with mock.patch.object(MODULE, "__file__", str(lib_directory / "web_manager.py")):
                 self.assertEqual(MODULE.installed_version(), "9.8.7")
 
     def test_stream_metrics_count_jpeg_frames_across_chunk_boundaries(self):
@@ -666,6 +668,15 @@ auto_exposure 0x009a0901 (menu) : min=0 max=3 default=0 value=3 (Aperture Priori
             with self.assertRaisesRegex(ValueError, "inactive or read-only"):
                 MODULE.set_camera_control({"name": "brightness", "value": 100})
         run.assert_not_called()
+
+    def test_out_of_range_camera_values_are_reported_as_unknown(self):
+        controls = MODULE.parse_v4l2_controls(
+            "brightness 0x00980900 (int) : min=0 max=255 step=1 default=128 value=300 flags=has-min-max\\n"
+            "power_line_frequency 0x00980918 (menu) : min=0 max=2 default=2 value=9\\n"
+            "white_balance_automatic 0x0098090c (bool) : default=1 value=4"
+        )
+        self.assertEqual([control["value"] for control in controls], [None, None, None])
+        self.assertEqual([control["default"] for control in controls], [128, 2, 1])
 
     def test_boolean_camera_controls_use_enabled_and_disabled_labels(self):
         self.assertIn('booleanLabel=value=>value===null?"unknown":Number(value)===1?"Enabled":"Disabled"', MODULE.PAGE)
