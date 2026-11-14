@@ -7,3 +7,5 @@ libv4l-dev
 openssl
 python3-pil
 i2c-tools
+cifs-utils
+nfs-common

@@ -1,6 +1,6 @@
 [Unit]
 Description=PetCam timelapse capture from the active MJPEG stream
-After=network-online.target petcam-stream.service petcam-web.service
+After=network-online.target remote-fs.target petcam-stream.service petcam-web.service
 Wants=network-online.target
 
 [Service]
@@ -21,7 +21,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/lib/petcam
+ReadWritePaths=/var/lib/petcam /mnt/petcam-network
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 ProtectKernelTunables=true
 ProtectKernelModules=true

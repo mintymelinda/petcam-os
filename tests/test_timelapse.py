@@ -29,6 +29,37 @@ class TimelapseTests(unittest.TestCase):
             MODULE.validate_config({"schedule_start": "25:00"})
         with self.assertRaises(ValueError):
             MODULE.validate_config({"storage_path": "/etc/petcam"})
+        with self.assertRaises(ValueError):
+            MODULE.validate_config({"storage_path": "/mnt/petcam-network/../../etc"})
+        with self.assertRaises(ValueError):
+            MODULE.validate_config({"storage_path": "/mnt/petcam-network"})
+
+    def test_network_storage_path_is_allowed_but_confined_to_mount_root(self):
+        config = MODULE.validate_config({"storage_path": "/mnt/petcam-network/camera-a/timelapse"})
+        self.assertEqual(config["storage_path"], "/mnt/petcam-network/camera-a/timelapse")
+        self.assertTrue(MODULE.uses_network_storage(config["storage_path"]))
+        self.assertFalse(MODULE.uses_network_storage("/var/lib/petcam/timelapse/frames"))
+
+    def test_network_storage_requires_a_mounted_smb_or_nfs_filesystem(self):
+        with tempfile.TemporaryDirectory() as directory:
+            mounts = Path(directory) / "mounts"
+            mounts.write_text(
+                "//nas/photos /mnt/petcam-network cifs rw,vers=3.0 0 0\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(MODULE.os.path, "ismount", return_value=True):
+                self.assertTrue(MODULE.network_storage_ready(mounts))
+                mounts.write_text(
+                    "/dev/mmcblk0p2 /mnt/petcam-network ext4 rw 0 0\n",
+                    encoding="utf-8",
+                )
+                self.assertFalse(MODULE.network_storage_ready(mounts))
+                self.assertFalse(MODULE.network_storage_ready(Path(directory) / "missing"))
+
+    def test_network_storage_is_not_considered_ready_when_mountpoint_is_missing(self):
+        with mock.patch.object(MODULE.os.path, "ismount", return_value=False):
+            self.assertFalse(MODULE.network_storage_ready())
+
 
     def test_schedule_supports_normal_and_overnight_windows(self):
         normal = datetime(2026, 1, 1, 12, 0)
