@@ -68,7 +68,7 @@ def prepare_pigen(pigen_dir: Path) -> None:
     finalise = pigen_dir / "export-image" / "05-finalise" / "01-run.sh"
     replace_once(
         finalise,
-        '\t\tpython3 -m apt_listchanges.populate_database --profile apt\\n',
+        '\t\tpython3 -m apt_listchanges.populate_database --profile apt\n',
         "",
         "apt-listchanges changelog database population",
     )
