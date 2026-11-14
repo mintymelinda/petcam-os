@@ -17,6 +17,7 @@ REQUIRED_FILES = (
     "lib/camera.py",
     "lib/csi_stream.py",
     "lib/rtmp_output.py",
+    "bin/mediamtx",
     "lib/web_manager.py",
     "lib/web_auth.py",
     "lib/health_monitor.py",

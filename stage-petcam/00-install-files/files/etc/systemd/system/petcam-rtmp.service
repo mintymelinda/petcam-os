@@ -1,5 +1,5 @@
 [Unit]
-Description=PetCam optional RTMP publisher
+Description=PetCam OBS RTSP video publisher
 Documentation=https://github.com/mintymelinda/petcam-os
 After=network-online.target petcam-stream.service
 Wants=network-online.target petcam-stream.service

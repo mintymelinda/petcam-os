@@ -23,7 +23,10 @@ class SignedReleasePublisherTests(unittest.TestCase):
         from create_update_release import REQUIRED_FILES
         systemd_source_dir = repo / "stage-petcam/00-install-files/files/etc/systemd/system"
         for relative in REQUIRED_FILES:
-            if relative.startswith("lib/") and relative.endswith(".py"):
+            if relative == "bin/mediamtx":
+                self.assertIn('install -m 0755 "$MEDIAMTX_TMP/mediamtx" "$RELEASE_DIR/bin/mediamtx"', script)
+                continue
+            elif relative.startswith("lib/") and relative.endswith(".py"):
                 source = source_dir / Path(relative).name
                 install_line = f'install -m 0644 files/usr/local/lib/petcam/{source.name} "$RELEASE_DIR/{relative}"'
             elif relative.startswith("systemd/") and relative.endswith(".service"):
@@ -43,7 +46,8 @@ class SignedReleasePublisherTests(unittest.TestCase):
             "manifest.json": b'{"application":"petcam-os","version":"1.2.3"}\n',
             "lib/camera.py": b"# camera\n",
             "lib/csi_stream.py": b"# csi\n",
-            "lib/rtmp_output.py": b"# RTMP publisher\n",
+            "lib/rtmp_output.py": b"# OBS RTSP publisher\n",
+            "bin/mediamtx": b"fake MediaMTX binary",
             "lib/web_manager.py": b"# web\n",
             "lib/web_auth.py": b"# authentication\n",
             "lib/health_monitor.py": b"# health monitor\n",
@@ -67,7 +71,7 @@ class SignedReleasePublisherTests(unittest.TestCase):
             path = root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content)
-            if name.endswith((".sh", "ustreamer")):
+            if name.endswith((".sh", "ustreamer")) or name == "bin/mediamtx":
                 path.chmod(0o755)
         return files
 

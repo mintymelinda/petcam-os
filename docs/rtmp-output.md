@@ -1,42 +1,60 @@
-# Optional RTMP output
+# OBS camera output (RTSP)
 
-RTMP publishing is an optional, independent output from the existing PetCam camera stream. It is disabled by default. New PetCam images include FFmpeg. On an existing installation that was upgraded without reflashing, install the dependency once with `sudo apt-get update && sudo apt-get install ffmpeg` before enabling RTMP.
+PetCam can expose its camera as a local-network RTSP feed for OBS. **PetCam does not publish to Twitch, YouTube, or another streaming platform.** OBS remains the final production and publishing application: use it for scenes, overlays, audio, encoding, and destination stream keys.
 
-For CSI cameras, the publisher receives the H.264 stream produced by the Picamera2 dual-encoder capture session and muxes it into FLV without re-encoding. USB cameras and unsupported CSI configurations use the existing loopback MJPEG endpoint at `http://127.0.0.1:8081/stream` and FFmpeg H.264 encoding. Neither path changes the public MJPEG endpoint used by browser preview and OBS.
+The OBS feed is disabled by default. Enable it in **System → OBS Output**, save the settings, and add a **Media Source** in OBS using:
 
-## Configure in the manager
+```
+rtsp://PETCAM_HOST:8554/petcam
+```
 
-Open **System → RTMP Output** and configure:
+Replace `PETCAM_HOST` with the PetCam hostname or LAN IP address. The dashboard pre-fills the address using the hostname currently used to open the manager. The host portion is editable; if the manager was opened through a reverse proxy or OBS cannot resolve that hostname, replace it with the PetCam LAN IP or another address reachable from the OBS computer.
 
-- **Enable RTMP publishing** — starts or stops the separate `petcam-rtmp.service`.
-- **RTMP server URL** — the server/application URL, such as `rtmps://stream.example.net/live`. Do not include the stream key in this URL.
-- **Stream key** — stored in `/etc/petcam/rtmp.json`; the manager never returns the saved key to the browser. Leave the field blank to retain the existing key.
-- **Video encoder** — used by the MJPEG fallback path. Native CSI publishing uses Picamera2's platform-selected H.264 encoder automatically.
-- **Output resolution, FPS, and bitrate** — the MJPEG fallback is scaled to the selected dimensions while preserving aspect ratio. Native CSI H.264 uses the selected output dimensions directly; its resolution cannot exceed the camera capture mode, and its FPS must divide the capture FPS evenly.
+## Video path
 
-Only RTMP and RTMPS URLs are accepted. The stream key is restricted to URL-safe characters. Settings are validated before the service is changed.
+For CSI cameras, PetCam uses one Picamera2 camera session with simultaneous encoders:
+
+- MJPEG continues to serve the existing dashboard preview and stable MJPEG URL.
+- Native H.264 is published to the local RTSP server without decoding or re-encoding on supported hardware.
+
+USB cameras and unsupported CSI configurations use the MJPEG-to-FFmpeg H.264 fallback. The RTSP endpoint remains the same in either case. Raspberry Pi 4 and earlier can use dedicated H.264/MJPEG encoder hardware; Raspberry Pi 5 uses software encoders through FFmpeg libraries.
+
+MediaMTX provides the RTSP server. PetCam bundles a version-pinned MediaMTX binary for 32-bit armhf images (ARMv6-compatible, including older Pi Zero hardware), with release SHA-256 verification during image creation. The server accepts publishers only from localhost and allows read-only clients on the local network.
+
+## Configure
+
+Open **System → OBS Output**:
+
+- **Enable OBS RTSP feed** — starts or stops the PetCam publisher.
+- **OBS Media Source URL** — the address to paste into OBS.
+- **Fallback video encoder** — used only for USB cameras or when native CSI H.264 cannot be used.
+- **Output resolution, FPS, and bitrate** — controls the output stream. Native CSI mode requires the output resolution not to exceed the selected capture mode and output FPS to divide capture FPS evenly; unsupported combinations fall back to MJPEG transcoding.
+
+No external server URL or stream key is needed in PetCam. Configure your Twitch/YouTube destination and stream key only in OBS.
+
+## OBS setup
+
+1. Confirm the PetCam and OBS computers are on the same trusted LAN.
+2. In OBS, add **Sources → + → Media Source**.
+3. Disable **Local File**.
+4. Paste the RTSP URL shown in PetCam's System tab.
+5. Apply the source settings and confirm video appears.
+6. Configure audio, scenes, and streaming destination in OBS as usual.
+
+If OBS cannot connect, confirm TCP port **8554** is reachable from the OBS computer and that the PetCam RTSP service is running. Do not expose the RTSP port directly to the public internet.
 
 ## Performance and troubleshooting
 
-RTMP encoding is additional work on the Pi. The service runs separately from capture, with a CPU quota and memory limit, but software H.264 encoding can still reduce available headroom—especially on Raspberry Pi Zero/Zero W and other low-power boards. Start at 640×360 or 854×480, 10–15 FPS, and a modest bitrate on slower hardware. Use the hardware encoder only when it is listed by the installed FFmpeg build.
-
-The System health panel reports RTMP publisher state and FFmpeg's measured output FPS separately from the camera's hardware capture FPS and MJPEG viewer-delivery FPS. A stopped publisher does not stop or interrupt the MJPEG camera feed.
+RTSP publishing is additional work on the Pi. The publisher service has CPU and memory limits. Start with 640×360 or 854×480 at 10–15 FPS on slower hardware. Native H.264 stream copy avoids a second encode when the CSI capture path supports the requested output.
 
 Useful SSH checks:
 
 ```bash
+sudo systemctl status mediamtx.service
 sudo systemctl status petcam-rtmp.service
+sudo journalctl -u mediamtx.service -n 100 --no-pager
 sudo journalctl -u petcam-rtmp.service -n 100 --no-pager
 sudo /usr/bin/python3 /opt/petcam/current/lib/rtmp_output.py --check
 ```
 
-The publisher is not an audio encoder and sends video only. It does not provide a microphone or audio-input path.
-
-
-## Native CSI H.264 path
-
-When RTMP is enabled for a CSI camera, the camera service switches to Picamera2 and opens the sensor only once. A main-stream MJPEG encoder continues to serve the established HTTP MJPEG endpoint, while a lores H.264 encoder produces the configured RTMP dimensions. Picamera2 sends the encoded H.264 packets through a local MPEG-TS/UDP hop. The RTMP publisher uses FFmpeg stream copy to mux those packets into FLV, avoiding a decode/re-encode cycle.
-
-Picamera2 is installed from Raspberry Pi OS packages. Raspberry Pi 4 and earlier can use dedicated H.264/MJPEG encoder hardware; Raspberry Pi 5 uses FFmpeg software encoders. USB cameras remain on the existing MJPEG-to-FFmpeg path. If Picamera2 cannot start or the selected capture/RTMP frame rates are incompatible, PetCam falls back to the existing MJPEG publisher instead of taking down the camera preview.
-
-Saving RTMP settings restarts the camera capture service to add or remove the secondary encoder. The MJPEG preview and OBS stream URL do not change.
+The feed is video-only. OBS should handle microphone and other audio sources. The existing MJPEG preview and endpoint remain available whether the OBS RTSP feed is enabled or disabled.

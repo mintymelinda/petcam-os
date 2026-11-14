@@ -1,23 +1,22 @@
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location(
-    "petcam_rtmp_output",
+    "petcam_obs_output",
     "stage-petcam/00-install-files/files/usr/local/lib/petcam/rtmp_output.py",
 )
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
-class RTMPOutputTests(unittest.TestCase):
+class OBSOutputTests(unittest.TestCase):
     def valid_config(self, **overrides):
         return {
             "enabled": True,
-            "server_url": "rtmps://live.example.test/app",
-            "stream_key": "secret-stream-key",
             "encoder": "libx264",
             "width": 1280,
             "height": 720,
@@ -26,53 +25,41 @@ class RTMPOutputTests(unittest.TestCase):
             **overrides,
         }
 
-    def test_rtmp_requires_supported_scheme_and_host(self):
-        for url in ("https://live.example.test/app", "rtmp:///app", "rtmp://user:pass@host/app", "rtmp://host/app?key=x"):
-            with self.subTest(url=url), self.assertRaises(MODULE.RTMPConfigError):
-                MODULE.validate_config(self.valid_config(server_url=url))
-
-    def test_enabled_output_requires_server_and_stream_key(self):
-        with self.assertRaisesRegex(MODULE.RTMPConfigError, "server URL and stream key"):
-            MODULE.validate_config(self.valid_config(stream_key=""))
-        with self.assertRaises(MODULE.RTMPConfigError):
-            MODULE.validate_config(self.valid_config(server_url=""))
-
     def test_output_settings_are_bounded_and_encoder_is_allowlisted(self):
         with self.assertRaises(MODULE.RTMPConfigError):
             MODULE.validate_config(self.valid_config(fps=0))
         with self.assertRaises(MODULE.RTMPConfigError):
             MODULE.validate_config(self.valid_config(encoder="shell-command"))
 
-    def test_stream_key_rejects_url_delimiters(self):
-        for key in ("bad/key", "bad?query", "bad#fragment", "bad key"):
-            with self.subTest(key=key), self.assertRaises(MODULE.RTMPConfigError):
-                MODULE.validate_config(self.valid_config(stream_key=key))
-
-    def test_public_config_never_returns_the_stream_key(self):
+    def test_public_config_contains_no_remote_destination_or_credentials(self):
         public = MODULE.public_config(MODULE.validate_config(self.valid_config()))
-        self.assertEqual(public["stream_key"], "")
-        self.assertTrue(public["stream_key_configured"])
-        self.assertNotIn("secret-stream-key", repr(public))
+        self.assertNotIn("server_url", public)
+        self.assertNotIn("stream_key", public)
 
     def test_save_and_load_round_trip(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "rtmp.json"
+            path = Path(directory) / "obs-output.json"
             saved = MODULE.save_config(self.valid_config(), path)
             loaded = MODULE.load_config(path)
         self.assertEqual(saved, loaded)
-        self.assertEqual(loaded["stream_key"], "secret-stream-key")
 
-    def test_ffmpeg_command_reuses_local_mjpeg_feed_and_publishes_flv(self):
-        config = MODULE.validate_config(self.valid_config())
-        with patch.object(MODULE.shutil, "which", return_value="/usr/bin/ffmpeg"):
-            command = MODULE.build_ffmpeg_command(config)
-        self.assertIn("http://127.0.0.1:8081/stream", command)
-        self.assertIn("mpjpeg", command)
-        self.assertIn("libx264", command)
-        self.assertEqual(command[-3:-1], ["-f", "flv"])
-        self.assertEqual(command[-1], "rtmps://live.example.test/app/secret-stream-key")
+    def test_legacy_rtmp_configuration_is_migrated_and_secret_removed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "rtmp.json"
+            path.write_text(json.dumps({
+                **self.valid_config(),
+                "server_url": "rtmps://live.example.test/app",
+                "stream_key": "old-private-key",
+            }), encoding="utf-8")
+            loaded = MODULE.load_config(path)
+            persisted_text = path.read_text(encoding="utf-8")
+            persisted = json.loads(persisted_text)
+        self.assertEqual(loaded["width"], 1280)
+        self.assertNotIn("server_url", persisted)
+        self.assertNotIn("stream_key", persisted)
+        self.assertNotIn("old-private-key", persisted_text)
 
-    def test_native_h264_path_uses_mpegts_and_stream_copy_without_transcoding(self):
+    def test_native_h264_path_uses_mpegts_and_stream_copy_to_local_rtsp(self):
         config = MODULE.validate_config(self.valid_config())
         with patch.object(MODULE.shutil, "which", return_value="/usr/bin/ffmpeg"):
             command = MODULE.build_ffmpeg_command(config, native_h264=True)
@@ -81,8 +68,18 @@ class RTMPOutputTests(unittest.TestCase):
         self.assertIn("copy", command)
         self.assertNotIn("mpjpeg", command)
         self.assertNotIn("libx264", command)
-        self.assertNotIn("-vf", command)
-        self.assertEqual(command[-1], "rtmps://live.example.test/app/secret-stream-key")
+        self.assertIn("rtsp", command)
+        self.assertEqual(command[-1], "rtsp://127.0.0.1:8554/petcam")
+
+    def test_mjpeg_fallback_encodes_and_publishes_to_local_rtsp(self):
+        config = MODULE.validate_config(self.valid_config())
+        with patch.object(MODULE.shutil, "which", return_value="/usr/bin/ffmpeg"):
+            command = MODULE.build_ffmpeg_command(config)
+        self.assertIn("http://127.0.0.1:8081/stream", command)
+        self.assertIn("mpjpeg", command)
+        self.assertIn("libx264", command)
+        self.assertIn("rtsp", command)
+        self.assertEqual(command[-1], "rtsp://127.0.0.1:8554/petcam")
 
     def test_native_h264_detection_reads_capture_status(self):
         response = type("Response", (), {

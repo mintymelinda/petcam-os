@@ -8,6 +8,24 @@ fi
 RELEASE_DIR="${ROOTFS_DIR}/opt/petcam/releases/${APP_VERSION}"
 install -D -o root -g root -m 0644 files/etc/petcam/update-signing.pub "${ROOTFS_DIR}/etc/petcam/update-signing.pub"
 install -d -m 0755 "$RELEASE_DIR/lib" "$RELEASE_DIR/systemd" "$RELEASE_DIR/etc/petcam"
+install -d -m 0755 "$RELEASE_DIR/bin"
+MEDIAMTX_VERSION="1.21.3"
+# PetCam application releases currently target 32-bit armhf; the ARMv6
+# binary runs across the supported 32-bit Raspberry Pi models.
+MEDIAMTX_ARCH="armv6"
+MEDIAMTX_SHA256="cbacd828dd7c8bb67954eee2b0b5590b1f1f6994faa6fcd86a3cf0ba50213095"
+MEDIAMTX_ARCHIVE="mediamtx_v${MEDIAMTX_VERSION}_linux_${MEDIAMTX_ARCH}.tar.gz"
+MEDIAMTX_TMP="$(mktemp -d)"
+trap 'rm -rf "$MEDIAMTX_TMP"' EXIT
+python3 - "$MEDIAMTX_TMP/$MEDIAMTX_ARCHIVE" "https://github.com/bluenviron/mediamtx/releases/download/v${MEDIAMTX_VERSION}/${MEDIAMTX_ARCHIVE}" <<'PY'
+import sys
+import urllib.request
+urllib.request.urlretrieve(sys.argv[2], sys.argv[1])
+PY
+echo "$MEDIAMTX_SHA256  $MEDIAMTX_TMP/$MEDIAMTX_ARCHIVE" | sha256sum --check
+tar -xzf "$MEDIAMTX_TMP/$MEDIAMTX_ARCHIVE" -C "$MEDIAMTX_TMP" mediamtx
+install -m 0755 "$MEDIAMTX_TMP/mediamtx" "$RELEASE_DIR/bin/mediamtx"
+
 install -d -m 0755 "${ROOTFS_DIR}/mnt/petcam-network"
 install -m 0644 files/usr/local/lib/petcam/VERSION "$RELEASE_DIR/VERSION"
 install -m 0644 files/usr/local/lib/petcam/camera.py "$RELEASE_DIR/lib/camera.py"
