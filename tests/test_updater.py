@@ -410,12 +410,12 @@ class RecentReleaseDiscoveryTests(unittest.TestCase):
             "https://assets/old/manifest": self.manifest("1.5.0", "https://assets/old/archive.tar.gz"),
             "https://assets/old/signature": b"valid-signature",
         }
-        with mock.patch("updater.fetch", side_effect=lambda url, limit: payloads[url]), \\
-                mock.patch("updater.verify_signature"):
-            found = release_manifest_candidates(
-                "https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json",
-                Path("/trusted/key.pem"),
-            )
+        with mock.patch("updater.fetch", side_effect=lambda url, limit: payloads[url]):
+            with mock.patch("updater.verify_signature"):
+                found = release_manifest_candidates(
+                    "https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json",
+                    Path("/trusted/key.pem"),
+                )
         self.assertEqual([item["manifest"]["version"] for item in found], ["1.5.0"])
 
     def test_install_only_discovers_the_newest_valid_release(self):
