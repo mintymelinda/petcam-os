@@ -1171,8 +1171,6 @@ class Handler(BaseHTTPRequestHandler):
                     ["systemctl", "is-active", "--quiet", "petcam-rtmp.service"],
                     check=False, timeout=5,
                 ).returncode == 0
-                if not data.get("stream_key"):
-                    data["stream_key"] = current["stream_key"]
                 updated = save_rtmp_config({**current, **data})
                 action = ("restart" if was_active else "enable") if updated["enabled"] else "disable"
                 capture_restart = subprocess.run(
