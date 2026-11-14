@@ -596,20 +596,46 @@ def save_selection(data):
 
 
 def proxy_stream(handler, port):
-    try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/stream", timeout=5) as upstream:
-            handler.send_response(upstream.status)
-            handler.send_header("Content-Type", upstream.headers.get("Content-Type", "multipart/x-mixed-replace"))
-            handler.send_header("Cache-Control", "no-store")
-            handler.end_headers()
-            read_chunk = getattr(upstream, "read1", upstream.read)
-            while chunk := read_chunk(65536):
-                # BufferedWriter flushes large writes itself. Avoid an extra flush
-                # call for every MJPEG chunk, and read only currently available
-                # socket data so low-bitrate streams are not held for a full buffer.
-                handler.wfile.write(chunk)
-    except (OSError, urllib.error.URLError, BrokenPipeError, TimeoutError):
-        pass
+    """Keep the public MJPEG response open while the camera service restarts.
+
+    OBS treats the public stream URL as a long-lived Browser Source. The camera
+    process behind it is replaceable, so an upstream EOF or reset must not end
+    the downstream response. Reconnect upstream and continue forwarding MIME
+    parts on the original response until the OBS client disconnects.
+    """
+    headers_sent = False
+    retry_delay = 0.1
+    while True:
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/stream", timeout=5) as upstream:
+                if not headers_sent:
+                    handler.send_response(upstream.status)
+                    handler.send_header(
+                        "Content-Type",
+                        upstream.headers.get("Content-Type", "multipart/x-mixed-replace"),
+                    )
+                    handler.send_header("Cache-Control", "no-store")
+                    handler.end_headers()
+                    headers_sent = True
+                read_chunk = getattr(upstream, "read1", upstream.read)
+                while chunk := read_chunk(65536):
+                    # BufferedWriter flushes large writes itself. Avoid an extra
+                    # flush call for every MJPEG chunk, and read only currently
+                    # available socket data so low-bitrate streams are not held
+                    # for a full buffer.
+                    handler.wfile.write(chunk)
+            # A clean EOF is also a camera restart/disconnect; retry without
+            # ending the response already held by OBS.
+            retry_delay = 0.1
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # The downstream OBS/browser client has gone away.
+            return
+        except (OSError, urllib.error.URLError, TimeoutError):
+            # The upstream camera service is temporarily unavailable. Keep the
+            # downstream socket open and retry with a bounded backoff.
+            pass
+        time.sleep(retry_delay)
+        retry_delay = min(2.0, retry_delay * 1.7)
 
 
 def update_check():
