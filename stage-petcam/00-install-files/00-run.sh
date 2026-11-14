@@ -8,6 +8,26 @@ fi
 RELEASE_DIR="${ROOTFS_DIR}/opt/petcam/releases/${APP_VERSION}"
 install -D -o root -g root -m 0644 files/etc/petcam/update-signing.pub "${ROOTFS_DIR}/etc/petcam/update-signing.pub"
 install -d -m 0755 "$RELEASE_DIR/lib" "$RELEASE_DIR/systemd" "$RELEASE_DIR/etc/petcam"
+install -d -m 0755 "$RELEASE_DIR/bin"
+MEDIAMTX_VERSION="1.21.3"
+TARGET_ARCH="$(chroot "$ROOTFS_DIR" dpkg --print-architecture)"
+case "$TARGET_ARCH" in
+    armhf) MEDIAMTX_ARCH="armv6"; MEDIAMTX_SHA256="cbacd828dd7c8bb67954eee2b0b5590b1f1f6994faa6fcd86a3cf0ba50213095" ;;
+    arm64) MEDIAMTX_ARCH="arm64"; MEDIAMTX_SHA256="27f038237cb5f77a724f6afc58eca2798f2bc4edf9989895631a80eeb41a4fe2" ;;
+    *) echo "Unsupported PetCam architecture for MediaMTX: $TARGET_ARCH" >&2; exit 1 ;;
+esac
+MEDIAMTX_ARCHIVE="mediamtx_v${MEDIAMTX_VERSION}_linux_${MEDIAMTX_ARCH}.tar.gz"
+MEDIAMTX_TMP="$(mktemp -d)"
+trap 'rm -rf "$MEDIAMTX_TMP"' EXIT
+python3 - "$MEDIAMTX_TMP/$MEDIAMTX_ARCHIVE" "https://github.com/bluenviron/mediamtx/releases/download/v${MEDIAMTX_VERSION}/${MEDIAMTX_ARCHIVE}" <<'PY'
+import sys
+import urllib.request
+urllib.request.urlretrieve(sys.argv[2], sys.argv[1])
+PY
+echo "$MEDIAMTX_SHA256  $MEDIAMTX_TMP/$MEDIAMTX_ARCHIVE" | sha256sum --check
+tar -xzf "$MEDIAMTX_TMP/$MEDIAMTX_ARCHIVE" -C "$MEDIAMTX_TMP" mediamtx
+install -m 0755 "$MEDIAMTX_TMP/mediamtx" "$RELEASE_DIR/bin/mediamtx"
+
 install -d -m 0755 "${ROOTFS_DIR}/mnt/petcam-network"
 install -m 0644 files/usr/local/lib/petcam/VERSION "$RELEASE_DIR/VERSION"
 install -m 0644 files/usr/local/lib/petcam/camera.py "$RELEASE_DIR/lib/camera.py"
@@ -15,6 +35,10 @@ install -m 0644 files/usr/local/lib/petcam/csi_stream.py "$RELEASE_DIR/lib/csi_s
 install -m 0644 files/usr/local/lib/petcam/rtmp_output.py "$RELEASE_DIR/lib/rtmp_output.py"
 install -m 0644 files/etc/systemd/system/petcam-rtmp.service "$RELEASE_DIR/systemd/petcam-rtmp.service"
 install -D -m 0644 files/etc/systemd/system/petcam-rtmp.service "${ROOTFS_DIR}/etc/systemd/system/petcam-rtmp.service"
+install -m 0644 files/etc/systemd/system/mediamtx.service "$RELEASE_DIR/systemd/mediamtx.service"
+install -D -m 0644 files/etc/systemd/system/mediamtx.service "${ROOTFS_DIR}/etc/systemd/system/mediamtx.service"
+install -m 0644 files/etc/petcam/mediamtx.yml "$RELEASE_DIR/etc/petcam/mediamtx.yml"
+install -D -m 0644 files/etc/petcam/mediamtx.yml "${ROOTFS_DIR}/etc/petcam/mediamtx.yml"
 install -m 0640 files/etc/petcam/rtmp.json "$RELEASE_DIR/etc/petcam/rtmp.json"
 install -D -m 0640 files/etc/petcam/rtmp.json "${ROOTFS_DIR}/etc/petcam/rtmp.json"
 install -m 0644 files/usr/local/lib/petcam/timelapse.py "$RELEASE_DIR/lib/timelapse.py"
