@@ -29,7 +29,6 @@ DEFAULTS = {
     "bitrate_kbps": 2500,
 }
 ENCODERS = {"libx264", "h264_v4l2m2m"}
-MAX_KEY_LENGTH = 512
 
 
 class RTMPConfigError(ValueError):
