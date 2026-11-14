@@ -1,8 +1,8 @@
 [Unit]
 Description=PetCam OBS RTSP video publisher
 Documentation=https://github.com/mintymelinda/petcam-os
-After=network-online.target petcam-stream.service mediamtx.service
-Wants=network-online.target petcam-stream.service mediamtx.service
+After=network-online.target petcam-stream.service
+Wants=network-online.target petcam-stream.service
 ConditionPathExists=/etc/petcam/rtmp.json
 
 [Service]
