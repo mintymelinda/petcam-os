@@ -76,7 +76,7 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <dialog id="advanced-camera-dialog" class="advanced-dialog"><div class="dialog-heading"><h2>Advanced camera controls</h2><button id="advanced-camera-close" type="button">Close</button></div><p class="muted">Edits apply automatically. Controls are refreshed every 60 seconds while this dialog is open.</p><section><div class="row" style="justify-content:space-between;align-items:center"><h2>Available controls</h2><div class="row" style="gap:.5rem"><button id="refresh-camera-controls" type="button">Refresh</button></div></div>
 <p id="camera-controls-status" class="muted" role="status">Controls for the active camera will appear here.</p>
 <p class="muted">Controls are discovered from the connected camera. Some settings may be unavailable while automatic modes are active. Dynamic framerate can reduce the actual captured FPS when enabled.</p>
-<div id="camera-controls-list" class="muted">No camera controls loaded.</div></dialog>
+<div id="camera-controls-list" class="muted">No camera controls loaded.</div><button id="apply-camera-controls" type="button" hidden disabled>Apply</button></dialog>
 </div><div id="panel-timelapse" class="tab-panel" role="tabpanel" aria-labelledby="tab-timelapse" tabindex="0" hidden><section><div class="row" style="justify-content:space-between;align-items:center"><h2>Timelapse</h2><button id="refresh-timelapse">Refresh status</button></div>
 <p id="timelapse-status" role="status">Loading timelapse status…</p>
 <label style="display:flex;gap:.5rem;align-items:center"><input id="timelapse-enabled" type="checkbox"> Enable periodic captures</label>
