@@ -673,6 +673,7 @@ auto_exposure 0x009a0901 (menu) : min=0 max=3 default=0 value=3 (Aperture Priori
         controls = MODULE.parse_v4l2_controls(
             "brightness 0x00980900 (int) : min=0 max=255 step=1 default=128 value=300 flags=has-min-max\n"
             "power_line_frequency 0x00980918 (menu) : min=0 max=2 default=2 value=9\n"
+            "0: Disabled\\n1: 50 Hz\\n2: 60 Hz\\n"
             "white_balance_automatic 0x0098090c (bool) : default=1 value=4"
         )
         self.assertEqual([control["value"] for control in controls], [None, None, None])
