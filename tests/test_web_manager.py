@@ -678,6 +678,11 @@ auto_exposure 0x009a0901 (menu) : min=0 max=3 default=0 value=3 (Aperture Priori
         self.assertEqual([control["value"] for control in controls], [None, None, None])
         self.assertEqual([control["default"] for control in controls], [128, 2, 1])
 
+    def test_unknown_camera_control_values_are_visible_in_editors(self):
+        self.assertIn('input.indeterminate=control.value===null', MODULE.PAGE)
+        self.assertIn('unknown.textContent="Unknown"', MODULE.PAGE)
+        self.assertIn('input.placeholder=control.value===null?"Unknown":""', MODULE.PAGE)
+
     def test_boolean_camera_controls_use_enabled_and_disabled_labels(self):
         self.assertIn('booleanLabel=value=>value===null?"unknown":Number(value)===1?"Enabled":"Disabled"', MODULE.PAGE)
         self.assertIn('isBoolean?booleanLabel(control.value)', MODULE.PAGE)
