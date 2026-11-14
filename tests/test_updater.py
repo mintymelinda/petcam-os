@@ -11,6 +11,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "stage-petcam/00-install-files/files/usr/local/lib/petcam"))
 
+import updater
+
 from updater import (
     MAX_ARCHIVE,
     UpdateError,
@@ -25,6 +27,7 @@ from updater import (
     verify_signature,
     version_tuple,
     release_manifest_candidates,
+    install_update,
 )
 
 
@@ -378,6 +381,54 @@ class RecentReleaseDiscoveryTests(unittest.TestCase):
         self.assertEqual([item["manifest"]["version"] for item in found], ["1.4.0", "1.3.0"])
         self.assertEqual(found[0]["manifest_url"], "https://assets/good/manifest")
         self.assertEqual(verify.call_count, 3)
+
+    def test_install_only_discovers_the_newest_valid_release(self):
+        config = {"MANIFEST_URL": "https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json"}
+        status = {
+            "status": "up-to-date",
+            "update_available": False,
+            "available_version": "1.2.3",
+        }
+        with mock.patch("updater.check_update", return_value=status) as check:
+            result = install_update(config)
+        self.assertEqual(result["status"], "up-to-date")
+        check.assert_called_once_with(config, max_releases=1)
+
+    def test_stops_fetching_after_ten_valid_signed_releases(self):
+        api_url = "https://api.github.com/repos/mintymelinda/petcam-os/releases?per_page=30"
+        releases = []
+        payloads = {api_url: None}
+        for index in range(11):
+            version = f"1.{10 - index}.0"
+            manifest_url = f"https://assets/release-{index}/manifest"
+            signature_url = f"https://assets/release-{index}/signature"
+            releases.append({
+                "tag_name": f"v{version}",
+                "draft": False,
+                "prerelease": False,
+                "assets": [
+                    {"name": "petcam-update-manifest.json", "browser_download_url": manifest_url},
+                    {"name": "petcam-update-manifest.json.sig", "browser_download_url": signature_url},
+                ],
+            })
+            payloads[manifest_url] = self.manifest(version)
+            payloads[signature_url] = b"valid-signature"
+        payloads[api_url] = json.dumps(releases).encode()
+
+        def fake_fetch(url, limit, timeout=10):
+            if url not in payloads:
+                raise AssertionError(f"Unexpected URL fetched after reaching the release limit: {url}")
+            return payloads[url]
+
+        with mock.patch("updater.fetch", side_effect=fake_fetch) as fetch_mock:
+            with mock.patch("updater.verify_signature"):
+                found = release_manifest_candidates(
+                    "https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json",
+                    Path("/trusted/key.pem"),
+                )
+
+        self.assertEqual(len(found), 10)
+        self.assertEqual(fetch_mock.call_count, 21)
 
     def test_ignores_drafts_and_prereleases(self):
         api_url = "https://api.github.com/repos/mintymelinda/petcam-os/releases?per_page=30"

@@ -88,13 +88,13 @@ def read_config(path: Path = CONFIG) -> dict[str, str]:
     return values
 
 
-def fetch(url: str, limit: int) -> bytes:
+def fetch(url: str, limit: int, timeout: int = 10) -> bytes:
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme != "https" or not parsed.netloc:
         raise UpdateError("Update downloads must use HTTPS")
     request = urllib.request.Request(url, headers={"User-Agent": "PetCam-Updater/1"})
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             final_url = urllib.parse.urlparse(response.geturl())
             if final_url.scheme != "https":
                 raise UpdateError("Update server redirected to a non-HTTPS URL")
@@ -209,7 +209,9 @@ def current_version() -> str | None:
     return value
 
 
-def release_manifest_candidates(manifest_url: str, key_path: Path) -> list[dict[str, object]]:
+def release_manifest_candidates(
+    manifest_url: str, key_path: Path, max_valid_releases: int = MAX_VALID_RELEASES
+) -> list[dict[str, object]]:
     """Find independently verifiable manifests in recent published GitHub releases."""
     parsed = urllib.parse.urlparse(manifest_url)
     match = re.fullmatch(
@@ -265,6 +267,8 @@ def release_manifest_candidates(manifest_url: str, key_path: Path) -> list[dict[
                 "tag_name": str(release.get("tag_name", "")),
                 "published_at": str(release.get("published_at", "")),
             })
+            if len(valid) >= max_valid_releases:
+                break
         except (UpdateError, ValueError, TypeError):
             # A broken or unsigned release must not prevent checking older releases.
             continue
@@ -273,13 +277,15 @@ def release_manifest_candidates(manifest_url: str, key_path: Path) -> list[dict[
     return valid[:MAX_VALID_RELEASES]
 
 
-def check_update(config: dict[str, str]) -> dict[str, object]:
+def check_update(
+    config: dict[str, str], max_releases: int = MAX_VALID_RELEASES
+) -> dict[str, object]:
     machine = platform.machine().lower()
     if machine not in ("armv6l", "armv7l", "armhf"):
         raise UpdateError(f"Updater requires a 32-bit ARM PetCam image (machine={machine})")
     key_path = Path(config.get("PUBLIC_KEY", str(PUBLIC_KEY)))
     manifest_url = config["MANIFEST_URL"]
-    candidates = release_manifest_candidates(manifest_url, key_path)
+    candidates = release_manifest_candidates(manifest_url, key_path, max_valid_releases=max_releases)
     if not candidates:
         raise UpdateError("No valid signed PetCam releases were found in recent GitHub releases")
 
@@ -524,7 +530,7 @@ def remove_inactive_release(release: Path) -> bool:
 
 
 def install_update(config: dict[str, str]) -> dict[str, object]:
-    status = check_update(config)
+    status = check_update(config, max_releases=1)
     version = str(status["available_version"])
     if not status["update_available"]:
         return {"status": "up-to-date", **status}
