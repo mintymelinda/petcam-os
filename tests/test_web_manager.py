@@ -671,8 +671,8 @@ auto_exposure 0x009a0901 (menu) : min=0 max=3 default=0 value=3 (Aperture Priori
 
     def test_out_of_range_camera_values_are_reported_as_unknown(self):
         controls = MODULE.parse_v4l2_controls(
-            "brightness 0x00980900 (int) : min=0 max=255 step=1 default=128 value=300 flags=has-min-max\\n"
-            "power_line_frequency 0x00980918 (menu) : min=0 max=2 default=2 value=9\\n"
+            "brightness 0x00980900 (int) : min=0 max=255 step=1 default=128 value=300 flags=has-min-max\n"
+            "power_line_frequency 0x00980918 (menu) : min=0 max=2 default=2 value=9\n"
             "white_balance_automatic 0x0098090c (bool) : default=1 value=4"
         )
         self.assertEqual([control["value"] for control in controls], [None, None, None])
