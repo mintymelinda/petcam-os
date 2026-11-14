@@ -1169,10 +1169,14 @@ class Handler(BaseHTTPRequestHandler):
                 if data.get("enabled") and not Path("/usr/bin/ffmpeg").is_file():
                     raise RuntimeError("FFmpeg is not installed. Run sudo apt-get update && sudo apt-get install ffmpeg, then save these settings again.")
                 current = load_rtmp_config()
+                was_active = subprocess.run(
+                    ["systemctl", "is-active", "--quiet", "petcam-rtmp.service"],
+                    check=False, timeout=5,
+                ).returncode == 0
                 if not data.get("stream_key"):
                     data["stream_key"] = current["stream_key"]
                 updated = save_rtmp_config({**current, **data})
-                action = "enable" if updated["enabled"] else "disable"
+                action = ("restart" if was_active else "enable") if updated["enabled"] else "disable"
                 result = subprocess.run(
                     ["sudo", "/usr/local/sbin/petcam-rtmp-service", action],
                     capture_output=True, text=True, timeout=30, check=False,
