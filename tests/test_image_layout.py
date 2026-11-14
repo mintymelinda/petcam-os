@@ -10,6 +10,9 @@ BASE_PACKAGES = BASE_STAGE / "01-install-packages" / "00-packages"
 USTREAMER_BUILD = BASE_STAGE / "02-build-ustreamer" / "00-run-chroot.sh"
 WORKFLOW = ROOT / ".github" / "workflows" / "build-image.yml"
 INSTALL = STAGE / "00-install-files" / "00-run.sh"
+TIMELAPSE_SERVICE = (
+    STAGE / "00-install-files/files/etc/systemd/system/petcam-timelapse.service"
+)
 CONFIGURE = STAGE / "02-configure-petcam" / "00-run-chroot.sh"
 VERSION = (ROOT / "VERSION").read_text().strip()
 STAGE_VERSION = (
@@ -39,6 +42,11 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn('"$RELEASE_DIR/systemd/petcam-home-assistant.service"', script)
         self.assertIn('"$RELEASE_DIR/etc/petcam/home-assistant.conf"', script)
         self.assertIn('"architecture":"armhf"', script)
+
+    def test_timelapse_service_only_writes_to_managed_data_directory(self):
+        service = TIMELAPSE_SERVICE.read_text()
+        self.assertIn("ReadWritePaths=/var/lib/petcam\\n", service)
+        self.assertNotIn("/mnt/petcam-network", service)
 
     def test_runtime_uses_stable_wrappers_and_active_release(self):
         script = CONFIGURE.read_text()
