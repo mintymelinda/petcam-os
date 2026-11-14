@@ -10,11 +10,13 @@ A minimal Raspberry Pi OS image for Raspberry Pi boards, USB UVC webcams, and Ra
 - Runtime health monitoring, status reporting, network diagnostics, and redacted support bundles.
 - Optional scheduled timelapse JPEG capture and motion-triggered event snapshots.
 - Optional read-only Home Assistant MQTT discovery.
+- Optional standalone H.264 RTMP/RTMPS publishing from the existing MJPEG feed.
 - Signed application updates with staged installation and rollback.
 
 See the feature guides:
 - [Building and installing](docs/building.md)
 - [Home Assistant MQTT integration](docs/home-assistant.md)
+- [Optional RTMP output](docs/rtmp-output.md)
 - [Motion detection](docs/motion-detection.md)
 - [Timelapse capture](docs/timelapse.md)
 - [Application update engine](docs/update-engine.md)
@@ -94,6 +96,10 @@ Motion detection is disabled by default. Its worker samples the existing stream,
 ### Home Assistant
 
 An optional MQTT 3.1.1 publisher exposes health and stream-status entities through Home Assistant MQTT discovery. It is disabled by default, runs as a separate service, and does not expose camera controls. See [docs/home-assistant.md](docs/home-assistant.md).
+
+### RTMP output
+
+An optional FFmpeg publisher can encode the existing MJPEG feed to H.264 and send video to an RTMP/RTMPS endpoint. It is disabled by default, runs independently from camera capture and the OBS/browser MJPEG feed, and reports its measured output FPS separately. See [docs/rtmp-output.md](docs/rtmp-output.md).
 
 ## Runtime status and diagnostics
 
