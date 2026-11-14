@@ -293,11 +293,12 @@ def _journal_excerpt() -> str:
     return redact_text(raw)
 
 
-def create_support_bundle() -> bytes:
+def create_support_bundle(performance: dict[str, Any] | None = None) -> bytes:
     diagnostics = collect_diagnostics()
     status = command_output(["/usr/local/bin/petcam-status"], timeout=15)
     files = {
         "diagnostics.json": json.dumps(diagnostics, indent=2) + "\n",
+        "performance.json": json.dumps(performance or {}, indent=2) + "\n",
         "petcam-status.json": redact_text(status) if status else "petcam-status unavailable.\n",
         "petcam.conf.redacted": _redacted_config(),
         "journal.txt": _journal_excerpt(),

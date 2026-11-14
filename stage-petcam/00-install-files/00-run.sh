@@ -22,6 +22,7 @@ install -m 0644 files/usr/local/lib/petcam/factory_reset.py "$RELEASE_DIR/lib/fa
 install -m 0644 files/usr/local/lib/petcam/health_monitor.py "$RELEASE_DIR/lib/health_monitor.py"
 install -m 0644 files/usr/local/lib/petcam/config.py "$RELEASE_DIR/lib/config.py"
 install -m 0644 files/usr/local/lib/petcam/network_diagnostics.py "$RELEASE_DIR/lib/network_diagnostics.py"
+install -m 0644 files/usr/local/lib/petcam/wifi_metrics.py "$RELEASE_DIR/lib/wifi_metrics.py"
 install -m 0644 files/usr/local/lib/petcam/home_assistant.py "$RELEASE_DIR/lib/home_assistant.py"
 install -m 0644 files/usr/local/lib/petcam/light_sensor.py "$RELEASE_DIR/lib/light_sensor.py"
 install -m 0644 files/etc/systemd/system/petcam-light-sensor.service "$RELEASE_DIR/systemd/petcam-light-sensor.service"
