@@ -43,6 +43,11 @@ class RTMPOutputTests(unittest.TestCase):
         with self.assertRaises(MODULE.RTMPConfigError):
             MODULE.validate_config(self.valid_config(encoder="shell-command"))
 
+    def test_stream_key_rejects_url_delimiters(self):
+        for key in ("bad/key", "bad?query", "bad#fragment", "bad key"):
+            with self.subTest(key=key), self.assertRaises(MODULE.RTMPConfigError):
+                MODULE.validate_config(self.valid_config(stream_key=key))
+
     def test_public_config_never_returns_the_stream_key(self):
         public = MODULE.public_config(MODULE.validate_config(self.valid_config()))
         self.assertEqual(public["stream_key"], "")
