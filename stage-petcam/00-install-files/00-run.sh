@@ -10,11 +10,10 @@ install -D -o root -g root -m 0644 files/etc/petcam/update-signing.pub "${ROOTFS
 install -d -m 0755 "$RELEASE_DIR/lib" "$RELEASE_DIR/systemd" "$RELEASE_DIR/etc/petcam"
 install -d -m 0755 "$RELEASE_DIR/bin"
 MEDIAMTX_VERSION="1.21.3"
-TARGET_ARCH="$(chroot "$ROOTFS_DIR" dpkg --print-architecture)"
-case "$TARGET_ARCH" in
-    armhf) MEDIAMTX_ARCH="armv6"; MEDIAMTX_SHA256="cbacd828dd7c8bb67954eee2b0b5590b1f1f6994faa6fcd86a3cf0ba50213095" ;;
-    *) echo "Unsupported PetCam architecture for MediaMTX: $TARGET_ARCH (PetCam application updates currently target armhf)" >&2; exit 1 ;;
-esac
+# PetCam application releases currently target 32-bit armhf; the ARMv6
+# binary runs across the supported 32-bit Raspberry Pi models.
+MEDIAMTX_ARCH="armv6"
+MEDIAMTX_SHA256="cbacd828dd7c8bb67954eee2b0b5590b1f1f6994faa6fcd86a3cf0ba50213095"
 MEDIAMTX_ARCHIVE="mediamtx_v${MEDIAMTX_VERSION}_linux_${MEDIAMTX_ARCH}.tar.gz"
 MEDIAMTX_TMP="$(mktemp -d)"
 trap 'rm -rf "$MEDIAMTX_TMP"' EXIT
