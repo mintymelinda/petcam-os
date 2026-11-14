@@ -88,13 +88,13 @@ def read_config(path: Path = CONFIG) -> dict[str, str]:
     return values
 
 
-def fetch(url: str, limit: int) -> bytes:
+def fetch(url: str, limit: int, timeout: int = 10) -> bytes:
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme != "https" or not parsed.netloc:
         raise UpdateError("Update downloads must use HTTPS")
     request = urllib.request.Request(url, headers={"User-Agent": "PetCam-Updater/1"})
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             final_url = urllib.parse.urlparse(response.geturl())
             if final_url.scheme != "https":
                 raise UpdateError("Update server redirected to a non-HTTPS URL")
@@ -265,6 +265,8 @@ def release_manifest_candidates(manifest_url: str, key_path: Path) -> list[dict[
                 "tag_name": str(release.get("tag_name", "")),
                 "published_at": str(release.get("published_at", "")),
             })
+            if len(valid) >= MAX_VALID_RELEASES:
+                break
         except (UpdateError, ValueError, TypeError):
             # A broken or unsigned release must not prevent checking older releases.
             continue
