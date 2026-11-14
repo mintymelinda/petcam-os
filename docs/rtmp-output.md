@@ -19,7 +19,7 @@ For CSI cameras, PetCam uses one Picamera2 camera session with simultaneous enco
 
 USB cameras and unsupported CSI configurations use the MJPEG-to-FFmpeg H.264 fallback. The RTSP endpoint remains the same in either case. Raspberry Pi 4 and earlier can use dedicated H.264/MJPEG encoder hardware; Raspberry Pi 5 uses software encoders through FFmpeg libraries.
 
-MediaMTX provides the RTSP server. PetCam bundles a version-pinned MediaMTX binary for 32-bit ARM (ARMv6-compatible) and 64-bit ARM images, with release SHA-256 verification during image creation. The server accepts publishers only from localhost and allows read-only clients on the local network.
+MediaMTX provides the RTSP server. PetCam bundles a version-pinned MediaMTX binary for 32-bit armhf images (ARMv6-compatible, including older Pi Zero hardware), with release SHA-256 verification during image creation. The server accepts publishers only from localhost and allows read-only clients on the local network.
 
 ## Configure
 
