@@ -615,7 +615,6 @@ def register_stream_client(source):
             "bytes": 0,
             "last_frame_at": None,
             "last_frame_monotonic": None,
-            "max_frame_gap_seconds": 0.0,
         }
     return client_id
 
@@ -626,23 +625,28 @@ def unregister_stream_client(client_id):
 
 
 def record_stream_chunk(client_id, chunk, parser_state):
-    """Count complete JPEG marker pairs in forwarded bytes; never decode images."""
+    """Count JPEG marker pairs using bytes.find; never decode or copy image data."""
+    data = (b"\\xff" if parser_state["previous_byte"] == 0xFF else b"") + chunk
+    cursor = 0
     frames = 0
     last_frame_at = None
-    max_gap = 0.0
-    for value in chunk:
-        previous = parser_state["previous_byte"]
-        if previous == 0xFF and value == 0xD8:
+    while True:
+        start = data.find(b"\\xff\\xd8", cursor)
+        end = data.find(b"\\xff\\xd9", cursor)
+        if start < 0 and end < 0:
+            break
+        if start >= 0 and (end < 0 or start < end):
             parser_state["in_jpeg"] = True
-        elif previous == 0xFF and value == 0xD9 and parser_state["in_jpeg"]:
+            cursor = start + 2
+        else:
+            if parser_state["in_jpeg"]:
+                frames += 1
+                parser_state["last_frame_monotonic"] = time.monotonic()
+                last_frame_at = time.time()
             parser_state["in_jpeg"] = False
-            frames += 1
-            now = time.monotonic()
-            if parser_state["last_frame_monotonic"] is not None:
-                max_gap = max(max_gap, now - parser_state["last_frame_monotonic"])
-            parser_state["last_frame_monotonic"] = now
-            last_frame_at = time.time()
-        parser_state["previous_byte"] = value
+            cursor = end + 2
+    if chunk:
+        parser_state["previous_byte"] = chunk[-1]
     with _STREAM_METRICS_LOCK:
         metrics = _STREAM_METRICS.get(client_id)
         if metrics is not None:
@@ -651,9 +655,6 @@ def record_stream_chunk(client_id, chunk, parser_state):
             if last_frame_at is not None:
                 metrics["last_frame_at"] = last_frame_at
                 metrics["last_frame_monotonic"] = parser_state["last_frame_monotonic"]
-                metrics["max_frame_gap_seconds"] = max(
-                    metrics["max_frame_gap_seconds"], max_gap
-                )
 
 
 def stream_metrics_snapshot():
@@ -673,7 +674,6 @@ def stream_metrics_snapshot():
                 "last_frame_age_seconds": (
                     round(max(0.0, now - last_frame), 2) if last_frame is not None else None
                 ),
-                "max_frame_gap_seconds": round(metrics["max_frame_gap_seconds"], 2),
             })
     return {"active_clients": len(clients), "clients": clients}
 
