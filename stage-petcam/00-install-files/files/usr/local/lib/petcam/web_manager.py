@@ -1179,14 +1179,14 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 if capture_restart.returncode:
                     raise RuntimeError(
-                        capture_restart.stderr.strip() or "Unable to restart the camera with the saved RTMP settings."
+                        capture_restart.stderr.strip() or "Unable to restart the camera with the saved OBS output settings."
                     )
                 result = subprocess.run(
                     ["sudo", "/usr/local/sbin/petcam-rtmp-service", action],
                     capture_output=True, text=True, timeout=30, check=False,
                 )
                 if result.returncode:
-                    raise RuntimeError(result.stderr.strip() or "Unable to update RTMP service state.")
+                    raise RuntimeError(result.stderr.strip() or "Unable to update OBS output service state.")
                 self.send_json(200, {"ok": True, "config": public_rtmp_config(updated), "status": rtmp_status_snapshot()})
                 return
             if path == "/api/logout":
