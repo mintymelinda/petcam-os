@@ -299,10 +299,18 @@ def check_update(
     key_path = Path(config.get("PUBLIC_KEY", str(PUBLIC_KEY)))
     manifest_url = config["MANIFEST_URL"]
     candidates = release_manifest_candidates(manifest_url, key_path, max_valid_releases=max_releases)
-    if not candidates:
-        raise UpdateError("No valid signed PetCam releases were found in recent GitHub releases")
-
     installed = current_version()
+    if not candidates:
+        return {
+            "installed_version": installed,
+            "available_version": None,
+            "update_available": False,
+            "release_notes": "",
+            "archive_size": 0,
+            "releases": [],
+            "status": "no-complete-release",
+        }
+
     releases = []
     for candidate in candidates:
         manifest = candidate["manifest"]
