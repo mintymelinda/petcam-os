@@ -422,10 +422,10 @@ class RecentReleaseDiscoveryTests(unittest.TestCase):
         config = {
             "MANIFEST_URL": "https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json",
         }
-        with mock.patch("updater.platform.machine", return_value="armv7l"), \\
-                mock.patch("updater.release_manifest_candidates", return_value=[]), \\
-                mock.patch("updater.current_version", return_value="1.4.0"):
-            result = check_update(config)
+        with mock.patch("updater.platform.machine", return_value="armv7l"):
+            with mock.patch("updater.release_manifest_candidates", return_value=[]):
+                with mock.patch("updater.current_version", return_value="1.4.0"):
+                    result = check_update(config)
         self.assertEqual(result["status"], "no-complete-release")
         self.assertFalse(result["update_available"])
         self.assertIsNone(result["available_version"])
