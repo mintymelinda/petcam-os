@@ -181,8 +181,11 @@ class UpdateArchiveTests(unittest.TestCase):
             rtmp_config_path = etc_root / "petcam/rtmp.json"
             rtmp_config_path.write_text("{\"enabled\":true,\"stream_key\":\"keep-this-secret\"}\n")
             with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=1000)), \
-                    mock.patch("updater.os.geteuid", return_value=1000):
+                    mock.patch("updater.pwd.getpwnam", return_value=mock.Mock(pw_uid=1001)), \
+                    mock.patch("updater.os.chown") as chown, \
+                    mock.patch("updater.os.geteuid", return_value=0):
                 install_runtime_integration_files(release, etc_root)
+            chown.assert_any_call(rtmp_config_path, 1001, 1000)
             self.assertEqual(
                 (etc_root / "systemd/system/petcam-home-assistant.service").read_text(),
                 "[Service]\nExecStart=petcam\n",
