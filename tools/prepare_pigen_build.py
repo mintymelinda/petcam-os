@@ -61,15 +61,16 @@ def prepare_pigen(pigen_dir: Path) -> None:
         raise SystemExit("pi-gen export cleanup no longer ends with the expected chroot heredoc")
     export_cleanup.write_text(content + cleanup_config, encoding="utf-8")
 
-    # Do not synchronously scan every installed package's changelog while
-    # building the image. Keep upstream's one-shot timer enabled so the
-    # database is initialized in the background after first boot instead.
+    # pi-gen now guards apt-listchanges setup inside its on_chroot heredoc.
+    # Defer the expensive changelog database scan until the first boot.
     finalise = pigen_dir / "export-image" / "05-finalise" / "01-run.sh"
     replace_once(
         finalise,
-        '\tpython3 -m apt_listchanges.populate_database --profile apt\n\t'
-        'systemctl disable apt-listchanges.timer\n',
-        "",
+        '\tif [ -f /usr/lib/systemd/system/apt-listchanges.service ]; then\n'
+        '\t\tpython3 -m apt_listchanges.populate_database --profile apt\n'
+        '\t\tsystemctl disable apt-listchanges.timer\n'
+        '\tfi\n',
+        '\t# Defer apt-listchanges database initialization until first boot.\n',
         "apt-listchanges changelog database initialization",
     )
 
