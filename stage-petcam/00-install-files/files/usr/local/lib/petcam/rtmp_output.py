@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Optional RTMP publisher that reuses PetCam's existing local MJPEG stream."""
+"""Publish PetCam video to its local RTSP endpoint for OBS to consume."""
 
 from __future__ import annotations
 
@@ -11,20 +11,17 @@ import re
 import shutil
 import signal
 import subprocess
-import sys
 import threading
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from urllib.parse import urlsplit
 
 CONFIG_PATH = Path(os.environ.get("PETCAM_RTMP_CONFIG", "/etc/petcam/rtmp.json"))
 STATUS_PATH = Path(os.environ.get("PETCAM_RTMP_STATUS", "/run/petcam/rtmp-status.json"))
+RTSP_URL = "rtsp://127.0.0.1:8554/petcam"
 DEFAULTS = {
     "enabled": False,
-    "server_url": "",
-    "stream_key": "",
     "encoder": "libx264",
     "width": 640,
     "height": 360,
@@ -35,34 +32,15 @@ ENCODERS = {"libx264", "h264_v4l2m2m"}
 
 
 class RTMPConfigError(ValueError):
-    """Raised when RTMP output settings are invalid."""
+    """Raised when OBS output settings are invalid."""
 
 
 def validate_config(values):
     if not isinstance(values, dict):
-        raise RTMPConfigError("RTMP settings must be an object.")
-    unknown = sorted(set(values) - set(DEFAULTS))
-    if unknown:
-        raise RTMPConfigError("Unknown RTMP setting(s): " + ", ".join(unknown))
-    config = {**DEFAULTS, **values}
+        raise RTMPConfigError("OBS output settings must be an object.")
+    config = {**DEFAULTS, **{key: value for key, value in values.items() if key in DEFAULTS}}
     if not isinstance(config["enabled"], bool):
-        raise RTMPConfigError("RTMP enabled must be true or false.")
-    server = str(config["server_url"]).strip()
-    key = str(config["stream_key"]).strip()
-    if server:
-        parsed = urlsplit(server)
-        if parsed.scheme not in {"rtmp", "rtmps"} or not parsed.hostname:
-            raise RTMPConfigError("RTMP server URL must use rtmp:// or rtmps:// and include a host.")
-        if parsed.username or parsed.password or parsed.query or parsed.fragment:
-            raise RTMPConfigError("Put the stream key in its own field; URL credentials, query strings, and fragments are not allowed.")
-        if any(char in server for char in ("\r", "\n", " ", "\t")):
-            raise RTMPConfigError("RTMP server URL contains invalid whitespace.")
-    if key and not re.fullmatch(r"[A-Za-z0-9._~-]{1,512}", key):
-        raise RTMPConfigError("Stream key must be 1–512 characters using letters, numbers, dot, underscore, tilde, or hyphen.")
-    if config["enabled"] and (not server or not key):
-        raise RTMPConfigError("Set both the RTMP server URL and stream key before enabling output.")
-    config["server_url"] = server.rstrip("/")
-    config["stream_key"] = key
+        raise RTMPConfigError("OBS output enabled must be true or false.")
     if config["encoder"] not in ENCODERS:
         raise RTMPConfigError("Encoder must be libx264 or h264_v4l2m2m.")
     for field, minimum, maximum in (
@@ -75,18 +53,7 @@ def validate_config(values):
     return config
 
 
-def load_config(path=CONFIG_PATH):
-    try:
-        values = json.loads(Path(path).read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return validate_config({})
-    except (OSError, json.JSONDecodeError) as error:
-        raise RTMPConfigError(f"Unable to read RTMP settings: {error}") from error
-    return validate_config(values)
-
-
-def save_config(values, path=CONFIG_PATH):
-    config = validate_config(values)
+def _write_config(config, path):
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(target.name + ".tmp")
@@ -99,24 +66,39 @@ def save_config(values, path=CONFIG_PATH):
     except (KeyError, PermissionError):
         pass
     os.replace(temporary, target)
+
+
+def load_config(path=CONFIG_PATH):
+    try:
+        values = json.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return validate_config({})
+    except (OSError, json.JSONDecodeError) as error:
+        raise RTMPConfigError(f"Unable to read OBS output settings: {error}") from error
+    config = validate_config(values)
+    # Migrate existing RTMP installations and remove the now-unneeded external
+    # destination and stream key from persistent configuration.
+    if any(key not in DEFAULTS for key in values):
+        _write_config(config, path)
+    return config
+
+
+def save_config(values, path=CONFIG_PATH):
+    config = validate_config(values)
+    _write_config(config, path)
     return config
 
 
 def public_config(config):
-    return {
-        **{key: value for key, value in config.items() if key != "stream_key"},
-        "stream_key_configured": bool(config.get("stream_key")),
-        "stream_key": "",
-    }
+    return dict(config)
 
 
 def build_ffmpeg_command(config, input_url="http://127.0.0.1:8081/stream", native_h264=False):
     config = validate_config(config)
     if not config["enabled"]:
-        raise RTMPConfigError("RTMP output is disabled.")
+        raise RTMPConfigError("OBS output is disabled.")
     if not shutil.which("ffmpeg"):
         raise RTMPConfigError("FFmpeg is not installed.")
-    output_url = config["server_url"] + "/" + config["stream_key"]
     command = [
         "ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin",
         "-rw_timeout", "15000000",
@@ -143,7 +125,7 @@ def build_ffmpeg_command(config, input_url="http://127.0.0.1:8081/stream", nativ
             command.extend(["-preset", "ultrafast", "-tune", "zerolatency"])
     command.extend([
         "-progress", "pipe:1", "-stats_period", "1", "-nostats",
-        "-flvflags", "no_duration_filesize", "-f", "flv", output_url,
+        "-rtsp_transport", "tcp", "-f", "rtsp", RTSP_URL,
     ])
     return command
 
@@ -169,11 +151,11 @@ def native_h264_available(status_url="http://127.0.0.1:8081/status", timeout=25)
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="validate settings and FFmpeg availability without publishing")
+    parser.add_argument("--check", action="store_true", help="validate OBS output settings and FFmpeg availability")
     args = parser.parse_args()
     config = load_config()
     if not config["enabled"]:
-        raise SystemExit("RTMP output is disabled.")
+        raise SystemExit("OBS output is disabled.")
     native_h264 = native_h264_available()
     command = build_ffmpeg_command(config, native_h264=native_h264)
     if not native_h264:
@@ -184,23 +166,20 @@ def main():
         if encoders.returncode or not re.search(r"\b" + re.escape(config["encoder"]) + r"\b", encoders.stdout):
             raise SystemExit(f"Configured FFmpeg encoder is unavailable: {config['encoder']}")
     if args.check:
-        print(json.dumps({**public_config(config), "source": "native_h264" if native_h264 else "mjpeg_transcode"}))
+        print(json.dumps({**public_config(config), "source": "native_h264" if native_h264 else "mjpeg_transcode",
+                          "rtsp_url": "rtsp://<petcam-host>:8554/petcam"}))
         return
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    logging.info(
-        "Starting RTMP publisher using %s; destination credentials are redacted",
-        "Picamera2 native H.264 stream copy" if native_h264 else config["encoder"],
-    )
+    logging.info("Starting OBS RTSP feed using %s", "Picamera2 native H.264 stream copy" if native_h264 else config["encoder"])
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
     stopping = False
     latest_fps = None
 
     def forward_stderr():
         for raw_line in process.stderr:
-            safe_line = raw_line.replace(config["stream_key"], "[redacted]")
-            logging.warning("FFmpeg: %s", safe_line.rstrip())
+            logging.warning("FFmpeg: %s", raw_line.rstrip())
 
-    stderr_reader = threading.Thread(target=forward_stderr, name="rtmp-ffmpeg-logs", daemon=True)
+    stderr_reader = threading.Thread(target=forward_stderr, name="obs-ffmpeg-logs", daemon=True)
     stderr_reader.start()
 
     def write_status(state):
