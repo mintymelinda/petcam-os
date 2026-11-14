@@ -56,7 +56,7 @@ set -eu
 case "${1:-}" in
     enable) exec /usr/bin/systemctl enable --now petcam-rtmp.service ;;
     disable) exec /usr/bin/systemctl disable --now petcam-rtmp.service ;;
-    restart) exec /usr/bin/systemctl restart petcam-rtmp.service ;;
+    restart) /usr/bin/systemctl enable petcam-rtmp.service; exec /usr/bin/systemctl restart petcam-rtmp.service ;;
     *) echo "Usage: petcam-rtmp-service enable|disable|restart" >&2; exit 2 ;;
 esac
 SCRIPT
