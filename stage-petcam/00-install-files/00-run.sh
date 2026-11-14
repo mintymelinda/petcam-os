@@ -13,8 +13,7 @@ MEDIAMTX_VERSION="1.21.3"
 TARGET_ARCH="$(chroot "$ROOTFS_DIR" dpkg --print-architecture)"
 case "$TARGET_ARCH" in
     armhf) MEDIAMTX_ARCH="armv6"; MEDIAMTX_SHA256="cbacd828dd7c8bb67954eee2b0b5590b1f1f6994faa6fcd86a3cf0ba50213095" ;;
-    arm64) MEDIAMTX_ARCH="arm64"; MEDIAMTX_SHA256="27f038237cb5f77a724f6afc58eca2798f2bc4edf9989895631a80eeb41a4fe2" ;;
-    *) echo "Unsupported PetCam architecture for MediaMTX: $TARGET_ARCH" >&2; exit 1 ;;
+    *) echo "Unsupported PetCam architecture for MediaMTX: $TARGET_ARCH (PetCam application updates currently target armhf)" >&2; exit 1 ;;
 esac
 MEDIAMTX_ARCHIVE="mediamtx_v${MEDIAMTX_VERSION}_linux_${MEDIAMTX_ARCH}.tar.gz"
 MEDIAMTX_TMP="$(mktemp -d)"
