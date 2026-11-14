@@ -55,8 +55,8 @@ def validate_config(values):
             raise RTMPConfigError("Put the stream key in its own field; URL credentials, query strings, and fragments are not allowed.")
         if any(char in server for char in ("\r", "\n", " ", "\t")):
             raise RTMPConfigError("RTMP server URL contains invalid whitespace.")
-    if len(key) > MAX_KEY_LENGTH or any(ord(char) < 33 or ord(char) > 126 for char in key):
-        raise RTMPConfigError("Stream key must contain printable non-space ASCII characters and be at most 512 characters.")
+    if key and not re.fullmatch(r"[A-Za-z0-9._~-]{1,512}", key):
+        raise RTMPConfigError("Stream key must be 1–512 characters using letters, numbers, dot, underscore, tilde, or hyphen.")
     if config["enabled"] and (not server or not key):
         raise RTMPConfigError("Set both the RTMP server URL and stream key before enabling output.")
     config["server_url"] = server.rstrip("/")
