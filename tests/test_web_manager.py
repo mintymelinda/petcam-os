@@ -307,6 +307,7 @@ class WebManagerTests(unittest.TestCase):
 
         class Handler:
             def __init__(self):
+                self.path = "/stream"
                 self.wfile = CountingWriter()
                 self.headers_sent = []
 
@@ -376,7 +377,7 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("/api/system", MODULE.PAGE)
         with tempfile.TemporaryDirectory() as directory:
             version_file = Path(directory) / "VERSION"
-            version_file.write_text("9.8.7\\n", encoding="utf-8")
+            version_file.write_text("9.8.7\n", encoding="utf-8")
             with mock.patch.object(MODULE, "__file__", str(Path(directory) / "web_manager.py")):
                 self.assertEqual(MODULE.installed_version(), "9.8.7")
 
@@ -388,8 +389,8 @@ class WebManagerTests(unittest.TestCase):
             "last_frame_monotonic": None,
         }
         try:
-            MODULE.record_stream_chunk(client_id, b"\\xff\\xd8first\\xff", parser_state)
-            MODULE.record_stream_chunk(client_id, b"\\xd9\\xff\\xd8second\\xff\\xd9", parser_state)
+            MODULE.record_stream_chunk(client_id, b"\xff\xd8first\xff", parser_state)
+            MODULE.record_stream_chunk(client_id, b"\xd9\xff\xd8second\xff\xd9", parser_state)
             snapshot = MODULE.stream_metrics_snapshot()
             self.assertEqual(snapshot["active_clients"], 1)
             self.assertEqual(snapshot["clients"][0]["frames"], 2)
