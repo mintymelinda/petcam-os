@@ -606,6 +606,7 @@ def proxy_stream(handler, port):
     headers_sent = False
     retry_delay = 0.1
     while True:
+        streamed_data = False
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/stream", timeout=5) as upstream:
                 if not headers_sent:
@@ -624,18 +625,21 @@ def proxy_stream(handler, port):
                     # available socket data so low-bitrate streams are not held
                     # for a full buffer.
                     handler.wfile.write(chunk)
+                    streamed_data = True
             # A clean EOF is also a camera restart/disconnect; retry without
             # ending the response already held by OBS.
-            retry_delay = 0.1
+            if streamed_data:
+                retry_delay = 0.1
+            else:
+                retry_delay = min(2.0, retry_delay * 1.7)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             # The downstream OBS/browser client has gone away.
             return
         except (OSError, urllib.error.URLError, TimeoutError):
             # The upstream camera service is temporarily unavailable. Keep the
             # downstream socket open and retry with a bounded backoff.
-            pass
+            retry_delay = min(2.0, retry_delay * 1.7)
         time.sleep(retry_delay)
-        retry_delay = min(2.0, retry_delay * 1.7)
 
 
 def update_check():
