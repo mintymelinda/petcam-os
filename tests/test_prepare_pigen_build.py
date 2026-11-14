@@ -19,16 +19,24 @@ class PreparePigenBuildTests(unittest.TestCase):
             (pigen / "export-image" / "05-finalise").mkdir(parents=True)
             (pigen / "build-docker.sh").write_text(
                 '${DOCKER} build ${PLATFORM:+--platform "${PLATFORM}"} '
-                '--build-arg BASE_IMAGE=${BASE_IMAGE} -t pi-gen "${DIR}"\n',
+                '--build-arg BASE_IMAGE=${BASE_IMAGE} -t pi-gen "${DIR}"\\n',
                 encoding="utf-8",
             )
             (pigen / "scripts" / "common").write_text(
-                'on_chroot() {\n\techo "inside chroot"\n}\n'
-                'setarch linux32 capsh $CAPSH_ARG "--chroot=${ROOTFS_DIR}/" -- -e "$@"\n',
+                'on_chroot() {\\n\\techo "inside chroot"\\n}\\n'
+                'setarch linux32 capsh $CAPSH_ARG "--chroot=${ROOTFS_DIR}/" -- -e "$@"\\n',
                 encoding="utf-8",
             )
             cleanup = pigen / "export-image" / "02-set-sources" / "01-run.sh"
-            cleanup.write_text("apt-get clean\nEOF\n", encoding="utf-8")
+            cleanup.write_text("apt-get clean\\nEOF\\n", encoding="utf-8")
+            finalise = pigen / "export-image" / "05-finalise" / "01-run.sh"
+            finalise.write_text(
+                'if [ -f "/usr/lib/systemd/system/apt-listchanges.service" ]; then\\n'
+                '\\tpython3 -m apt_listchanges.populate_database --profile apt\\n'
+                '\\tsystemctl disable apt-listchanges.timer\\n'
+                'fi\\n',
+                encoding="utf-8",
+            )
 
             prepare_pigen(pigen)
 
@@ -50,7 +58,7 @@ class PreparePigenBuildTests(unittest.TestCase):
             pigen = Path(temporary)
             (pigen / "scripts").mkdir()
             (pigen / "export-image" / "02-set-sources").mkdir(parents=True)
-            (pigen / "build-docker.sh").write_text("unexpected build command\n")
+            (pigen / "build-docker.sh").write_text("unexpected build command\\n")
             with self.assertRaises(SystemExit):
                 prepare_pigen(pigen)
 
