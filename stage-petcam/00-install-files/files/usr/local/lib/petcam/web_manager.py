@@ -15,7 +15,7 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import apply_config, ensure_config_lock, parse_config
 from camera import PIXEL_BUDGETS, USTREAMER_FORMATS, camera_identity, mode_supports_fps, model_tier, read_model
@@ -31,6 +31,9 @@ TLS_KEY = Path("/etc/petcam/web-manager.key")
 HEALTH_FILE = Path("/var/lib/petcam/health.json")
 _login_attempts = {}
 _login_lock = threading.Lock()
+_STREAM_METRICS_LOCK = threading.Lock()
+_STREAM_METRICS = {}
+_STREAM_CLIENT_SEQUENCE = 0
 PAGE = r"""<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PetCam</title>
@@ -54,7 +57,7 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 </nav>
 <main id="tab-panels">
 <div id="panel-live" class="tab-panel active" role="tabpanel" aria-labelledby="tab-live" tabindex="0">
-<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Live preview</h2><button id="copy-browser-source" type="button">URL Browser Source</button></div><img id="live-preview" src="/stream" alt="Live camera preview"><p id="capture-rate" class="muted">Checking actual capture rate…</p><p class="muted">The preview uses the same stream OBS receives.</p></section>
+<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Live preview</h2><button id="copy-browser-source" type="button">URL Browser Source</button></div><img id="live-preview" src="/stream?client=dashboard-preview" alt="Live camera preview"><p id="capture-rate" class="muted">Checking actual capture rate…</p><p id="capture-status-freshness" class="muted">Capture status refreshes every 5 seconds.</p><p id="stream-delivery-metrics" class="muted">Waiting for stream delivery metrics…</p><p class="muted">The preview uses the same stream OBS receives.</p></section>
 </div>
 <div id="panel-camera-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-camera-settings" tabindex="0" hidden>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Camera selection</h2><button id="refresh">Refresh cameras</button></div>
@@ -108,6 +111,7 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <div class="row"><button id="save-light-sensor" type="button">Save light sensor settings</button></div></section>
 </div>
 <div id="panel-system" class="tab-panel" role="tabpanel" aria-labelledby="tab-system" tabindex="0" hidden>
+<section><h2>Installed software</h2><p id="installed-version" role="status">Checking installed PetCam version…</p><small class="muted">Version of the active PetCam application installed on this device.</small></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Network and OBS diagnostics</h2><button id="refresh-diagnostics">Run checks</button></div><p id="diagnostic-summary" role="status">Diagnostics have not been run yet.</p><p id="diagnostic-details" class="muted"></p><div class="row"><button id="download-support-bundle">Download redacted support bundle</button></div></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Stream health</h2><button id="refresh-health">Refresh</button></div><p id="health-state" role="status">Checking stream health…</p><p id="health-reason" class="muted"></p><small id="health-details" class="muted"></small></section>
 <section id="updates"><div class="row" style="justify-content:space-between;align-items:center"><h2>Software updates</h2><span id="update-state" class="muted">Not checked</span></div>
@@ -164,7 +168,9 @@ function showSelectedModeWarning(){const c=inventory[+$("camera").value],raw=$("
 function activeCameraMatches(camera,config){if(!config)return false;if(config.SOURCE==="usb")return camera.kind==="usb"&&(config.USB_PHYSICAL_PATH?camera.physical_path===config.USB_PHYSICAL_PATH:camera.device===config.DEVICE);if(config.SOURCE==="csi")return camera.kind==="csi"&&(config.CSI_DEVICE_PATH?camera.device_path===config.CSI_DEVICE_PATH:String(camera.camera)===String(config.CAMERA));return false}
 function fillModes(preferred=null){const c=inventory[+$("camera").value];$("mode").replaceChildren();if(!c)return;let matched=false;for(const m of modesFor(c)){let fps=m.fps?.length?m.fps:[m.fps_range?.max||30];if(c.kind==="usb")fps=fps.filter(Number.isInteger);if(preferred&&preferred.width===m.width&&preferred.height===m.height&&(preferred.format||"CSI")===(m.format||"CSI")&&!fps.some(f=>Math.abs(f-preferred.fps)<0.1))fps=[...fps,preferred.fps];for(const f of fps){const mode={format:m.format||"CSI",width:m.width,height:m.height,fps:f};const o=document.createElement("option");o.value=JSON.stringify(mode);o.textContent=`${m.width}×${m.height} · ${f} fps · ${m.format||"CSI"}`+(exceedsPerformanceBudget(c,mode)?" · ⚠ above device estimate":"");if(preferred&&mode.width===preferred.width&&mode.height===preferred.height&&mode.format===(preferred.format||"CSI")&&Math.abs(mode.fps-preferred.fps)<0.1){o.selected=true;matched=true}$("mode").append(o)}}if(preferred&&!matched){const mode={format:preferred.format||"CSI",width:preferred.width,height:preferred.height,fps:Number(preferred.fps)};const o=document.createElement("option");o.value=JSON.stringify(mode);o.textContent=`${mode.width}×${mode.height} · ${mode.fps} fps · ${mode.format} (saved setting; not currently advertised)`;o.selected=true;$("mode").prepend(o)}$("mode").onchange=showSelectedModeWarning;showSelectedModeWarning()}
 function renderCaptureStatus(){const fps=Number(captureStatus.latest_captured_fps),configured=activeConfig?.FPS;if(Number.isFinite(fps)&&fps>0){$("capture-rate").textContent="Actual captured rate: "+fps.toFixed(1).replace(/\.0$/,"")+" FPS"+(configured&&configured!=="auto"?" · configured: "+configured+" FPS":"")+(activeConfig?.RESOLUTION&&activeConfig.RESOLUTION!=="auto"?" · "+activeConfig.RESOLUTION:"")}else $("capture-rate").textContent="Actual captured rate: not currently reported"}
-function refreshLivePreview(){const preview=$("live-preview");preview.src="/stream?refresh="+Date.now()}
+async function refreshLiveStatus(){try{const d=await request("/api/live-status");captureStatus=d.capture_status||{};renderCaptureStatus();const updated=new Date(d.capture_status_updated_at*1000);$("capture-status-freshness").textContent="Capture status refreshes every 5 seconds · last updated "+updated.toLocaleTimeString();const clients=d.stream_metrics?.clients||[];$("stream-delivery-metrics").textContent=clients.length?clients.map(client=>(client.source==="dashboard_preview"?"Dashboard preview":"Browser Source")+" · "+client.average_fps.toFixed(1)+" forwarded JPEG FPS · "+client.frames+" frames"+(client.last_frame_age_seconds===null?"":" · last frame "+client.last_frame_age_seconds.toFixed(1)+"s ago")).join(" | "):"No active stream clients reported."}catch(error){$("capture-status-freshness").textContent="Live status unavailable: "+error.message}}
+function refreshLivePreview(){const preview=$("live-preview");preview.src="/stream?client=dashboard-preview&refresh="+Date.now()}
+async function refreshSystemInfo(){try{const data=await request("/api/system");$("installed-version").textContent="Installed version: "+(data.installed_version||"unknown")}catch(error){$("installed-version").textContent="Installed version unavailable: "+error.message}}
 async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;activeConfig=d.active_config;captureStatus=d.capture_status||{};$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});const activeIndex=inventory.findIndex(c=>activeCameraMatches(c,activeConfig));if(activeIndex>=0){$("camera").value=String(activeIndex);$("camera").options[activeIndex].textContent+=" · current"}if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{const selected=activeIndex>=0?activeConfig:null;const selectedCamera=activeIndex>=0?inventory[activeIndex]:null;const currentResolution=selected&&selected.RESOLUTION!=="auto"?selected.RESOLUTION:captureStatus.active_resolution;const currentFps=selected&&selected.FPS!=="auto"?Number(selected.FPS):Number(captureStatus.latest_captured_fps);let currentFormat=selected&&selected.FORMAT!=="auto"?selected.FORMAT:(captureStatus.active_capture_format||"CSI");if(currentFormat==="MJPEG"||currentFormat==="JPEG")currentFormat="MJPG";if(selectedCamera?.kind==="csi")currentFormat="CSI";const preferred=currentResolution&&currentResolution!=="auto"&&Number.isFinite(currentFps)&&currentFps>0?{width:Number(currentResolution.split("x")[0]),height:Number(currentResolution.split("x")[1]),fps:currentFps,format:currentFormat}:null;$("message").textContent=inventory.length+" camera(s) found. Current saved camera settings are selected.";fillModes(preferred)}renderCaptureStatus();await refreshCameraControls()}catch(e){$("message").textContent=e.message}}
 
 function cameraControlLabel(name){const labels={auto_exposure:"Auto exposure",exposure_time_absolute:"Exposure time",exposure_dynamic_framerate:"Dynamic framerate",white_balance_automatic:"Automatic white balance",white_balance_temperature:"White balance temperature",power_line_frequency:"Power-line frequency",backlight_compensation:"Backlight compensation",focus_automatic_continuous:"Continuous autofocus",focus_absolute:"Focus"};return labels[name]||name.replaceAll("_"," ").replace(/\b\w/g,letter=>letter.toUpperCase())}
@@ -249,11 +255,11 @@ refreshLightSensor();setInterval(refreshLightSensor,10000);
 
 async function refreshDiagnostics(){try{const d=await request("/api/diagnostics");const layers=d.layers||{};const failed=Object.entries(layers).filter(([k,v])=>v&&(v.healthy===false||v.reachable===false||v.resolved===false||v.available===false));$("diagnostic-summary").textContent=failed.length?failed.map(([k])=>k.replaceAll("_"," ")+": attention needed").join(" · "):"Local camera, listener, and network checks look healthy.";const urls=(d.obs_browser_source_urls||[]).join("\n");$("diagnostic-details").textContent="OBS URL(s): "+urls+"\n"+(d.problems||[]).join("\n")+"\n"+d.remote_client_note}catch(e){$("diagnostic-summary").textContent="Diagnostics unavailable: "+e.message}}$("refresh-diagnostics").onclick=refreshDiagnostics;refreshDiagnostics();
 $("download-support-bundle").onclick=async()=>{const b=$("download-support-bundle");b.disabled=true;try{let r=await fetch("/api/support-bundle");if(r.status===401){await login();r=await fetch("/api/support-bundle")}if(!r.ok)throw Error("Support bundle request failed ("+r.status+")");const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="petcam-support.tar.gz";document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url)}catch(e){$("diagnostic-summary").textContent="Support bundle failed: "+e.message}finally{b.disabled=false}};
-async function refreshHealth(){try{const h=await request("/api/health");$("health-state").textContent="Status: "+h.state.replaceAll("_"," ");$("health-reason").textContent=h.reason||"No active issue reported."; $("health-details").textContent="Recoveries: "+(h.recovery_count||0)+" · Last checked: "+(h.last_checked_at||"not yet")+(h.last_recovery_at?" · Last recovery: "+h.last_recovery_at:"")}catch(e){$("health-state").textContent="Health status unavailable";$("health-reason").textContent=e.message}}$("refresh-health").onclick=refreshHealth;refresh();refreshHealth();setInterval(refreshHealth,30000);
+async function refreshHealth(){try{const h=await request("/api/health");$("health-state").textContent="Status: "+h.state.replaceAll("_"," ");$("health-reason").textContent=h.reason||"No active issue reported."; $("health-details").textContent="Recoveries: "+(h.recovery_count||0)+" · Last checked: "+(h.last_checked_at||"not yet")+(h.last_recovery_at?" · Last recovery: "+h.last_recovery_at:"")}catch(e){$("health-state").textContent="Health status unavailable";$("health-reason").textContent=e.message}}$("refresh-health").onclick=refreshHealth;refresh();refreshLiveStatus();setInterval(refreshLiveStatus,5000);refreshSystemInfo();refreshHealth();setInterval(refreshHealth,30000);
 const autoCheck=$("auto-check");autoCheck.checked=localStorage.getItem("petcam-auto-update-check")==="true";
 autoCheck.onchange=()=>localStorage.setItem("petcam-auto-update-check",String(autoCheck.checked));
 let updateAvailable=false,updateBusy=false;
-async function updateStatus(){try{const s=await request("/api/update/status");const wasBusy=updateBusy;updateBusy=s.active;$("update-state").textContent=s.active?"Installing…":s.result==="failed"?"Last install failed":s.result==="success"?"Installed":"Idle";$("update-logs").textContent=s.logs||"";if(!s.active&&wasBusy){updateBusy=false;await checkUpdates()}$("install-update").disabled=!updateAvailable||s.active}catch(e){$("update-message").textContent=e.message}}
+async function updateStatus(){try{const s=await request("/api/update/status");const wasBusy=updateBusy;updateBusy=s.active;$("update-state").textContent=s.active?"Installing…":s.result==="failed"?"Last install failed":s.result==="success"?"Installed":"Idle";$("update-logs").textContent=s.logs||"";if(!s.active&&wasBusy){updateBusy=false;await refreshSystemInfo();await checkUpdates()}$("install-update").disabled=!updateAvailable||s.active}catch(e){$("update-message").textContent=e.message}}
 async function checkUpdates(){const b=$("check-updates");b.disabled=true;$("update-message").textContent="Checking signed release metadata…";try{const d=await request("/api/update/check");updateAvailable=d.update_available;$("update-state").textContent=updateAvailable?"Update available":"Up to date";$("update-message").textContent=updateAvailable?"A verified application release is available. Review the notes before installing.":"This device is running the latest published PetCam application."; const releaseList=(d.releases||[]).map(r=>r.version+" · "+Math.ceil(r.archive_size/1048576)+" MiB"+(r.update_available?" · update":" · installed/current")+(r.release_notes?"\n"+r.release_notes:"")).join("\n\n");$("update-details").textContent="Installed: "+(d.installed_version||"unknown")+" · Newest valid: "+d.available_version+"\n\nRecent verified releases\n"+(releaseList||"No valid releases found.");$("install-update").disabled=!updateAvailable||updateBusy}catch(e){$("update-state").textContent="Check failed";$("update-message").textContent=e.message}finally{b.disabled=false}}
 $("check-updates").onclick=checkUpdates;
 async function installUpdate(){if(!updateAvailable||updateBusy)return;$("update-confirmation").hidden=true;$("install-update").disabled=true;$("check-updates").disabled=true;$("update-message").textContent="Starting verified update…";try{await request("/api/update/install",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});updateBusy=true;$("update-state").textContent="Installing…";$("update-message").textContent="The update is downloading and staging. This page may briefly disconnect while services restart.";const poll=async()=>{await updateStatus();if(updateBusy)setTimeout(poll,2000)};setTimeout(poll,1500)}catch(e){$("update-message").textContent=e.message;$("install-update").disabled=false}finally{$("check-updates").disabled=false}}
@@ -596,51 +602,135 @@ def save_selection(data):
     return apply_config(values)
 
 
-def proxy_stream(handler, port):
-    """Keep the public MJPEG response open while the camera service restarts.
+def register_stream_client(source):
+    """Track one downstream MJPEG client without retaining its network address."""
+    global _STREAM_CLIENT_SEQUENCE
+    with _STREAM_METRICS_LOCK:
+        _STREAM_CLIENT_SEQUENCE += 1
+        client_id = str(_STREAM_CLIENT_SEQUENCE)
+        _STREAM_METRICS[client_id] = {
+            "source": source,
+            "started_monotonic": time.monotonic(),
+            "frames": 0,
+            "bytes": 0,
+            "last_frame_at": None,
+            "last_frame_monotonic": None,
+        }
+    return client_id
 
-    OBS treats the public stream URL as a long-lived Browser Source. The camera
-    process behind it is replaceable, so an upstream EOF or reset must not end
-    the downstream response. Reconnect upstream and continue forwarding MIME
-    parts on the original response until the OBS client disconnects.
-    """
+
+def unregister_stream_client(client_id):
+    with _STREAM_METRICS_LOCK:
+        _STREAM_METRICS.pop(client_id, None)
+
+
+def record_stream_chunk(client_id, chunk, parser_state):
+    """Count JPEG marker pairs using bytes.find; never decode or copy image data."""
+    data = (b"\xff" if parser_state["previous_byte"] == 0xFF else b"") + chunk
+    cursor = 0
+    frames = 0
+    last_frame_at = None
+    while True:
+        start = data.find(b"\xff\xd8", cursor)
+        end = data.find(b"\xff\xd9", cursor)
+        if start < 0 and end < 0:
+            break
+        if start >= 0 and (end < 0 or start < end):
+            parser_state["in_jpeg"] = True
+            cursor = start + 2
+        else:
+            if parser_state["in_jpeg"]:
+                frames += 1
+                parser_state["last_frame_monotonic"] = time.monotonic()
+                last_frame_at = time.time()
+            parser_state["in_jpeg"] = False
+            cursor = end + 2
+    if chunk:
+        parser_state["previous_byte"] = chunk[-1]
+    with _STREAM_METRICS_LOCK:
+        metrics = _STREAM_METRICS.get(client_id)
+        if metrics is not None:
+            metrics["bytes"] += len(chunk)
+            metrics["frames"] += frames
+            if last_frame_at is not None:
+                metrics["last_frame_at"] = last_frame_at
+                metrics["last_frame_monotonic"] = parser_state["last_frame_monotonic"]
+
+
+def stream_metrics_snapshot():
+    """Return live per-client delivery rates without exposing client addresses."""
+    now = time.monotonic()
+    with _STREAM_METRICS_LOCK:
+        clients = []
+        for client_id, metrics in _STREAM_METRICS.items():
+            elapsed = max(0.001, now - metrics["started_monotonic"])
+            last_frame = metrics["last_frame_monotonic"]
+            clients.append({
+                "client_id": client_id,
+                "source": metrics["source"],
+                "frames": metrics["frames"],
+                "bytes": metrics["bytes"],
+                "average_fps": round(metrics["frames"] / elapsed, 2),
+                "last_frame_age_seconds": (
+                    round(max(0.0, now - last_frame), 2) if last_frame is not None else None
+                ),
+            })
+    return {"active_clients": len(clients), "clients": clients}
+
+
+def installed_version():
+    """Read the VERSION file belonging to the active, resolved application release."""
+    version_file = Path(__file__).resolve().parent / "VERSION"
+    try:
+        version = version_file.read_text(encoding="utf-8").strip()
+        return version or None
+    except OSError:
+        return None
+
+
+def proxy_stream(handler, port):
+    """Keep OBS/browser MJPEG responses open and measure frames actually forwarded."""
+    query = parse_qs(urlparse(handler.path).query)
+    source = "dashboard_preview" if query.get("client") == ["dashboard-preview"] else "browser_source"
+    client_id = register_stream_client(source)
+    parser_state = {
+        "previous_byte": None,
+        "in_jpeg": False,
+        "last_frame_monotonic": None,
+    }
     headers_sent = False
     retry_delay = 0.1
-    while True:
-        streamed_data = False
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{port}/stream", timeout=5) as upstream:
-                if not headers_sent:
-                    handler.send_response(upstream.status)
-                    handler.send_header(
-                        "Content-Type",
-                        upstream.headers.get("Content-Type", "multipart/x-mixed-replace"),
-                    )
-                    handler.send_header("Cache-Control", "no-store")
-                    handler.end_headers()
-                    headers_sent = True
-                read_chunk = getattr(upstream, "read1", upstream.read)
-                while chunk := read_chunk(65536):
-                    # BufferedWriter flushes large writes itself. Avoid an extra
-                    # flush call for every MJPEG chunk, and read only currently
-                    # available socket data so low-bitrate streams are not held
-                    # for a full buffer.
-                    handler.wfile.write(chunk)
-                    streamed_data = True
-            # A clean EOF is also a camera restart/disconnect; retry without
-            # ending the response already held by OBS.
-            if streamed_data:
-                retry_delay = 0.1
-            else:
+    try:
+        while True:
+            streamed_data = False
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/stream", timeout=5) as upstream:
+                    if not headers_sent:
+                        handler.send_response(upstream.status)
+                        handler.send_header(
+                            "Content-Type",
+                            upstream.headers.get("Content-Type", "multipart/x-mixed-replace"),
+                        )
+                        handler.send_header("Cache-Control", "no-store")
+                        handler.end_headers()
+                        headers_sent = True
+                    read_chunk = getattr(upstream, "read1", upstream.read)
+                    while chunk := read_chunk(65536):
+                        # Forward original bytes unchanged; metrics only scan JPEG markers.
+                        handler.wfile.write(chunk)
+                        record_stream_chunk(client_id, chunk, parser_state)
+                        streamed_data = True
+                if streamed_data:
+                    retry_delay = 0.1
+                else:
+                    retry_delay = min(2.0, retry_delay * 1.7)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                return
+            except (OSError, urllib.error.URLError, TimeoutError, http.client.HTTPException):
                 retry_delay = min(2.0, retry_delay * 1.7)
-        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
-            # The downstream OBS/browser client has gone away.
-            return
-        except (OSError, urllib.error.URLError, TimeoutError, http.client.HTTPException):
-            # The upstream camera service is temporarily unavailable. Keep the
-            # downstream socket open and retry with a bounded backoff.
-            retry_delay = min(2.0, retry_delay * 1.7)
-        time.sleep(retry_delay)
+            time.sleep(retry_delay)
+    finally:
+        unregister_stream_client(client_id)
 
 
 def update_check():
@@ -807,6 +897,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
             except Exception as error:
                 self.send_json(503, {"error": str(error)})
+            return
+        if path == "/api/live-status":
+            self.send_json(200, {
+                "capture_status": live_capture_status(),
+                "capture_status_updated_at": time.time(),
+                "stream_metrics": stream_metrics_snapshot(),
+            })
+            return
+        if path == "/api/system":
+            self.send_json(200, {"installed_version": installed_version()})
             return
         if path == "/api/health":
             try:
