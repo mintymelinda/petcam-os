@@ -260,6 +260,7 @@ class UpdateArchiveTests(unittest.TestCase):
             "systemd/petcam-rtmp.service": b"[Service]\nExecStart=/usr/bin/python3 /opt/petcam/current/lib/rtmp_output.py\n",
             "etc/petcam/home-assistant.conf": b"MQTT_ENABLED=false\n",
             "etc/petcam/rtmp.json": b"{\"enabled\":false}\n",
+            "bin/mediamtx": b"MediaMTX binary",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"binary",
         }
@@ -268,6 +269,7 @@ class UpdateArchiveTests(unittest.TestCase):
             safe_extract(self.archive(files), root)
             validate_release(root, "1.2.3")
             self.assertTrue((root / "vendor/bin/ustreamer").stat().st_mode & 0o111)
+            self.assertTrue((root / "bin/mediamtx").stat().st_mode & 0o111)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             safe_extract(self.archive({"VERSION": b"9.9.9"}), root)
