@@ -24,10 +24,10 @@ DEFAULTS = {
     "server_url": "",
     "stream_key": "",
     "encoder": "libx264",
-    "width": 1280,
-    "height": 720,
-    "fps": 30,
-    "bitrate_kbps": 2500,
+    "width": 640,
+    "height": 360,
+    "fps": 15,
+    "bitrate_kbps": 750,
 }
 ENCODERS = {"libx264", "h264_v4l2m2m"}
 
