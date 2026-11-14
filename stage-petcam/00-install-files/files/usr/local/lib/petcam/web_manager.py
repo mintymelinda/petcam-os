@@ -35,6 +35,8 @@ _login_lock = threading.Lock()
 _STREAM_METRICS_LOCK = threading.Lock()
 _STREAM_METRICS = {}
 _STREAM_CLIENT_SEQUENCE = 0
+_SYSTEM_METRICS_LOCK = threading.Lock()
+_SYSTEM_CPU_SAMPLE = None
 PAGE = r"""<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PetCam</title>
@@ -747,6 +749,46 @@ def stream_metrics_snapshot():
     return {"active_clients": len(clients), "clients": clients}
 
 
+
+def system_resource_metrics():
+    """Return low-cost CPU and memory usage from Linux procfs."""
+    global _SYSTEM_CPU_SAMPLE
+    cpu_percent = None
+    try:
+        with open("/proc/stat", encoding="ascii") as source:
+            fields = source.readline().split()[1:]
+        values = [int(value) for value in fields]
+        total = sum(values)
+        idle = values[3] + (values[4] if len(values) > 4 else 0)
+        now = time.monotonic()
+        with _SYSTEM_METRICS_LOCK:
+            previous = _SYSTEM_CPU_SAMPLE
+            _SYSTEM_CPU_SAMPLE = (total, idle, now)
+        if previous:
+            total_delta = total - previous[0]
+            idle_delta = idle - previous[1]
+            if total_delta > 0:
+                cpu_percent = round(max(0.0, min(100.0, (total_delta - idle_delta) * 100.0 / total_delta)), 1)
+    except (OSError, ValueError, IndexError):
+        pass
+    memory = {}
+    try:
+        with open("/proc/meminfo", encoding="ascii") as source:
+            for line in source:
+                key, value = line.split(":", 1)
+                if key in ("MemTotal", "MemAvailable"):
+                    memory[key] = int(value.split()[0])
+        total_kib = memory.get("MemTotal")
+        available_kib = memory.get("MemAvailable")
+        if total_kib is not None and available_kib is not None:
+            total_mb = round(total_kib / 1024)
+            used_mb = round(max(0, total_kib - available_kib) / 1024)
+        else:
+            total_mb = used_mb = None
+    except (OSError, ValueError, IndexError):
+        total_mb = used_mb = None
+    return {"cpu_percent": cpu_percent, "memory_used_mb": used_mb, "memory_total_mb": total_mb}
+
 def installed_version():
     """Read the VERSION file belonging to the active, resolved application release."""
     version_file = Path(__file__).resolve().parent.parent / "VERSION"
@@ -978,6 +1020,7 @@ class Handler(BaseHTTPRequestHandler):
                 "capture_status_updated_at": time.time(),
                 "stream_metrics": stream_metrics_snapshot(),
                 "network_status": collect_network_performance(),
+                "system_metrics": system_resource_metrics(),
             })
             return
         if path == "/api/system":
