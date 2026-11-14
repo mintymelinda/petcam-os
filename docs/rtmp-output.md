@@ -1,6 +1,6 @@
 # Optional RTMP output
 
-RTMP publishing is an optional, independent output from the existing PetCam camera stream. It is disabled by default.
+RTMP publishing is an optional, independent output from the existing PetCam camera stream. It is disabled by default. New PetCam images include FFmpeg. On an existing installation that was upgraded without reflashing, install the dependency once with `sudo apt-get update && sudo apt-get install ffmpeg` before enabling RTMP.
 
 The publisher reads the existing loopback MJPEG endpoint at `http://127.0.0.1:8081/stream`, encodes H.264 with FFmpeg, and sends an FLV stream to an RTMP or RTMPS destination. It does not open the camera device, create a second capture process, or change the public MJPEG endpoint used by browser preview and OBS.
 
