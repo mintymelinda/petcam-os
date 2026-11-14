@@ -1,0 +1,34 @@
+[Unit]
+Description=PetCam optional RTMP publisher
+Documentation=https://github.com/mintymelinda/petcam-os
+After=network-online.target petcam-stream.service
+Wants=network-online.target petcam-stream.service
+ConditionPathExists=/etc/petcam/rtmp.json
+
+[Service]
+Type=simple
+User=petcam
+Group=petcam
+SupplementaryGroups=video
+ExecStart=/usr/bin/python3 /opt/petcam/current/lib/rtmp_output.py
+Restart=always
+RestartSec=5
+Nice=10
+CPUWeight=20
+CPUQuota=80%
+MemoryHigh=192M
+MemoryMax=256M
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/etc/petcam/rtmp.json
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
