@@ -138,7 +138,7 @@ class UpdateArchiveTests(unittest.TestCase):
             for name, content in files.items():
                 info = tarfile.TarInfo(name)
                 info.size = len(content)
-                info.mode = 0o755 if name.endswith((".sh", "ustreamer")) else 0o644
+                info.mode = 0o755 if name.endswith((".sh", "ustreamer")) or name == "bin/mediamtx" else 0o644
                 bundle.addfile(info, io.BytesIO(content))
         return stream.getvalue()
 
