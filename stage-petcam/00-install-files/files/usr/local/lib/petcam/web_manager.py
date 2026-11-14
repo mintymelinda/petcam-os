@@ -370,9 +370,8 @@ def live_capture_status():
         if isinstance(state, dict):
             source = state.get("source") or {}
             resolution = source.get("resolution") or {}
-            return {
+            result = {
                 "latest_captured_fps": source.get("captured_fps"),
-                "configured_fps": config.get("FPS"),
                 "active_resolution": (
                     f"{resolution['width']}x{resolution['height']}"
                     if resolution.get("width") and resolution.get("height") else None
@@ -381,6 +380,9 @@ def live_capture_status():
                     "MJPEG" if (state.get("encoder") or {}).get("type") == "HW" else None
                 ),
             }
+            if config.get("FPS") is not None:
+                result["configured_fps"] = config["FPS"]
+            return result
     except (OSError, urllib.error.URLError, subprocess.TimeoutExpired, ValueError, TypeError, KeyError, AttributeError):
         pass
 
@@ -388,16 +390,19 @@ def live_capture_status():
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/status", timeout=2) as response:
             payload = json.loads(response.read().decode("utf-8"))
         if isinstance(payload, dict) and payload.get("backend") == "csi":
-            return {
+            result = {
                 "latest_captured_fps": payload.get("captured_fps_average"),
-                "configured_fps": config.get("FPS"),
-                "frames_received": payload.get("frames_received"),
-                "last_frame_age_seconds": payload.get("last_frame_age_seconds"),
-                "capture_process_running": payload.get("capture_process_running"),
-                "capture_error": payload.get("error"),
                 "active_resolution": config.get("RESOLUTION"),
                 "active_capture_format": "MJPEG",
             }
+            if config.get("FPS") is not None:
+                result["configured_fps"] = config["FPS"]
+            for key in ("frames_received", "last_frame_age_seconds", "capture_process_running"):
+                if key in payload:
+                    result[key] = payload[key]
+            if payload.get("error"):
+                result["capture_error"] = payload["error"]
+            return result
     except (OSError, urllib.error.URLError, subprocess.TimeoutExpired, ValueError, TypeError):
         pass
     return {}
