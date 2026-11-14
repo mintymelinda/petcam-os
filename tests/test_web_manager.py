@@ -374,6 +374,11 @@ class WebManagerTests(unittest.TestCase):
 
     def test_system_tab_displays_the_installed_application_version(self):
         self.assertIn('id="installed-version"', MODULE.PAGE)
+        self.assertIn('id="frame-statistics"', MODULE.PAGE)
+        self.assertIn('id="viewer-statistics"', MODULE.PAGE)
+        self.assertIn('id="network-statistics"', MODULE.PAGE)
+        self.assertIn("refreshStatistics", MODULE.PAGE)
+        self.assertIn("/api/live-status", MODULE.PAGE)
         self.assertIn("/api/system", MODULE.PAGE)
         with tempfile.TemporaryDirectory() as directory:
             version_file = Path(directory) / "VERSION"
@@ -396,6 +401,9 @@ class WebManagerTests(unittest.TestCase):
             snapshot = MODULE.stream_metrics_snapshot()
             self.assertEqual(snapshot["active_clients"], 1)
             self.assertEqual(snapshot["clients"][0]["frames"], 2)
+            self.assertIn("window_fps", snapshot["clients"][0])
+            self.assertIn("max_frame_gap_ms", snapshot["clients"][0])
+            self.assertIn("average_frame_interval_ms", snapshot["clients"][0])
             self.assertEqual(snapshot["clients"][0]["source"], "browser_source")
             self.assertGreater(snapshot["clients"][0]["bytes"], 0)
         finally:

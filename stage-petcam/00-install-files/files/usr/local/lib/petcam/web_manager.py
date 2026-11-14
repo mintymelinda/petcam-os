@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import apply_config, ensure_config_lock, parse_config
 from camera import PIXEL_BUDGETS, USTREAMER_FORMATS, camera_identity, mode_supports_fps, model_tier, read_model
 from network_diagnostics import collect_diagnostics, create_support_bundle
+from wifi_metrics import collect_network_performance
 from timelapse import load_config as load_timelapse_config, save_config as save_timelapse_config, state_snapshot as timelapse_snapshot
 from motion_detection import load_config as load_motion_config, save_config as save_motion_config, state_snapshot as motion_snapshot, FRAMES as MOTION_FRAMES
 from light_sensor import load_config as load_light_config, save_config as save_light_config, read_status as light_sensor_status
@@ -112,6 +113,12 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 </div>
 <div id="panel-system" class="tab-panel" role="tabpanel" aria-labelledby="tab-system" tabindex="0" hidden>
 <section><h2>Installed software</h2><p id="installed-version" role="status">Checking installed PetCam version…</p><small class="muted">Version of the active PetCam application installed on this device.</small></section>
+<section><div class="row" style="justify-content:space-between;align-items:center"><h2>Performance statistics</h2><button id="refresh-statistics" type="button">Refresh</button></div>
+<p id="statistics-updated" class="muted" role="status">Collecting frame and network statistics…</p>
+<h3>Frame pipeline</h3><div id="frame-statistics" class="stats-grid"><p class="muted">Waiting for telemetry…</p></div>
+<h3>Viewer delivery</h3><div id="viewer-statistics" class="stats-grid"><p class="muted">Waiting for telemetry…</p></div>
+<h3>Network link</h3><div id="network-statistics" class="stats-grid"><p class="muted">Waiting for telemetry…</p></div>
+<p class="muted">Rates are measured over the latest polling window where available. Link speed is the negotiated Wi-Fi PHY rate, not internet throughput. Queue depth and hardware frame-drop counters are shown only when the active backend exposes them.</p></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Network and OBS diagnostics</h2><button id="refresh-diagnostics">Run checks</button></div><p id="diagnostic-summary" role="status">Diagnostics have not been run yet.</p><p id="diagnostic-details" class="muted"></p><div class="row"><button id="download-support-bundle">Download redacted support bundle</button></div></section>
 <section><div class="row" style="justify-content:space-between;align-items:center"><h2>Stream health</h2><button id="refresh-health">Refresh</button></div><p id="health-state" role="status">Checking stream health…</p><p id="health-reason" class="muted"></p><small id="health-details" class="muted"></small></section>
 <section id="updates"><div class="row" style="justify-content:space-between;align-items:center"><h2>Software updates</h2><span id="update-state" class="muted">Not checked</span></div>
@@ -171,6 +178,9 @@ function renderCaptureStatus(){const fps=Number(captureStatus.latest_captured_fp
 async function refreshLiveStatus(){try{const d=await request("/api/live-status");captureStatus=d.capture_status||{};renderCaptureStatus();const updated=new Date(d.capture_status_updated_at*1000);$("capture-status-freshness").textContent="Capture status refreshes every 5 seconds · last updated "+updated.toLocaleTimeString();const clients=d.stream_metrics?.clients||[];$("stream-delivery-metrics").textContent=clients.length?clients.map(client=>(client.source==="dashboard_preview"?"Dashboard preview":"Browser Source")+" · "+client.average_fps.toFixed(1)+" forwarded JPEG FPS · "+client.frames+" frames"+(client.last_frame_age_seconds===null?"":" · last frame "+client.last_frame_age_seconds.toFixed(1)+"s ago")).join(" | "):"No active stream clients reported."}catch(error){$("capture-status-freshness").textContent="Live status unavailable: "+error.message}}
 function refreshLivePreview(){const preview=$("live-preview");preview.src="/stream?client=dashboard-preview&refresh="+Date.now()}
 async function refreshSystemInfo(){try{const data=await request("/api/system");$("installed-version").textContent="Installed version: "+(data.installed_version||"unknown")}catch(error){$("installed-version").textContent="Installed version unavailable: "+error.message}}
+function renderStatCards(root,items){root.replaceChildren();for(const [label,value] of items){const card=document.createElement("div"),name=document.createElement("small"),reading=document.createElement("strong");card.style.cssText="background:#1a1d22;border:1px solid #383e47;border-radius:8px;padding:.7rem;min-width:0";name.className="muted";name.textContent=label;reading.style.cssText="display:block;font-size:1.05rem;overflow-wrap:anywhere;margin-top:.2rem";reading.textContent=value===null||value===undefined||value===""?"Not available":String(value);card.append(name,reading);root.append(card)}}
+async function refreshStatistics(){try{const d=await request("/api/live-status"),capture=d.capture_status||{},stream=d.stream_metrics||{},network=d.network_status||{},clients=stream.clients||[];const fps=capture.latest_captured_fps;renderStatCards($("frame-statistics"),[["Captured FPS",fps?Number(fps).toFixed(1):"Not reported"],["Configured FPS",capture.configured_fps||"Unknown"],["Capture resolution",capture.active_resolution||"Unknown"],["Capture frames",capture.frames_received??"Not exposed"],["Backend queue depth",capture.queue_depth??"Not exposed"],["Backend dropped frames",capture.dropped_frames??"Not exposed"]]);renderStatCards($("viewer-statistics"),[["Active viewers",stream.active_clients??clients.length],["Viewer FPS (latest window)",clients.length?clients.map(c=>Number(c.window_fps||0).toFixed(1)).join(" / "):"No viewers"],["Viewer throughput",clients.length?clients.map(c=>Number(c.window_mbps||0).toFixed(2)+" Mbps").join(" / "):"No viewers"],["Average frame interval",clients.length?clients.map(c=>c.average_frame_interval_ms===null?"—":c.average_frame_interval_ms+" ms").join(" / "):"—"],["Largest frame gap",clients.length?Math.max(...clients.map(c=>c.max_frame_gap_ms||0)).toFixed(0)+" ms":"—"],["Last-frame age",clients.length?Math.max(...clients.map(c=>c.last_frame_age_seconds??0)).toFixed(1)+" s":"—"]]);const wifi=network.wifi||{};renderStatCards($("network-statistics"),[["Connection",network.type==="wireless"?(wifi.connected?"Wi-Fi connected":"Wi-Fi disconnected"):(network.type||"Unknown")],["Interface",network.interface_name||"Unknown"],["Signal",wifi.signal_dbm===null||wifi.signal_dbm===undefined?"Not available":wifi.signal_dbm+" dBm"],["Wi-Fi RX / TX link",wifi.rx_bitrate_mbps===null||wifi.rx_bitrate_mbps===undefined?"—":wifi.rx_bitrate_mbps+" / "+(wifi.tx_bitrate_mbps??"—")+" Mbps"],["Actual RX / TX",network.rx_mbps===null||network.rx_mbps===undefined?"—":network.rx_mbps+" / "+(network.tx_mbps??"—")+" Mbps"],["Frequency / channel",wifi.frequency_mhz?wifi.frequency_mhz+" MHz"+(wifi.channel?" · ch "+wifi.channel:""):"Not available"],["Retries / failures",wifi.tx_retries===null||wifi.tx_retries===undefined?"Not available":wifi.tx_retries+" / "+(wifi.tx_failed??"—")],["Interface drops",network.rx_dropped===undefined?"—":network.rx_dropped+" RX / "+(network.tx_dropped??"—")+" TX"]]);$("statistics-updated").textContent="Updated "+new Date(d.capture_status_updated_at*1000).toLocaleTimeString()+" · unavailable hardware counters are not estimated."}catch(error){$("statistics-updated").textContent="Statistics unavailable: "+error.message}}
+$("refresh-statistics").onclick=refreshStatistics;
 async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;activeConfig=d.active_config;captureStatus=d.capture_status||{};$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});const activeIndex=inventory.findIndex(c=>activeCameraMatches(c,activeConfig));if(activeIndex>=0){$("camera").value=String(activeIndex);$("camera").options[activeIndex].textContent+=" · current"}if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{const selected=activeIndex>=0?activeConfig:null;const selectedCamera=activeIndex>=0?inventory[activeIndex]:null;const currentResolution=selected&&selected.RESOLUTION!=="auto"?selected.RESOLUTION:captureStatus.active_resolution;const currentFps=selected&&selected.FPS!=="auto"?Number(selected.FPS):Number(captureStatus.latest_captured_fps);let currentFormat=selected&&selected.FORMAT!=="auto"?selected.FORMAT:(captureStatus.active_capture_format||"CSI");if(currentFormat==="MJPEG"||currentFormat==="JPEG")currentFormat="MJPG";if(selectedCamera?.kind==="csi")currentFormat="CSI";const preferred=currentResolution&&currentResolution!=="auto"&&Number.isFinite(currentFps)&&currentFps>0?{width:Number(currentResolution.split("x")[0]),height:Number(currentResolution.split("x")[1]),fps:currentFps,format:currentFormat}:null;$("message").textContent=inventory.length+" camera(s) found. Current saved camera settings are selected.";fillModes(preferred)}renderCaptureStatus();await refreshCameraControls()}catch(e){$("message").textContent=e.message}}
 
 function cameraControlLabel(name){const labels={auto_exposure:"Auto exposure",exposure_time_absolute:"Exposure time",exposure_dynamic_framerate:"Dynamic framerate",white_balance_automatic:"Automatic white balance",white_balance_temperature:"White balance temperature",power_line_frequency:"Power-line frequency",backlight_compensation:"Backlight compensation",focus_automatic_continuous:"Continuous autofocus",focus_absolute:"Focus"};return labels[name]||name.replaceAll("_"," ").replace(/\b\w/g,letter=>letter.toUpperCase())}
@@ -255,7 +265,7 @@ refreshLightSensor();setInterval(refreshLightSensor,10000);
 
 async function refreshDiagnostics(){try{const d=await request("/api/diagnostics");const layers=d.layers||{};const failed=Object.entries(layers).filter(([k,v])=>v&&(v.healthy===false||v.reachable===false||v.resolved===false||v.available===false));$("diagnostic-summary").textContent=failed.length?failed.map(([k])=>k.replaceAll("_"," ")+": attention needed").join(" · "):"Local camera, listener, and network checks look healthy.";const urls=(d.obs_browser_source_urls||[]).join("\n");$("diagnostic-details").textContent="OBS URL(s): "+urls+"\n"+(d.problems||[]).join("\n")+"\n"+d.remote_client_note}catch(e){$("diagnostic-summary").textContent="Diagnostics unavailable: "+e.message}}$("refresh-diagnostics").onclick=refreshDiagnostics;refreshDiagnostics();
 $("download-support-bundle").onclick=async()=>{const b=$("download-support-bundle");b.disabled=true;try{let r=await fetch("/api/support-bundle");if(r.status===401){await login();r=await fetch("/api/support-bundle")}if(!r.ok)throw Error("Support bundle request failed ("+r.status+")");const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="petcam-support.tar.gz";document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url)}catch(e){$("diagnostic-summary").textContent="Support bundle failed: "+e.message}finally{b.disabled=false}};
-async function refreshHealth(){try{const h=await request("/api/health");$("health-state").textContent="Status: "+h.state.replaceAll("_"," ");$("health-reason").textContent=h.reason||"No active issue reported."; $("health-details").textContent="Recoveries: "+(h.recovery_count||0)+" · Last checked: "+(h.last_checked_at||"not yet")+(h.last_recovery_at?" · Last recovery: "+h.last_recovery_at:"")}catch(e){$("health-state").textContent="Health status unavailable";$("health-reason").textContent=e.message}}$("refresh-health").onclick=refreshHealth;refresh();refreshLiveStatus();setInterval(refreshLiveStatus,5000);refreshSystemInfo();refreshHealth();setInterval(refreshHealth,30000);
+async function refreshHealth(){try{const h=await request("/api/health");$("health-state").textContent="Status: "+h.state.replaceAll("_"," ");$("health-reason").textContent=h.reason||"No active issue reported."; $("health-details").textContent="Recoveries: "+(h.recovery_count||0)+" · Last checked: "+(h.last_checked_at||"not yet")+(h.last_recovery_at?" · Last recovery: "+h.last_recovery_at:"")}catch(e){$("health-state").textContent="Health status unavailable";$("health-reason").textContent=e.message}}$("refresh-health").onclick=refreshHealth;refresh();refreshLiveStatus();setInterval(refreshLiveStatus,5000);refreshStatistics();setInterval(refreshStatistics,5000);refreshSystemInfo();refreshHealth();setInterval(refreshHealth,30000);
 const autoCheck=$("auto-check");autoCheck.checked=localStorage.getItem("petcam-auto-update-check")==="true";
 autoCheck.onchange=()=>localStorage.setItem("petcam-auto-update-check",String(autoCheck.checked));
 let updateAvailable=false,updateBusy=false;
@@ -634,11 +644,18 @@ def register_stream_client(source):
     with _STREAM_METRICS_LOCK:
         _STREAM_CLIENT_SEQUENCE += 1
         client_id = str(_STREAM_CLIENT_SEQUENCE)
+        now = time.monotonic()
         _STREAM_METRICS[client_id] = {
             "source": source,
-            "started_monotonic": time.monotonic(),
+            "started_monotonic": now,
+            "window_started_monotonic": now,
+            "window_frames": 0,
+            "window_bytes": 0,
             "frames": 0,
             "bytes": 0,
+            "inter_frame_count": 0,
+            "inter_frame_total_seconds": 0.0,
+            "max_frame_gap_seconds": 0.0,
             "last_frame_at": None,
             "last_frame_monotonic": None,
         }
@@ -677,19 +694,29 @@ def record_stream_chunk(client_id, chunk, parser_state):
         metrics = _STREAM_METRICS.get(client_id)
         if metrics is not None:
             metrics["bytes"] += len(chunk)
+            metrics["window_bytes"] += len(chunk)
             metrics["frames"] += frames
+            metrics["window_frames"] += frames
             if last_frame_at is not None:
+                previous = metrics["last_frame_monotonic"]
+                current = parser_state["last_frame_monotonic"]
+                if previous is not None:
+                    gap = max(0.0, current - previous)
+                    metrics["inter_frame_count"] += 1
+                    metrics["inter_frame_total_seconds"] += gap
+                    metrics["max_frame_gap_seconds"] = max(metrics["max_frame_gap_seconds"], gap)
                 metrics["last_frame_at"] = last_frame_at
-                metrics["last_frame_monotonic"] = parser_state["last_frame_monotonic"]
+                metrics["last_frame_monotonic"] = current
 
 
 def stream_metrics_snapshot():
-    """Return live per-client delivery rates without exposing client addresses."""
+    """Return bounded per-client throughput and frame-timing telemetry."""
     now = time.monotonic()
     with _STREAM_METRICS_LOCK:
         clients = []
         for client_id, metrics in _STREAM_METRICS.items():
             elapsed = max(0.001, now - metrics["started_monotonic"])
+            window_elapsed = max(0.001, now - metrics["window_started_monotonic"])
             last_frame = metrics["last_frame_monotonic"]
             clients.append({
                 "client_id": client_id,
@@ -697,10 +724,20 @@ def stream_metrics_snapshot():
                 "frames": metrics["frames"],
                 "bytes": metrics["bytes"],
                 "average_fps": round(metrics["frames"] / elapsed, 2),
+                "window_fps": round(metrics["window_frames"] / window_elapsed, 2),
+                "window_mbps": round(metrics["window_bytes"] * 8 / window_elapsed / 1_000_000, 3),
+                "average_frame_interval_ms": (
+                    round(metrics["inter_frame_total_seconds"] * 1000 / metrics["inter_frame_count"], 2)
+                    if metrics["inter_frame_count"] else None
+                ),
+                "max_frame_gap_ms": round(metrics["max_frame_gap_seconds"] * 1000, 2),
                 "last_frame_age_seconds": (
                     round(max(0.0, now - last_frame), 2) if last_frame is not None else None
                 ),
             })
+            metrics["window_started_monotonic"] = now
+            metrics["window_frames"] = 0
+            metrics["window_bytes"] = 0
     return {"active_clients": len(clients), "clients": clients}
 
 
@@ -913,7 +950,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/support-bundle":
             try:
-                body = create_support_bundle()
+                body = create_support_bundle(performance={
+                    "capture_status": live_capture_status(),
+                    "stream_metrics": stream_metrics_snapshot(),
+                    "network_status": collect_network_performance(),
+                    "captured_at": time.time(),
+                })
                 self.send_response(200)
                 self.send_header("Content-Type", "application/gzip")
                 self.send_header("Content-Disposition", "attachment; filename=\"petcam-support.tar.gz\"")
@@ -929,6 +971,7 @@ class Handler(BaseHTTPRequestHandler):
                 "capture_status": live_capture_status(),
                 "capture_status_updated_at": time.time(),
                 "stream_metrics": stream_metrics_snapshot(),
+                "network_status": collect_network_performance(),
             })
             return
         if path == "/api/system":
