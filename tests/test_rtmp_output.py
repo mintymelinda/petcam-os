@@ -52,11 +52,12 @@ class OBSOutputTests(unittest.TestCase):
                 "stream_key": "old-private-key",
             }), encoding="utf-8")
             loaded = MODULE.load_config(path)
-            persisted = json.loads(path.read_text(encoding="utf-8"))
+            persisted_text = path.read_text(encoding="utf-8")
+            persisted = json.loads(persisted_text)
         self.assertEqual(loaded["width"], 1280)
         self.assertNotIn("server_url", persisted)
         self.assertNotIn("stream_key", persisted)
-        self.assertNotIn("old-private-key", path.read_text(encoding="utf-8"))
+        self.assertNotIn("old-private-key", persisted_text)
 
     def test_native_h264_path_uses_mpegts_and_stream_copy_to_local_rtsp(self):
         config = MODULE.validate_config(self.valid_config())
