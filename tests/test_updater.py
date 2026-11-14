@@ -232,6 +232,7 @@ class UpdateArchiveTests(unittest.TestCase):
             "lib/health_monitor.py": b"# health monitor",
             "lib/config.py": b"# config",
             "lib/network_diagnostics.py": b"# network diagnostics",
+            "lib/wifi_metrics.py": b"# Wi-Fi metrics",
             "lib/factory_reset.py": b"# Factory reset",
             "lib/home_assistant.py": b"# Home Assistant MQTT",
             "lib/timelapse.py": b"# Timelapse",
