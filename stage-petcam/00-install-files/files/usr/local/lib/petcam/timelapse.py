@@ -69,6 +69,8 @@ def validate_config(values):
     resolved_path = storage_path.resolve()
     if not any(resolved_path.is_relative_to(root) for root in allowed_roots):
         raise ValueError("storage_path must remain inside /var/lib/petcam or /mnt/petcam-network.")
+    if resolved_path == NETWORK_ROOT.resolve():
+        raise ValueError("storage_path must be a folder beneath /mnt/petcam-network, not the mount root.")
     for key, low, high in (("max_width", 0, 4096), ("jpeg_quality", 0, 95)):
         value = result[key]
         if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
@@ -147,7 +149,7 @@ def network_storage_ready(mounts_path="/proc/mounts"):
         for line in Path(mounts_path).read_text(encoding="utf-8").splitlines():
             fields = line.split()
             if len(fields) >= 3:
-                mountpoint = fields[1].replace("\\040", " ").replace("\\011", "\\t")
+                mountpoint = fields[1]
                 if mountpoint == str(NETWORK_ROOT) and fields[2] in NETWORK_FILESYSTEMS:
                     return True
     except OSError:
