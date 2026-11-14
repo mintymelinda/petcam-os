@@ -1166,6 +1166,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"ok": True, "config": updated})
                 return
             if path == "/api/rtmp":
+                if data.get("enabled") and not Path("/usr/bin/ffmpeg").is_file():
+                    raise RuntimeError("FFmpeg is not installed. Run sudo apt-get update && sudo apt-get install ffmpeg, then save these settings again.")
                 current = load_rtmp_config()
                 if not data.get("stream_key"):
                     data["stream_key"] = current["stream_key"]
