@@ -22,7 +22,8 @@ class WifiMetricsTests(unittest.TestCase):
             "Station aa:bb:cc:dd:ee:ff (on wlan0)\n\tsignal avg: -59 dBm\n\ttx retries: 12\n\ttx failed: 2\n",
             "Interface wlan0\n\ttype managed\n\tchannel 36 (5180 MHz)\n",
         ]
-        with mock.patch.object(MODULE, "_command", side_effect=outputs), \
+        with mock.patch.object(MODULE, "_default_interface", return_value="wlan0"), \
+                mock.patch.object(MODULE, "_command", side_effect=outputs), \
                 mock.patch.object(MODULE.Path, "exists", return_value=True), \
                 mock.patch.object(MODULE, "_read_counter", side_effect=[1000, 2000, 1, 2, 0, 0]):
             result = MODULE.collect_network_performance()
