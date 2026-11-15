@@ -52,7 +52,7 @@ class UpdateProgressTests(unittest.TestCase):
         ])
 
     def test_start_update_does_not_queue_a_second_active_install(self):
-        with mock.patch.object(UPDATER, "subprocess") as subprocess_mock:
+        with mock.patch.object(MANAGER, "subprocess") as subprocess_mock:
             subprocess_mock.run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
             with self.assertRaisesRegex(RuntimeError, "already running"):
                 MANAGER.start_update()
