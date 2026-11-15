@@ -3,85 +3,85 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PI_GEN_COMMIT = "6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78"
 
 
-class BuildCacheContractTests(unittest.TestCase):
-    def test_release_workflow_does_not_run_pishrink_or_recompress_the_image(self):
+class BuildPipelineContractTests(unittest.TestCase):
+    def test_image_jobs_use_native_arm64_runners(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
-        self.assertNotIn("Shrink and recompress", workflow)
-        self.assertNotIn("tools/shrink_image.sh", workflow)
-        self.assertFalse((ROOT / "tools/shrink_image.sh").exists())
+        self.assertEqual(workflow.count("runs-on: ubuntu-24.04-arm"), 2)
 
-    def test_prepared_package_rootfs_is_cached_with_a_stable_explicit_epoch(self):
+    def test_pi_gen_action_is_pinned_and_keeps_the_armhf_target(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
-        self.assertEqual(workflow.count("id: base-rootfs-cache-key"), 2)
-        self.assertEqual(workflow.count("key: ${{ steps.base-rootfs-cache-key.outputs.key }}"), 3)
-        self.assertNotIn("needs: [validate, warm-base-cache]", workflow)
-        self.assertEqual(workflow.count("pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-"), 2)
-        self.assertEqual(workflow.count("restore-keys: |"), 4)
-        self.assertIn("github.ref_type == 'tag'", workflow)
-        self.assertIn("id: base-rootfs-cache", workflow)
-        self.assertIn("pigen-base-rootfs-v2-", workflow)
-        self.assertIn("hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile', 'tools/prepare_pigen_build.py')", workflow)
-        self.assertIn("pigen-base-rootfs.tar", workflow)
-        self.assertIn("stage-petcam-base/**", workflow)
-        self.assertIn("sudo tar --numeric-owner --xattrs --acls -xpf", workflow)
-        self.assertIn("sudo tar --numeric-owner --xattrs --acls -cpf", workflow)
-        self.assertIn("touch pi-gen/stage0/SKIP pi-gen/stage1/SKIP pi-gen/stage2/SKIP pi-gen/stage-petcam-base/SKIP", workflow)
-        self.assertLess(workflow.index("cp -a stage-petcam-base"), workflow.index("touch pi-gen/stage0/SKIP"))
+        self.assertIn("uses: usimd/pi-gen-action@v1.11.0", workflow)
+        self.assertIn(f"pi-gen-version: {PI_GEN_COMMIT}", workflow)
+        self.assertIn("compression: xz", workflow)
+        self.assertIn("enable-cloud-init: 1", workflow)
+        self.assertIn("enable-pigen-cache: false", workflow)
+        self.assertIn('"architecture": "armhf"', (ROOT / "tools/create_update_release.py").read_text(encoding="utf-8"))
+        self.assertIn('if manifest["architecture"] != "armhf"', (
+            ROOT / "stage-petcam/00-install-files/files/usr/local/lib/petcam/updater.py"
+        ).read_text(encoding="utf-8"))
 
-    def test_cached_rootfs_is_mounted_as_pi_gen_work_dir(self):
+    def test_old_pi_gen_cache_patcher_and_cache_jobs_are_removed(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
-        self.assertIn("src=${RUNNER_TEMP}/pigen-work,dst=/pi-gen/work", workflow)
-        self.assertIn("PetCamOS/stage-petcam-base/rootfs", workflow)
-        self.assertIn("Base rootfs cache hit:", workflow)
-        self.assertIn("Base rootfs cache archive bytes:", workflow)
-        self.assertIn("bash -n stage-petcam-base/prerun.sh", workflow)
+        self.assertFalse((ROOT / "tools/prepare_pigen_build.py").exists())
+        self.assertFalse((ROOT / "tests/test_prepare_pigen_build.py").exists())
+        self.assertNotIn("warm-base-cache", workflow)
+        self.assertNotIn("actions/cache@", workflow)
+        self.assertNotIn("APT_ARCHIVE_CACHE", workflow)
+        self.assertNotIn("pigen-base-rootfs", workflow)
+        self.assertNotIn("pigen-apt-", workflow)
 
-    def test_stable_packages_live_in_the_cached_stage_before_application_changes(self):
-        config = (ROOT / "config").read_text(encoding="utf-8")
-        self.assertIn('STAGE_LIST="stage0 stage1 stage2 stage-petcam-base stage-petcam"', config)
-        self.assertTrue((ROOT / "stage-petcam-base/01-install-packages/00-packages").is_file())
-        self.assertTrue((ROOT / "stage-petcam-base/prerun.sh").is_file())
-        self.assertFalse((ROOT / "stage-petcam/01-install-packages/00-packages").exists())
-
-    def test_debian_archives_and_docker_layers_remain_cached(self):
+    def test_buildkit_caches_only_the_product_tooling_container(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
+        compose = (ROOT / "build/compose.yaml").read_text(encoding="utf-8")
+        dockerfile = (ROOT / "build/Dockerfile").read_text(encoding="utf-8")
         self.assertIn("docker/setup-buildx-action@v3", workflow)
-        build_helper = (ROOT / "tools/prepare_pigen_build.py").read_text(encoding="utf-8")
-        self.assertIn("--cache-from type=gha,scope=pigen-builder", build_helper)
-        self.assertIn("--cache-to type=gha,scope=pigen-builder,mode=max", build_helper)
-        self.assertIn("uses: actions/cache@v4", workflow)
-        self.assertIn("APT_ARCHIVE_CACHE=/apt-cache", workflow)
-        self.assertIn("hashFiles('config', 'stage-petcam-base/**', 'tools/prepare_pigen_build.py')", workflow)
-        self.assertIn("--mount type=bind", workflow)
+        self.assertIn("docker/build-push-action@v6", workflow)
+        self.assertIn("cache-from: type=gha,scope=petcam-image-validation", workflow)
+        self.assertIn("cache-to: type=gha,scope=petcam-image-validation,mode=max", workflow)
+        self.assertIn("docker compose --file build/compose.yaml run --rm --no-build image-validation", workflow)
+        self.assertIn("image-validation:", compose)
+        self.assertIn("build/requirements.txt", dockerfile)
+        self.assertIn("tools/validate_image_build.py", dockerfile)
 
-    def test_manual_image_build_remains_non_publishing_and_emits_timing_metrics(self):
+    def test_explicit_package_and_python_manifests_are_enforced(self):
+        packages = (ROOT / "build/apt-packages.txt").read_text(encoding="utf-8").splitlines()
+        stage_packages = (
+            ROOT / "stage-petcam-base/01-install-packages/00-packages"
+        ).read_text(encoding="utf-8").splitlines()
+        self.assertEqual(packages, stage_packages)
+        requirements = (ROOT / "build/requirements.txt").read_text(encoding="utf-8")
+        self.assertIn("jsonschema", requirements)
+        validator = (ROOT / "tools/validate_image_build.py").read_text(encoding="utf-8")
+        self.assertIn("validate_package_manifest()", validator)
+        self.assertIn('entry.get("architecture") != "armhf"', validator)
+
+    def test_containerized_post_build_validates_image_and_raspberry_pi_schema(self):
+        validator = (ROOT / "tools/validate_image_build.py").read_text(encoding="utf-8")
+        self.assertIn("create_imager_os_list.py", validator)
+        self.assertIn("validate(instance=catalogue, schema=schema)", validator)
+        self.assertIn("IMAGE_SCHEMA_PATH", validator)
+        self.assertIn("IMAGE_PATH", validator)
+
+    def test_release_signing_and_publish_gates_are_preserved(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
-        self.assertNotIn("build_image:", workflow)
-        self.assertIn("if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'", workflow)
-        for step in (
-            "name: Prepare release",
-            "name: Prepare and publish signed application update",
-        ):
-            start = workflow.index(step)
-            following = workflow.find("\n      - name:", start + len(step))
-            block = workflow[start:] if following < 0 else workflow[start:following]
-            self.assertIn("if: github.ref_type == 'tag'", block)
-        self.assertIn("pi-gen build duration seconds:", workflow)
+        self.assertIn("PETCAM_UPDATE_SIGNING_PRIVATE_KEY", workflow)
+        self.assertIn("refusing to publish an unsigned update", workflow)
+        self.assertIn("cmp -s", workflow)
+        self.assertIn("petcam-update-manifest.json.sig", workflow)
+        self.assertIn("gh release edit", workflow)
+        self.assertIn("draft=false", workflow)
+        self.assertIn("petcam-${VERSION}-armhf.tar.gz", workflow)
+        self.assertIn("gh release upload", workflow)
+
+    def test_manual_build_does_not_publish_and_uploads_a_build_artifact(self):
+        workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
+        self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
+        self.assertIn("if: github.event_name == 'workflow_dispatch'", workflow)
         self.assertIn("actions/upload-artifact@v4", workflow)
-        self.assertIn("pigen-build-diagnostics-", workflow)
-
-    def test_shared_apt_archive_cache_is_detached_before_target_cleanup(self):
-        cleanup = (ROOT / "stage-petcam-base/02-build-ustreamer/00-run-chroot.sh").read_text(encoding="utf-8")
-        self.assertIn("umount /var/cache/apt/archives", cleanup)
-        self.assertLess(cleanup.index("umount /var/cache/apt/archives"), cleanup.index("apt-get clean"))
-
-    def test_runtime_library_cleanup_resolves_symlinks_and_fails_closed(self):
-        cleanup = (ROOT / "stage-petcam-base/02-build-ustreamer/00-run-chroot.sh").read_text(encoding="utf-8")
-        self.assertIn('readlink -f "$library"', cleanup)
-        self.assertIn("Unable to identify the Debian package owning runtime library", cleanup)
-        self.assertIn('apt-mark manual "$package"', cleanup)
+        self.assertNotIn("warm-base-cache", workflow)
 
 
 if __name__ == "__main__":
