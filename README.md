@@ -97,7 +97,7 @@ Motion detection is disabled by default. Its worker samples the existing stream,
 
 An optional MQTT 3.1.1 publisher exposes health and stream-status entities through Home Assistant MQTT discovery. It is disabled by default, runs as a separate service, and does not expose camera controls. See [docs/home-assistant.md](docs/home-assistant.md).
 
-### RTMP output
+### OBS RTSP output
 
 An optional GStreamer RTSP server exposes the camera feed to OBS. USB cameras with native H.264 support are served directly from V4L2 as RTP without decoding or re-encoding; MJPEG cameras retain the existing browser feed and can be packetized for RTSP. See [docs/rtmp-output.md](docs/rtmp-output.md).
 
