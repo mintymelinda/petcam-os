@@ -6,6 +6,7 @@ import json
 import os
 import re
 import ssl
+import socket
 import subprocess
 import threading
 import time
@@ -39,6 +40,14 @@ _STREAM_METRICS = {}
 _STREAM_CLIENT_SEQUENCE = 0
 _SYSTEM_METRICS_LOCK = threading.Lock()
 _SYSTEM_CPU_SAMPLE = None
+def device_mdns_hostname():
+    """Return the configured device hostname as an mDNS name for UI links."""
+    hostname = socket.gethostname().strip().rstrip(".")
+    if not hostname:
+        raise RuntimeError("Unable to determine the configured device hostname")
+    return hostname if "." in hostname else f"{hostname}.local"
+
+
 PAGE = r"""<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PetCam</title>
@@ -71,7 +80,7 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <main id="tab-panels">
 <div id="panel-camera" class="tab-panel active" role="tabpanel" aria-labelledby="tab-camera" tabindex="0">
 <section><div class="camera-select-grid"><div><label for="camera">Camera</label><select id="camera"></select></div><div><label for="mode">Capture mode</label><select id="mode"></select></div></div><p id="message" role="status" class="muted">Discovering cameras…</p><p class="muted">Only advertised camera modes are offered.</p></section>
-<section><h2>Capture status</h2><p id="capture-rate" class="muted">Checking actual capture rate…</p><p id="capture-status-freshness" class="muted">Capture status refreshes every 5 seconds.</p><p class="muted">Browser Source: <a href="http://petcam.local:8080/" target="_blank" rel="noopener">http://petcam.local:8080/</a></p></section>
+<section><h2>Capture status</h2><p id="capture-rate" class="muted">Checking actual capture rate…</p><p id="capture-status-freshness" class="muted">Capture status refreshes every 5 seconds.</p><p class="muted">Browser Source: <a href="http://__PETCAM_HOST__:8080/" target="_blank" rel="noopener">http://__PETCAM_HOST__:8080/</a></p></section>
 <div class="camera-actions"><button id="advanced-camera-open" type="button">Advanced</button><div class="camera-actions-right"><button id="apply">Apply</button><button id="refresh" type="button" title="Refresh cameras">Refresh</button></div></div>
 <dialog id="advanced-camera-dialog" class="advanced-dialog"><div class="dialog-heading"><h2>Advanced camera controls</h2><button id="advanced-camera-close" type="button">Close</button></div><p class="muted">Edits apply automatically. Controls are refreshed every 60 seconds while this dialog is open.</p><section><div class="row" style="justify-content:space-between;align-items:center"><h2>Available controls</h2><div class="row" style="gap:.5rem"><button id="refresh-camera-controls" type="button">Refresh</button></div></div>
 <p id="camera-controls-status" class="muted" role="status">Controls for the active camera will appear here.</p>
@@ -118,8 +127,8 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <section id="rtmp-output"><h2>OBS Output</h2>
 <p class="muted">This exposes the camera to OBS without transcoding. PetCam does not publish to Twitch or YouTube. Add the RTSP address as an OBS Media Source. The HTTP Browser Source is available while capture is in MJPEG mode; native H.264 capture is selected for RTSP only when timelapse and motion detection are disabled.</p>
 <label style="display:flex;gap:.5rem;align-items:center"><input id="rtmp-enabled" type="checkbox"> Enable OBS RTSP feed</label>
-<label for="obs-rtsp-url">OBS Media Source URL</label><input id="obs-rtsp-url" type="text" value="rtsp://petcam.local:8554/petcam">
-<p class="muted">HTTP Browser Source: <a href="http://petcam.local:8080/" target="_blank" rel="noopener">http://petcam.local:8080/</a></p>
+<label for="obs-rtsp-url">OBS Media Source URL</label><input id="obs-rtsp-url" type="text" value="rtsp://__PETCAM_HOST__:8554/petcam">
+<p class="muted">HTTP Browser Source: <a href="http://__PETCAM_HOST__:8080/" target="_blank" rel="noopener">http://__PETCAM_HOST__:8080/</a></p>
 <p id="rtmp-status" class="muted" role="status">Checking OBS feed…</p>
 <div class="row"><button id="save-rtmp" type="button">Save OBS output settings</button><button id="refresh-rtmp" type="button">Refresh status</button></div>
 </section>
@@ -178,7 +187,7 @@ async function refreshLiveStatus(){try{const d=await request("/api/live-status")
 
 async function refreshSystemInfo(){try{const data=await request("/api/system");$("installed-version").textContent="Installed version: "+(data.installed_version||"unknown")}catch(error){$("installed-version").textContent="Installed version unavailable: "+error.message}}
 
-async function refreshRTMP(){try{const data=await request("/api/rtmp");$("rtmp-enabled").checked=!!data.config?.enabled;$("obs-rtsp-url").value="rtsp://"+location.hostname+":8554/petcam";const sourceLabel=data.status?.source==="native_h264"?"native H.264 stream copy":data.status?.source==="mjpeg_copy"?"MJPEG packet copy":"";$("rtmp-status").textContent=!data.status?.ffmpeg_available?"FFmpeg is missing. Install it with sudo apt-get install ffmpeg.":data.status?.active?("OBS RTSP feed is running"+(sourceLabel?" ("+sourceLabel+")":"")+"."):("OBS RTSP feed: "+(data.status?.state||"stopped")+".")}catch(error){$("rtmp-status").textContent="OBS feed status unavailable: "+error.message}}
+async function refreshRTMP(){try{const data=await request("/api/rtmp");$("rtmp-enabled").checked=!!data.config?.enabled;const sourceLabel=data.status?.source==="native_h264"?"native H.264 stream copy":data.status?.source==="mjpeg_copy"?"MJPEG packet copy":"";$("rtmp-status").textContent=!data.status?.ffmpeg_available?"FFmpeg is missing. Install it with sudo apt-get install ffmpeg.":data.status?.active?("OBS RTSP feed is running"+(sourceLabel?" ("+sourceLabel+")":"")+"."):("OBS RTSP feed: "+(data.status?.state||"stopped")+".")}catch(error){$("rtmp-status").textContent="OBS feed status unavailable: "+error.message}}
 async function saveRTMP(){const data={enabled:$("rtmp-enabled").checked};$("save-rtmp").disabled=true;$("rtmp-status").textContent="Saving OBS output settings…";try{const result=await request("/api/rtmp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});const sourceLabel=result.status?.source==="native_h264"?"native H.264 stream copy":result.status?.source==="mjpeg_copy"?"MJPEG packet copy":"";$("rtmp-status").textContent=result.status?.active?("OBS feed started"+(sourceLabel?" ("+sourceLabel+")":"")+"."):("Settings saved; OBS feed: "+(result.status?.state||"stopped")+".")}catch(error){$("rtmp-status").textContent="Unable to save OBS output settings: "+error.message}finally{$("save-rtmp").disabled=false}}$("save-rtmp").onclick=saveRTMP;$("refresh-rtmp").onclick=refreshRTMP;
 function renderStatCards(root,items){root.replaceChildren();for(const [label,value] of items){const card=document.createElement("div"),name=document.createElement("small"),reading=document.createElement("strong");card.style.cssText="background:#1a1d22;border:1px solid #383e47;border-radius:8px;padding:.7rem;min-width:0";name.className="muted";name.textContent=label;reading.style.cssText="display:block;font-size:1.05rem;overflow-wrap:anywhere;margin-top:.2rem";reading.textContent=value===null||value===undefined||value===""?"Not available":String(value);card.append(name,reading);root.append(card)}}
 async function refreshStatistics(data=null){try{const d=data||await request("/api/live-status"),capture=d.capture_status||{},stream=d.stream_metrics||{},network=d.network_status||{},clients=stream.clients||[],system=d.system_metrics||{},wifi=network.wifi||{};const fps=capture.latest_captured_fps,delivered=clients.length?Math.max(...clients.map(client=>Number(client.average_fps||client.window_fps||0))):null,signal=wifi.signal_dbm,rtmp=d.rtmp_output_status||{};const bars=!wifi.connected?0:signal===null||signal===undefined?null:signal>=-50?5:signal>=-60?4:signal>=-67?3:signal>=-75?2:1;const labels=["none","weak","poor","good","excellent"];const reception=bars===null?"unknown":labels[bars];const metrics=[["Camera FPS",fps?Number(fps).toFixed(1):"Not reported"],["OBS Feed FPS (RTSP)",rtmp.active&&rtmp.fps!==null&&rtmp.fps!==undefined&&Number.isFinite(Number(rtmp.fps))?Number(rtmp.fps).toFixed(1):rtmp.enabled?(rtmp.state==="stalled"?"No recent output telemetry":rtmp.state):"Disabled"],["MJPEG delivered FPS (forwarded JPEG FPS)",delivered===null?"No active viewers":delivered.toFixed(1)],["Wi-Fi signal",reception+(signal===null||signal===undefined?"":" · "+signal+" dBm")+" · "+(bars===null?"—":"▮".repeat(bars)+"▯".repeat(5-bars))],["CPU",system.cpu_percent===null||system.cpu_percent===undefined?"Not available":Number(system.cpu_percent).toFixed(1)+"%"],["Memory",system.memory_used_mb===undefined?"Not available":system.memory_used_mb+" / "+system.memory_total_mb+" MiB"],["Network Up / Down",network.tx_mbps===undefined?"Not available":Number(network.tx_mbps).toFixed(2)+" / "+Number(network.rx_mbps||0).toFixed(2)+" Mbps"]];renderStatCards($("system-health-grid"),metrics);$("statistics-updated").textContent="Updated "+new Date(d.capture_status_updated_at*1000).toLocaleTimeString()+" · OBS feed: "+(rtmp.enabled?(rtmp.state||"starting"):"disabled")+"; MJPEG delivery is measured separately."}catch(error){$("statistics-updated").textContent="Statistics unavailable: "+error.message}}
@@ -952,7 +961,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, {"configured": is_configured()})
             return
         if path == "/":
-            body = PAGE.encode()
+            body = PAGE.replace("__PETCAM_HOST__", device_mdns_hostname()).encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
