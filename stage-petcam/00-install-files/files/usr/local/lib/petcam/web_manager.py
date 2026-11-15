@@ -304,7 +304,7 @@ async function updateStatus(){
   else{
    $("check-updates").disabled=false;
    $("install-update").hidden=!updateAvailable;
-   $("install-update").disabled=!updateAvailable||s.stage==="failed";
+   $("install-update").disabled=!updateAvailable;
    if(wasBusy){updateBusy=false;await refreshSystemInfo();if(s.stage==="complete")await checkUpdates()}
   }
  }catch(e){
@@ -315,7 +315,7 @@ async function updateStatus(){
 }
 async function checkUpdates(){const b=$("check-updates");updateAvailable=false;$("install-update").hidden=true;b.disabled=true;$("update-message").textContent="Checking signed release metadata…";try{const d=await request("/api/update/check");updateAvailable=d.update_available;$("install-update").hidden=!updateAvailable;if(d.status==="no-complete-release"){$("update-state").textContent="No complete release";$("update-message").textContent="No complete signed PetCam release is currently available. Incomplete releases are skipped automatically; try again later."}else{$("update-state").textContent=updateAvailable?"Update available":"Up to date";$("update-message").textContent=updateAvailable?"A verified application release is available. Review the notes before installing.":"This device is running the latest published PetCam application."}$("release-notes").textContent=(d.releases||[]).find(r=>r.update_available)?.release_notes||((d.releases||[])[0]?.release_notes)||"No release notes provided by the latest verified release.";const releaseList=(d.releases||[]).map(r=>r.version+" · "+Math.ceil(r.archive_size/1048576)+" MiB"+(r.update_available?" · update":" · installed/current")+(r.release_notes?"\n"+r.release_notes:"")).join("\n\n");$("update-details").textContent="Installed: "+(d.installed_version||"unknown")+" · Newest valid: "+(d.available_version||"none")+"\n\nRecent verified releases\n"+(releaseList||"No complete signed releases found.");$("install-update").disabled=!updateAvailable||updateBusy}catch(e){$("update-state").textContent="Check failed";$("update-message").textContent=e.message}finally{b.disabled=false}}
 $("check-updates").onclick=checkUpdates;
-async function installUpdate(){if(!updateAvailable||updateBusy)return;$("update-confirmation").hidden=true;$("install-update").disabled=true;$("check-updates").disabled=true;$("update-message").textContent="Starting verified update…";try{await request("/api/update/install",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});updateBusy=true;$("update-state").textContent="Starting…";$("update-message").textContent="The update has been accepted. Progress is saved on the device; this page will reconnect automatically if the manager restarts.";scheduleUpdatePoll(500)}catch(e){$("update-message").textContent=e.message;$("install-update").disabled=false;$("check-updates").disabled=false;await updateStatus()}}
+async function installUpdate(){if(!updateAvailable||updateBusy)return;$("update-confirmation").hidden=true;$("install-update").disabled=true;$("check-updates").disabled=true;updateBusy=true;$("update-message").textContent="Starting verified update…";try{await request("/api/update/install",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});$("update-state").textContent="Starting…";$("update-message").textContent="The update has been accepted. Progress is saved on the device; this page will reconnect automatically if the manager restarts.";scheduleUpdatePoll(500)}catch(e){$("update-message").textContent="The start request did not complete: "+e.message+" Checking whether the updater started…";scheduleUpdatePoll(500)}}
 $("install-update").onclick=()=>{if(!updateAvailable||updateBusy)return;$("update-confirmation").hidden=false;$("confirm-update-install").focus()};
 $("cancel-update-install").onclick=()=>{$("update-confirmation").hidden=true;$("install-update").focus()};
 $("confirm-update-install").onclick=installUpdate;
@@ -929,7 +929,7 @@ def update_status():
         )
     logs = subprocess.run(
         ["sudo", "-n", "/usr/bin/journalctl", "-u", "petcam-update.service",
-         "-n", "30", "--no-pager", "-o", "cat"],
+         "-n", "20", "--no-pager", "-o", "cat"],
         capture_output=True, text=True, timeout=5, check=False,
     )
     return {
