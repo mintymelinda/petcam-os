@@ -512,6 +512,13 @@ class WebManagerTests(unittest.TestCase):
         self.assertNotIn('rtmp-encoder', MODULE.PAGE)
         self.assertIn("saved camera settings are selected", MODULE.PAGE)
 
+    def test_explicit_h264_capture_uses_native_v4l2_and_mpegts_transport(self):
+        script = Path("stage-petcam/02-configure-petcam/00-run-chroot.sh").read_text()
+        self.assertIn('if [[ "$FORMAT" == "H264" ]]', script)
+        self.assertIn("-input_format h264", script)
+        self.assertIn("udp://127.0.0.1:10000", script)
+        self.assertIn("H.264 capture cannot run while timelapse or motion detection requires MJPEG", script)
+
     def test_browser_source_is_rejected_when_h264_capture_is_active(self):
         class Request:
             path = "/"

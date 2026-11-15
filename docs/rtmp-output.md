@@ -24,7 +24,7 @@ When H.264 is selected, PetCam captures the advertised V4L2 H.264 mode and packe
 
 ## MJPEG-only features
 
-Timelapse and motion detection continue to consume the MJPEG capture stream. They are not moved to H.264 and do not start a second camera capture session.
+Timelapse and motion detection continue to consume the MJPEG capture stream. They are not moved to H.264 and do not start a second camera capture session. Both features must remain disabled while H.264 capture is selected; PetCam rejects attempts to enable either one until the camera is returned to MJPEG mode.
 
 ## Network and troubleshooting
 
