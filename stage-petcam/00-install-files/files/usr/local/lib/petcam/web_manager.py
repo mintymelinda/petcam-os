@@ -1154,6 +1154,13 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 if capture_restart.returncode:
                     raise RuntimeError(capture_restart.stderr.strip() or "Unable to restart camera after changing timelapse settings.")
+                if load_rtmp_config()["enabled"]:
+                    rtmp_restart = subprocess.run(
+                        ["sudo", "/usr/bin/systemctl", "restart", "petcam-rtmp.service"],
+                        capture_output=True, text=True, timeout=30, check=False,
+                    )
+                    if rtmp_restart.returncode:
+                        raise RuntimeError(rtmp_restart.stderr.strip() or "Unable to restart OBS output after changing MJPEG consumer settings.")
                 self.send_json(200, {"ok": True, "config": updated})
                 return
             if path == "/api/motion":
@@ -1165,6 +1172,13 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 if capture_restart.returncode:
                     raise RuntimeError(capture_restart.stderr.strip() or "Unable to restart camera after changing motion settings.")
+                if load_rtmp_config()["enabled"]:
+                    rtmp_restart = subprocess.run(
+                        ["sudo", "/usr/bin/systemctl", "restart", "petcam-rtmp.service"],
+                        capture_output=True, text=True, timeout=30, check=False,
+                    )
+                    if rtmp_restart.returncode:
+                        raise RuntimeError(rtmp_restart.stderr.strip() or "Unable to restart OBS output after changing MJPEG consumer settings.")
                 self.send_json(200, {"ok": True, "config": updated})
                 return
             if path == "/api/light-sensor":
