@@ -141,9 +141,14 @@ def restart_service(service: str) -> tuple[bool, str]:
             # Exit so the existing Restart=always policy replaces the web manager.
             os.kill(os.getpid(), signal.SIGTERM)
             return True, "Manager process exited for systemd recovery."
+        if service == "petcam-rtmp.service":
+            command = ["sudo", "-n", "/usr/local/sbin/petcam-rtmp-service", "restart"]
+        elif service == "petcam-stream.service":
+            command = ["sudo", "-n", "/usr/bin/systemctl", "restart", service]
+        else:
+            return False, f"Refusing to restart unsupported PetCam service: {service}"
         result = subprocess.run(
-            ["sudo", "-n", "/usr/bin/systemctl", "restart", service],
-            capture_output=True, text=True, timeout=30, check=False,
+            command, capture_output=True, text=True, timeout=30, check=False,
         )
         if result.returncode:
             return False, result.stderr.strip() or f"systemctl restart {service} failed"
