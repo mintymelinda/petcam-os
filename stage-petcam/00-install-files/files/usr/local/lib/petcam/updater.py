@@ -68,6 +68,32 @@ class UpdateError(RuntimeError):
     pass
 
 
+def write_update_state(stage: str, message: str = "", **details: object) -> None:
+    """Persist updater progress so the manager can recover after its own restart."""
+    STATE.mkdir(parents=True, exist_ok=True)
+    path = STATE / "status.json"
+    previous: dict[str, object] = {}
+    try:
+        previous = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+    now = time.time()
+    state = {
+        **previous,
+        "stage": stage,
+        "message": message,
+        "updated_at": now,
+        "started_at": previous.get("started_at", now) if stage not in ("complete", "failed") else previous.get("started_at", now),
+        **details,
+    }
+    if stage in ("complete", "failed"):
+        state["finished_at"] = now
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(state, sort_keys=True) + "\\n", encoding="utf-8")
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, path)
+
+
 def version_tuple(value: str) -> tuple[int, int, int]:
     if not VERSION_RE.fullmatch(value):
         raise UpdateError(f"Invalid release version: {value!r}")
@@ -592,13 +618,16 @@ def remove_inactive_release(release: Path) -> bool:
 
 
 def install_update(config: dict[str, str]) -> dict[str, object]:
+    write_update_state("checking", "Checking signed release metadata")
     status = check_update(config, max_releases=1)
     version = str(status["available_version"])
     if not status["update_available"]:
+        write_update_state("complete", "No update was needed", installed_version=status.get("installed_version"))
         return {"status": "up-to-date", **status}
 
     selected = status["releases"][0]
     manifest_url = str(selected["manifest_url"])
+    write_update_state("verifying", f"Verifying signed release {version}", target_version=version)
     raw_manifest = fetch(manifest_url, MAX_MANIFEST)
     signature = fetch(manifest_url + ".sig", 4096)
     verify_signature(raw_manifest, signature, Path(config.get("PUBLIC_KEY", str(PUBLIC_KEY))))
@@ -609,10 +638,12 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
     staging_parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="release-", dir=staging_parent) as temporary:
         archive_path = Path(temporary) / "release.tar.gz"
+        write_update_state("downloading", f"Downloading release {version}", target_version=version)
         download_archive(
             str(manifest["archive_url"]), archive_path,
             int(manifest["archive_size"]), str(manifest["archive_sha256"]),
         )
+        write_update_state("staging", f"Download verified; extracting release {version}", target_version=version)
         staged = Path(temporary) / "release"
         staged.mkdir()
         safe_extract(archive_path, staged)
@@ -624,6 +655,7 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
     old_version = current_version()
     switched = False
     try:
+        write_update_state("installing", f"Activating release {version}", target_version=version, previous_version=old_version)
         atomic_activate(final)
         switched = True
         repair_config_directory_permissions()
@@ -631,10 +663,14 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
         subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
         subprocess.run(["systemctl", "enable", "--now", "petcam-timelapse.service"], check=True, capture_output=True)
         subprocess.run(["systemctl", "enable", "--now", "petcam-motion.service"], check=True, capture_output=True)
+        write_update_state("restarting", "Restarting PetCam services", target_version=version, previous_version=old_version)
         stream_warning = restart_services()
+        write_update_state("verifying", "Checking the restarted web manager", target_version=version, previous_version=old_version)
         deadline = time.monotonic() + 45
         while time.monotonic() < deadline:
             if healthy():
+                write_update_state("complete", f"PetCam {version} installed and health-checked",
+                                   installed_version=version, previous_version=old_version, warning=stream_warning)
                 return {"status": "installed", "installed_version": version,
                         "previous_version": old_version, "warning": stream_warning}
             time.sleep(2)
@@ -657,6 +693,8 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
                 f"Update failed and previous release was restored: {exc}; "
                 f"unable to remove inactive failed release {final}: {cleanup_error}"
             ) from cleanup_error
+        write_update_state("failed", f"Update failed; previous release restored: {exc}",
+                           target_version=version, previous_version=old_version, rollback="restored")
         raise UpdateError(f"Update failed and previous release was restored: {exc}") from exc
 
 
@@ -672,6 +710,11 @@ def main() -> int:
         print(json.dumps(result, indent=2))
         return 0
     except UpdateError as exc:
+        if args.command == "install":
+            try:
+                write_update_state("failed", str(exc))
+            except OSError:
+                pass
         print(f"petcam-update: {exc}", file=sys.stderr)
         return 1
 
