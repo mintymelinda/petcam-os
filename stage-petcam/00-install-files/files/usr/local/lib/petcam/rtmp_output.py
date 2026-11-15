@@ -138,6 +138,16 @@ def _write_status(state, source, path=STATUS_PATH):
     os.replace(temporary, target)
 
 
+def check_gstreamer_runtime():
+    """Validate the RTSP server bindings and the elements used by both camera modes."""
+    _GLib, Gst, _GstRtspServer = _load_gstreamer()
+    required = ("v4l2src", "h264parse", "rtph264pay", "souphttpsrc", "multipartdemux", "jpegparse", "rtpjpegpay")
+    missing = [name for name in required if Gst.ElementFactory.find(name) is None]
+    if missing:
+        raise RTMPConfigError("Required GStreamer element(s) are missing: " + ", ".join(missing))
+    return True
+
+
 def _load_gstreamer():
     try:
         import gi
@@ -164,7 +174,7 @@ def main():
 
     camera_status = load_camera_status()
     native_h264 = camera_status.get("native_h264") is True
-    source = "native_h264" if native_h264 else "mjpeg"
+    source = "native_h264" if native_h264 else "mjpeg_copy"
     launch = build_gstreamer_launch(camera_status)
     GLib, Gst, GstRtspServer = _load_gstreamer()
     if args.check:
@@ -185,10 +195,16 @@ def main():
     factory.set_shared(True)
     factory.set_launch(launch)
 
+    current_state = {"value": "starting"}
+
+    def set_state(state):
+        current_state["value"] = state
+        _write_status(state, source)
+
     def media_configured(_factory, media):
         logging.info("GStreamer RTSP media configured from %s", source)
-        _write_status("publishing", source)
-        media.connect("unprepared", lambda _media: _write_status("starting", source))
+        media.connect("prepared", lambda _media: set_state("publishing"))
+        media.connect("unprepared", lambda _media: set_state("starting"))
 
     factory.connect("media-configure", media_configured)
     mounts.add_factory("/petcam", factory)
