@@ -761,8 +761,10 @@ def save_selection(data):
         ).returncode == 0
 
     if requested_h264:
-        if not Path("/usr/bin/ffmpeg").is_file():
-            raise RuntimeError("FFmpeg is required for native H.264 RTSP output.")
+        try:
+            check_gstreamer_runtime()
+        except ValueError as error:
+            raise RuntimeError(str(error)) from error
         if load_timelapse_config().get("enabled") or load_motion_config().get("enabled"):
             raise ValueError("Disable timelapse and motion detection before selecting H.264; both require the MJPEG capture feed.")
 
@@ -1377,8 +1379,11 @@ class Handler(BaseHTTPRequestHandler):
                 current_camera = parse_config(CONFIG)
                 if current_camera.get("FORMAT") == "H264" and data.get("enabled") is not True:
                     raise RuntimeError("OBS RTSP output is forced on while H.264 capture is selected.")
-                if data.get("enabled") and not Path("/usr/bin/ffmpeg").is_file():
-                    raise RuntimeError("FFmpeg is not installed. Run sudo apt-get update && sudo apt-get install ffmpeg, then save these settings again.")
+                if data.get("enabled"):
+                    try:
+                        check_gstreamer_runtime()
+                    except ValueError as error:
+                        raise RuntimeError(str(error)) from error
                 current = load_rtmp_config()
                 was_active = subprocess.run(
                     ["systemctl", "is-active", "--quiet", "petcam-rtmp.service"],
@@ -1483,7 +1488,6 @@ def rtmp_status_snapshot():
         state = "stalled"
     return {
         "enabled": config["enabled"],
-        "ffmpeg_available": Path("/usr/bin/ffmpeg").is_file(),
         "active": active_service and state == "publishing",
         "state": state,
         "fps": status.get("fps") if fresh else None,
