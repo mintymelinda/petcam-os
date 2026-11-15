@@ -48,6 +48,24 @@ class CameraDiscoveryTests(unittest.TestCase):
         self.assertTrue(MODULE.mode_supports_fps(modes[0], 30))
         self.assertFalse(MODULE.mode_supports_fps(modes[0], 45))
 
+    def test_native_h264_selector_uses_only_advertised_h264_modes(self):
+        devices = [{
+            "device": "/dev/video2",
+            "modes": [
+                {"format": "MJPG", "width": 1280, "height": 720, "fps": [30.0]},
+                {"format": "H264", "width": 1920, "height": 1080, "fps": [30.0]},
+            ],
+        }]
+        selected = MODULE.select_native_h264_mode(devices)
+        self.assertEqual(selected, {
+            "device": "/dev/video2", "resolution": "1920x1080",
+            "fps": 30, "format": "H264",
+        })
+        self.assertIsNone(MODULE.select_native_h264_mode([{
+            "device": "/dev/video3",
+            "modes": [{"format": "MJPG", "width": 640, "height": 480, "fps": [30.0]}],
+        }]))
+
     def test_prefers_native_mjpeg_and_uses_least_demanding_when_over_budget(self):
         devices = [{"device": "/dev/video0", "modes": MODULE.parse_modes(SAMPLE)}]
         device, mode, native = MODULE.select_mode(devices, "zero")

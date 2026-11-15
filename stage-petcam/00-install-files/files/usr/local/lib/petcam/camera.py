@@ -22,6 +22,7 @@ FPS_RE = re.compile(r"\(([\d.]+) fps\)")
 SIZE_RANGE_RE = re.compile(r"Size: (?:Stepwise|Continuous) (\d+)x(\d+) - (\d+)x(\d+)(?: with step (\d+)/(\d+))?")
 FPS_RANGE_RE = re.compile(r"Interval: (?:Stepwise|Continuous) ([\d.]+)s - ([\d.]+)s(?: with step ([\d.]+)s)?")
 NATIVE_JPEG_FORMATS = {"MJPG", "MJPEG", "JPEG"}
+NATIVE_H264_FORMATS = {"H264"}
 USTREAMER_FORMATS = NATIVE_JPEG_FORMATS | {"YUYV", "YVYU", "UYVY", "YUV420", "YVU420", "RGB565", "RGB24", "GREY"}
 PIXEL_BUDGETS = {
     "zero": 1280 * 720 * 30,
@@ -349,6 +350,45 @@ def filter_devices_by_format(devices, requested_format):
     ]
 
 
+def select_native_h264_mode(devices, resolution="auto", fps="auto"):
+    """Select only an explicitly advertised V4L2 H.264 capture mode."""
+    candidates = [
+        (device, mode)
+        for device in devices
+        for mode in device["modes"]
+        if mode["format"] in NATIVE_H264_FORMATS
+    ]
+    if resolution != "auto":
+        match = re.fullmatch(r"(\d+)x(\d+)", resolution)
+        if not match:
+            raise ValueError("Resolution must be 'auto' or WIDTHxHEIGHT.")
+        width, height = map(int, match.groups())
+        candidates = [(device, mode) for device, mode in candidates
+                      if mode_supports_resolution(mode, width, height)]
+    if fps != "auto":
+        try:
+            requested_fps = float(fps)
+        except ValueError as error:
+            raise ValueError("FPS must be 'auto' or a positive number.") from error
+        if requested_fps <= 0:
+            raise ValueError("FPS must be 'auto' or a positive number.")
+        candidates = [(device, mode) for device, mode in candidates
+                      if mode_supports_fps(mode, requested_fps)]
+    if not candidates:
+        return None
+    device, mode = max(candidates, key=lambda item: (
+        item[1]["width"] * item[1]["height"] * mode_max_fps(item[1]),
+        item[1]["width"] * item[1]["height"],
+    ))
+    selected_fps = float(fps) if fps != "auto" else float(mode_max_fps(mode))
+    return {
+        "device": device["device"],
+        "resolution": f'{mode["width"]}x{mode["height"]}',
+        "fps": int(selected_fps) if selected_fps.is_integer() else selected_fps,
+        "format": "H264",
+    }
+
+
 def select_mode(devices, tier):
     candidates = []
     for device in devices:
@@ -375,7 +415,7 @@ def select_mode(devices, tier):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("discover", "select", "discover-csi", "select-csi", "status"))
+    parser.add_argument("command", choices=("discover", "select", "select-h264", "discover-csi", "select-csi", "status"))
     parser.add_argument("--device")
     parser.add_argument("--physical-path")
     parser.add_argument("--camera", type=int)
@@ -415,6 +455,17 @@ def main():
             print("No supported CSI camera or camera mode found. Check the ribbon cable and camera-stack detection.", file=sys.stderr)
             return 1
         print(json.dumps({"backend": "csi", "model": model, "tier": tier, **selected_csi}))
+        return 0
+    if args.command == "select-h264":
+        try:
+            selected_h264 = select_native_h264_mode(devices, args.resolution, args.fps)
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        if not selected_h264:
+            print("No native H.264 V4L2 capture mode is advertised.", file=sys.stderr)
+            return 1
+        print(json.dumps(selected_h264))
         return 0
     if args.command == "select":
         devices = filter_devices_by_format(devices, args.format)
