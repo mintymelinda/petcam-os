@@ -203,7 +203,7 @@ jobs:
           load: true
           tags: petcam-image-assembly:local
           cache-from: type=gha,scope=petcam-image-assembly
-          cache-to: type=gha,scope=petcam-image-validation,mode=max
+          cache-to: type=gha,scope=petcam-image-assembly,mode=max
 
       - name: Assemble PetCam and validate Imager catalogue
         run: docker compose --file build/compose.yaml run --rm --no-build image-assembly
