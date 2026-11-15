@@ -42,6 +42,8 @@ REQUIRED_FILES = (
     "lib/csi_stream.py",
     "lib/rtmp_output.py",
     "bin/mediamtx",
+    "bin/petcam-rtmp-service",
+    "etc/sudoers.d/petcam-rtmp",
     "lib/web_manager.py",
     "lib/web_auth.py",
     "lib/health_monitor.py",
