@@ -1,2 +1,2 @@
 # PetCam web manager may manage only the dedicated OBS RTSP service.
-petcam ALL=(root) NOPASSWD: /usr/local/sbin/petcam-rtmp-service *
+petcam ALL=(root) NOPASSWD: /usr/local/sbin/petcam-rtmp-service enable, /usr/local/sbin/petcam-rtmp-service disable, /usr/local/sbin/petcam-rtmp-service restart
