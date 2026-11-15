@@ -292,6 +292,19 @@ class TransactionalApplyTests(unittest.TestCase):
         h264_ready.assert_called_once_with()
         ready.assert_not_called()
 
+    def test_auto_mode_uses_rtsp_readiness_when_native_h264_was_selected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "camera-status.json"
+            marker.write_text('{"native_h264": true}', encoding="utf-8")
+            ready = mock.Mock(return_value=True)
+            with mock.patch.object(MODULE, "CAMERA_STATUS_PATH", marker):
+                with mock.patch.object(MODULE, "wait_for_native_h264", return_value=True) as h264_ready:
+                    self.assertTrue(MODULE.wait_for_configured_capture(
+                        {"FORMAT": "auto", "PORT": "8081"}, ready
+                    ))
+            h264_ready.assert_called_once_with()
+            ready.assert_not_called()
+
     def test_successful_apply_commits_and_updates_last_known_good(self):
         restart = mock.Mock()
         ready = mock.Mock(return_value=True)
