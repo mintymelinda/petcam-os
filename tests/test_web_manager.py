@@ -262,19 +262,20 @@ class WebManagerTests(unittest.TestCase):
         self.assertEqual(status["result"], "success")
         self.assertIn("Downloading release", status["logs"])
 
-    def test_camera_inventory_exposes_advertised_h264_modes(self):
-        with mock.patch.object(MODULE, "run_camera", return_value={
-            "usb_devices": [{
-                "device": "/dev/video0",
-                "physical_path": "/sys/devices/usb1/1-1",
-                "modes": [
-                    {"format": "MJPG", "width": 1280, "height": 720, "fps": [30]},
-                    {"format": "H264", "width": 1920, "height": 1080, "fps": [30]},
-                ],
-            }],
-            "csi_cameras": [],
-        }):
+    def test_camera_inventory_uses_shared_discovery_and_exposes_h264_modes(self):
+        usb_devices = [{
+            "device": "/dev/video0",
+            "physical_path": "/sys/devices/usb1/1-1",
+            "modes": [
+                {"format": "MJPG", "width": 1280, "height": 720, "fps": [30]},
+                {"format": "H264", "width": 1920, "height": 1080, "fps": [30]},
+            ],
+        }]
+        with mock.patch.object(MODULE, "discover_devices", return_value=usb_devices) as discover_usb, \\
+                mock.patch.object(MODULE, "discover_csi_cameras", return_value=[]) as discover_csi:
             cameras = MODULE.camera_inventory()
+        discover_usb.assert_called_once_with()
+        discover_csi.assert_called_once_with()
         self.assertEqual({mode["format"] for mode in cameras[0]["modes"]}, {"MJPG", "H264"})
 
     def test_h264_selection_forces_rtmp_and_starts_rtsp_service(self):
