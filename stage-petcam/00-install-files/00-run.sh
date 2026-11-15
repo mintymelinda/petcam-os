@@ -7,7 +7,7 @@ fi
 
 RELEASE_DIR="${ROOTFS_DIR}/opt/petcam/releases/${APP_VERSION}"
 install -D -o root -g root -m 0644 files/etc/petcam/update-signing.pub "${ROOTFS_DIR}/etc/petcam/update-signing.pub"
-install -d -m 0755 "$RELEASE_DIR/lib" "$RELEASE_DIR/systemd" "$RELEASE_DIR/etc/petcam"
+install -d -m 0755 "$RELEASE_DIR/lib" "$RELEASE_DIR/systemd" "$RELEASE_DIR/etc/petcam" "$RELEASE_DIR/etc/sudoers.d"
 install -d -m 0755 "$RELEASE_DIR/bin"
 MEDIAMTX_VERSION="1.21.3"
 # PetCam application releases currently target 32-bit armhf; the ARMv6
@@ -34,6 +34,8 @@ install -m 0644 files/etc/systemd/system/petcam-rtmp.service "$RELEASE_DIR/syste
 install -D -m 0644 files/etc/systemd/system/petcam-rtmp.service "${ROOTFS_DIR}/etc/systemd/system/petcam-rtmp.service"
 install -D -o root -g root -m 0755 files/usr/local/sbin/petcam-rtmp-service "${ROOTFS_DIR}/usr/local/sbin/petcam-rtmp-service"
 install -D -o root -g root -m 0440 files/etc/sudoers.d/petcam-rtmp "${ROOTFS_DIR}/etc/sudoers.d/petcam-rtmp"
+install -m 0755 files/usr/local/sbin/petcam-rtmp-service "$RELEASE_DIR/bin/petcam-rtmp-service"
+install -m 0440 files/etc/sudoers.d/petcam-rtmp "$RELEASE_DIR/etc/sudoers.d/petcam-rtmp"
 install -m 0640 files/etc/petcam/rtmp.json "$RELEASE_DIR/etc/petcam/rtmp.json"
 install -D -m 0640 files/etc/petcam/rtmp.json "${ROOTFS_DIR}/etc/petcam/rtmp.json"
 install -m 0644 files/usr/local/lib/petcam/timelapse.py "$RELEASE_DIR/lib/timelapse.py"

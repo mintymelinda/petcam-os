@@ -253,6 +253,20 @@ class WebManagerTests(unittest.TestCase):
             self.assertFalse(MODULE.update_check()["update_available"])
         self.assertEqual(run.call_args.args[0], ["sudo", "-n", "/usr/local/bin/petcam-update", "check"])
 
+    def test_set_rtmp_service_uses_noninteractive_scoped_helper(self):
+        completed = mock.Mock(returncode=0, stderr="")
+        with mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run:
+            MODULE.set_rtmp_service("restart")
+        self.assertEqual(run.call_args.args[0], [
+            "sudo", "-n", "/usr/local/sbin/petcam-rtmp-service", "restart",
+        ])
+
+    def test_web_manager_privileged_systemctl_calls_are_noninteractive(self):
+        source = Path(SPEC.origin).read_text(encoding="utf-8")
+        self.assertNotIn('["sudo", "/usr/bin/systemctl"', source)
+        self.assertNotIn('["sudo", "/usr/local/sbin/petcam-rtmp-service"', source)
+        self.assertIn('["sudo", "-n", "/usr/local/sbin/petcam-rtmp-service", "restart"]', source)
+
     def test_update_status_reports_active_state_and_recent_logs(self):
         outputs = [
             mock.Mock(returncode=0, stdout="active\nsuccess\n0\n", stderr=""),

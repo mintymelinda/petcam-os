@@ -42,6 +42,8 @@ REQUIRED_FILES = (
     "lib/csi_stream.py",
     "lib/rtmp_output.py",
     "bin/mediamtx",
+    "bin/petcam-rtmp-service",
+    "etc/sudoers.d/petcam-rtmp",
     "lib/web_manager.py",
     "lib/web_auth.py",
     "lib/health_monitor.py",
@@ -435,7 +437,9 @@ def validate_release(directory: Path, version: str) -> None:
     (directory / "bin/mediamtx").chmod(0o755)
 
 
-def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc")) -> None:
+def install_runtime_integration_files(
+    release: Path, etc_root: Path = Path("/etc"), usr_root: Path = Path("/usr"),
+) -> None:
     """Install signed optional integration assets without overwriting user settings."""
     service_source = release / "systemd/petcam-home-assistant.service"
     config_source = release / "etc/petcam/home-assistant.conf"
@@ -449,12 +453,18 @@ def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc
     rtmp_service_destination = etc_root / "systemd/system/petcam-rtmp.service"
     rtmp_config_source = release / "etc/petcam/rtmp.json"
     rtmp_config_destination = etc_root / "petcam/rtmp.json"
+    rtmp_helper_source = release / "bin/petcam-rtmp-service"
+    rtmp_helper_destination = usr_root / "local/sbin/petcam-rtmp-service"
+    rtmp_sudoers_source = release / "etc/sudoers.d/petcam-rtmp"
+    rtmp_sudoers_destination = etc_root / "sudoers.d/petcam-rtmp"
     service_destination.parent.mkdir(parents=True, exist_ok=True)
     config_destination.parent.mkdir(parents=True, exist_ok=True)
     timelapse_destination.parent.mkdir(parents=True, exist_ok=True)
     motion_destination.parent.mkdir(parents=True, exist_ok=True)
     rtmp_service_destination.parent.mkdir(parents=True, exist_ok=True)
     rtmp_config_destination.parent.mkdir(parents=True, exist_ok=True)
+    rtmp_helper_destination.parent.mkdir(parents=True, exist_ok=True)
+    rtmp_sudoers_destination.parent.mkdir(parents=True, exist_ok=True)
 
     service_temporary = service_destination.with_name(service_destination.name + ".new")
     shutil.copyfile(service_source, service_temporary)
@@ -472,6 +482,14 @@ def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc
     shutil.copyfile(rtmp_service_source, rtmp_service_temporary)
     os.chmod(rtmp_service_temporary, 0o644)
     os.replace(rtmp_service_temporary, rtmp_service_destination)
+    rtmp_helper_temporary = rtmp_helper_destination.with_name(rtmp_helper_destination.name + ".new")
+    shutil.copyfile(rtmp_helper_source, rtmp_helper_temporary)
+    os.chmod(rtmp_helper_temporary, 0o755)
+    os.replace(rtmp_helper_temporary, rtmp_helper_destination)
+    rtmp_sudoers_temporary = rtmp_sudoers_destination.with_name(rtmp_sudoers_destination.name + ".new")
+    shutil.copyfile(rtmp_sudoers_source, rtmp_sudoers_temporary)
+    os.chmod(rtmp_sudoers_temporary, 0o440)
+    os.replace(rtmp_sudoers_temporary, rtmp_sudoers_destination)
     config_destination_is_new = not config_destination.exists()
     if config_destination_is_new:
         config_temporary = config_destination.with_name(config_destination.name + ".new")
@@ -498,6 +516,8 @@ def install_runtime_integration_files(release: Path, etc_root: Path = Path("/etc
             os.chown(timelapse_destination, 0, 0)
             os.chown(motion_destination, 0, 0)
             os.chown(rtmp_service_destination, 0, 0)
+            os.chown(rtmp_helper_destination, 0, 0)
+            os.chown(rtmp_sudoers_destination, 0, 0)
             os.chown(config_destination, 0, group_id)
             os.chown(rtmp_config_destination, pwd.getpwnam("petcam").pw_uid, group_id)
     except KeyError as error:

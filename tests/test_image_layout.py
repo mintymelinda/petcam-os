@@ -43,10 +43,10 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn('"$RELEASE_DIR/etc/petcam/home-assistant.conf"', script)
         self.assertIn('"architecture":"armhf"', script)
 
-    def test_timelapse_service_only_writes_to_managed_data_directory(self):
+    def test_timelapse_service_can_write_to_local_and_network_storage(self):
         service = TIMELAPSE_SERVICE.read_text()
-        self.assertIn("ReadWritePaths=/var/lib/petcam\n", service)
-        self.assertNotIn("/mnt/petcam-network", service)
+        self.assertIn("ReadWritePaths=/var/lib/petcam /mnt/petcam-network\n", service)
+        self.assertIn("/mnt/petcam-network", service)
 
     def test_runtime_uses_stable_wrappers_and_active_release(self):
         script = CONFIGURE.read_text()
@@ -57,6 +57,33 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn('args+=(--device-path "$CSI_DEVICE_PATH")', script)
         self.assertIn('/opt/petcam/current/lib/web_manager.py', script)
         self.assertIn('/opt/petcam/current/lib/csi_stream.py', script)
+
+    def test_updater_sandbox_can_install_privileged_assets(self):
+        script = CONFIGURE.read_text()
+        self.assertIn(
+            "ReadWritePaths=/opt/petcam /var/lib/petcam/update /etc/systemd/system /etc/petcam /usr/local/sbin /etc/sudoers.d",
+            script,
+        )
+        self.assertIn("visudo -cf /etc/sudoers.d/petcam-rtmp", script)
+        self.assertIn("/usr/bin/systemctl start --no-block petcam-update.service", script)
+        self.assertIn("ReadWritePaths=/etc/petcam /var/lib/petcam /run/sudo/ts", script)
+        self.assertIn(
+            "/usr/bin/journalctl -u petcam-stream.service -n 300 --no-pager",
+            script,
+        )
+        self.assertIn(
+            "/usr/bin/journalctl -u petcam-stream.service -u petcam-web.service -n 120 --no-pager -o short-iso",
+            script,
+        )
+        camera = (
+            STAGE / "00-install-files/files/usr/local/lib/petcam/camera.py"
+        ).read_text()
+        diagnostics = (
+            STAGE / "00-install-files/files/usr/local/lib/petcam/network_diagnostics.py"
+        ).read_text()
+        self.assertIn('["sudo", "-n", "/usr/bin/journalctl"', camera)
+        self.assertIn('"sudo", "-n", "/usr/bin/journalctl"', diagnostics)
+        self.assertNotIn("cat > /usr/local/sbin/petcam-rtmp-service", script)
 
     def test_stream_backend_uses_loopback_port_separate_from_web_ui(self):
         script = CONFIGURE.read_text()

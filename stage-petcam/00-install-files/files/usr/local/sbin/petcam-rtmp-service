@@ -21,6 +21,7 @@ case "$1" in
         exec /usr/bin/systemctl disable --now petcam-rtmp.service
         ;;
     restart)
+        /usr/bin/systemctl enable petcam-rtmp.service
         exec /usr/bin/systemctl restart petcam-rtmp.service
         ;;
     *)
