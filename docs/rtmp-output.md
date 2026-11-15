@@ -10,7 +10,7 @@ Use the page URL as an OBS Browser Source:
 http://PETCAM_HOST:8080/
 ```
 
-The page contains a transparent, full-size image element backed by the existing MJPEG HTTP stream. PetCam forwards the MJPEG multipart response unchanged. There is no dashboard preview connection and no additional camera capture process.
+The page contains a transparent, full-size image element backed by the existing MJPEG HTTP stream. PetCam forwards the MJPEG multipart response unchanged. There is no dashboard preview connection and no additional camera capture process. This source is available while the camera is operating in MJPEG mode. If a camera advertises native H.264 and RTSP output is enabled while both MJPEG-only features are disabled, PetCam selects H.264 for RTSP and the HTTP MJPEG Browser Source is unavailable until the camera returns to MJPEG mode.
 
 ## RTSP Media Source
 

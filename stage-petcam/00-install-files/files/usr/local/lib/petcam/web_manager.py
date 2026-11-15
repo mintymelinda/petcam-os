@@ -116,7 +116,7 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <details><summary>Update details and diagnostics</summary><p id="update-details" class="muted">No update information yet.</p><pre id="update-logs" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
 </section></section>
 <section id="rtmp-output"><h2>OBS Output</h2>
-<p class="muted">This exposes the camera to OBS without transcoding. PetCam does not publish to Twitch or YouTube. Add the RTSP address as an OBS Media Source, or use the HTTP Browser Source URL below. Timelapse and motion detection continue to consume MJPEG independently.</p>
+<p class="muted">This exposes the camera to OBS without transcoding. PetCam does not publish to Twitch or YouTube. Add the RTSP address as an OBS Media Source. The HTTP Browser Source is available while capture is in MJPEG mode; native H.264 capture is selected for RTSP only when timelapse and motion detection are disabled.</p>
 <label style="display:flex;gap:.5rem;align-items:center"><input id="rtmp-enabled" type="checkbox"> Enable OBS RTSP feed</label>
 <label for="obs-rtsp-url">OBS Media Source URL</label><input id="obs-rtsp-url" type="text" value="rtsp://petcam.local:8554/petcam">
 <p class="muted">HTTP Browser Source: <a href="http://petcam.local:8080/" target="_blank" rel="noopener">http://petcam.local:8080/</a></p>
