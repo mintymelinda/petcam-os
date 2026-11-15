@@ -12,6 +12,7 @@ on:
     paths:
       - "config"
       - "VERSION"
+      - "build/**"
       - "stage-petcam/**"
       - "stage-petcam-base/**"
       - "tests/**"
@@ -26,6 +27,7 @@ on:
     paths:
       - "config"
       - "VERSION"
+      - "build/**"
       - "stage-petcam/**"
       - "stage-petcam-base/**"
       - "tests/**"
@@ -39,21 +41,40 @@ concurrency:
   group: petcam-os-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     name: Validate and test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
-    permissions:
-      contents: read
     steps:
       - name: Check out PetCam OS
         uses: actions/checkout@v7
 
       - name: Validate PetCam scripts
         run: |
-          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py stage-petcam/00-install-files/files/usr/local/lib/petcam/rtmp_output.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_auth.py stage-petcam/00-install-files/files/usr/local/lib/petcam/health_monitor.py stage-petcam/00-install-files/files/usr/local/lib/petcam/config.py stage-petcam/00-install-files/files/usr/local/lib/petcam/network_diagnostics.py stage-petcam/00-install-files/files/usr/local/lib/petcam/factory_reset.py stage-petcam/00-install-files/files/usr/local/lib/petcam/home_assistant.py stage-petcam/00-install-files/files/usr/local/lib/petcam/timelapse.py stage-petcam/00-install-files/files/usr/local/lib/petcam/motion_detection.py tools/create_imager_os_list.py stage-petcam/00-install-files/files/usr/local/lib/petcam/updater.py tools/create_update_release.py tools/prepare_pigen_build.py
-          bash -n stage-petcam-base/prerun.sh stage-petcam/prerun.sh stage-petcam/00-install-files/00-run.sh stage-petcam/02-configure-petcam/00-run-chroot.sh stage-petcam-base/02-build-ustreamer/00-run-chroot.sh
+          python3 -m py_compile \
+            stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py \
+            stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py \
+            stage-petcam/00-install-files/files/usr/local/lib/petcam/rtmp_output.py \
+            stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py \
+            stage-petcam/00-install-files/files/usr/local/lib/petcam/web_auth.py \
+            stage-petcam/00-install-files/files/usr/local/lib/petcam/health_monitor.py \
+            stage-petcam/00-install-files/files/usr/local/lib/petcam/config.py \
+            stage-petcam/00-install-files/files/usr/local/lib/petcam/network_diagnostics.py \
+            stage-petcam/00-install-files/files/usr/local/lib/petcam/factory_reset.py \
+            stage-petcam/00-install-files/files/usr/local/lib/petcam/home_assistant.py \
+            stage-petcam/00-install-files/files/usr/local/lib/petcam/timelapse.py \
+            stage-petcam/00-install-files/files/usr/local/lib/petcam/motion_detection.py \
+            tools/create_imager_os_list.py tools/create_update_release.py \
+            tools/validate_image_build.py
+          bash -n stage-petcam-base/prerun.sh stage-petcam/prerun.sh \
+            stage-petcam/00-install-files/00-run.sh \
+            stage-petcam/02-configure-petcam/00-run-chroot.sh \
+            stage-petcam-base/02-build-ustreamer/00-run-chroot.sh
+          diff -u build/apt-packages.txt stage-petcam-base/01-install-packages/00-packages
 
       - name: Install test-only image processing dependency
         run: sudo apt-get update && sudo apt-get install -y python3-pil
@@ -61,90 +82,11 @@ jobs:
       - name: Test camera, RTMP output, updater, timelapse, motion detection, and Imager catalogue generation
         run: python3 -m unittest discover -s tests -v
 
-  warm-base-cache:
-    name: Warm reusable image base cache
-    if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref_type == 'tag')) || github.event_name == 'workflow_dispatch'
-    needs: validate
-    runs-on: ubuntu-24.04
-    timeout-minutes: 180
-    permissions:
-      contents: read
-    steps:
-      - name: Check out PetCam OS
-        uses: actions/checkout@v7
-
-      - name: Check out pi-gen
-        uses: actions/checkout@v7
-        with:
-          repository: RPi-Distro/pi-gen
-          ref: 6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78
-          path: pi-gen
-
-      - name: Compute immutable base rootfs cache key
-        id: base-rootfs-cache-key
-        env:
-          BASE_ROOTFS_CACHE_HASH: ${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile', 'tools/prepare_pigen_build.py') }}
-        run: |
-          echo "key=pigen-base-rootfs-v2-${RUNNER_OS}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${BASE_ROOTFS_CACHE_HASH}" >> "$GITHUB_OUTPUT"
-
-      - name: Check for the shared prepared base root filesystem
-        id: base-rootfs-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/pigen-base-rootfs.tar
-          key: ${{ steps.base-rootfs-cache-key.outputs.key }}
-          restore-keys: |
-            pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
-          lookup-only: true
-
-      - name: Restore reusable APT package archives
-        if: steps.base-rootfs-cache.outputs.cache-hit != 'true'
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/pigen-apt-cache
-          key: pigen-apt-v3-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'stage-petcam-base/**', 'tools/prepare_pigen_build.py') }}
-          restore-keys: |
-            pigen-apt-v3-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
-
-      - name: Set up Docker Buildx
-        if: steps.base-rootfs-cache.outputs.cache-hit != 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Prepare base-only pi-gen build
-        if: steps.base-rootfs-cache.outputs.cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          mkdir -p "${RUNNER_TEMP}/pigen-apt-cache/partial" "${RUNNER_TEMP}/pigen-work"
-          cp config pi-gen/config
-          sed -i 's/^STAGE_LIST=.*/STAGE_LIST="stage0 stage1 stage2 stage-petcam-base"/' pi-gen/config
-          cp -a stage-petcam-base pi-gen/stage-petcam-base
-          chmod 0755 pi-gen/stage-petcam-base/prerun.sh
-          python3 tools/prepare_pigen_build.py pi-gen
-
-      - name: Build and cache the prepared base root filesystem
-        if: steps.base-rootfs-cache.outputs.cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          cd pi-gen
-          PIGEN_DOCKER_OPTS="--mount type=bind,src=${RUNNER_TEMP}/pigen-apt-cache,dst=/apt-cache -e APT_ARCHIVE_CACHE=/apt-cache --mount type=bind,src=${RUNNER_TEMP}/pigen-work,dst=/pi-gen/work"
-          PIGEN_DOCKER_OPTS="${PIGEN_DOCKER_OPTS}" ./build-docker.sh
-          sudo chown -R "$(id -u):$(id -g)" "${RUNNER_TEMP}/pigen-apt-cache"
-          sudo tar --numeric-owner --xattrs --acls -cpf "${RUNNER_TEMP}/pigen-base-rootfs.tar" -C "${RUNNER_TEMP}/pigen-work" PetCamOS/stage-petcam-base/rootfs
-          sudo chown "$(id -u):$(id -g)" "${RUNNER_TEMP}/pigen-base-rootfs.tar"
-          chmod 0644 "${RUNNER_TEMP}/pigen-base-rootfs.tar"
-
-      - name: Save shared prepared base root filesystem
-        if: steps.base-rootfs-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/pigen-base-rootfs.tar
-          key: ${{ steps.base-rootfs-cache-key.outputs.key }}
-
-  release:
+  build-image:
     name: Build Raspberry Pi OS image
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     needs: validate
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 180
     permissions:
       contents: write
@@ -152,9 +94,30 @@ jobs:
       - name: Check out PetCam OS
         uses: actions/checkout@v7
 
-      # Reuse an existing release regardless of draft state. Assets are uploaded
-      # after the image and signed updater package have been built and verified.
-      - name: Prepare release
+      - name: Resolve and validate application version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+            if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Release tag must be vMAJOR.MINOR.PATCH; got ${GITHUB_REF_NAME}." >&2
+              exit 1
+            fi
+          else
+            RELEASE_VERSION="${INPUT_VERSION:-0.0.0}"
+          fi
+          if [[ ! "${RELEASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release version must be MAJOR.MINOR.PATCH; got ${RELEASE_VERSION}." >&2
+            exit 1
+          fi
+          printf '%s\n' "${RELEASE_VERSION}" > stage-petcam/00-install-files/files/usr/local/lib/petcam/VERSION
+          echo "release_version=${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_ENV}"
+
+      - name: Prepare draft release
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -169,136 +132,85 @@ jobs:
               --title "PetCam OS ${VERSION}" --generate-notes
           fi
 
-      - name: Check out pi-gen
-        uses: actions/checkout@v7
+      # The pinned upstream pi-gen revision is the existing 32-bit/armhf target.
+      # The ARM64 runner executes the build tooling natively without changing the
+      # image architecture or dropping support for original Raspberry Pi Zero boards.
+      - name: Build base Raspberry Pi OS and PetCam stages
+        id: pigen
+        uses: usimd/pi-gen-action@v1.11.0
         with:
-          repository: RPi-Distro/pi-gen
-          ref: 6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78
-          path: pi-gen
+          image-name: PetCamOS
+          stage-list: stage0 stage1 stage2 stage-petcam-base stage-petcam
+          release: trixie
+          compression: xz
+          compression-level: 6
+          hostname: petcam
+          locale: en_CA.UTF-8
+          timezone: America/Toronto
+          keyboard-keymap: us
+          keyboard-layout: English (US)
+          enable-ssh: 1
+          enable-cloud-init: 1
+          pi-gen-version: 6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78
+          export-last-stage-only: true
+          enable-pigen-cache: false
+          increase-runner-disk-size: true
+          verbose-output: true
 
-      - name: Compute immutable base rootfs cache key
-        id: base-rootfs-cache-key
-        env:
-          BASE_ROOTFS_CACHE_HASH: ${{ hashFiles('config', 'pi-gen/stage0/**', 'pi-gen/stage1/**', 'pi-gen/stage2/**', 'stage-petcam-base/**', 'pi-gen/scripts/**', 'pi-gen/Dockerfile', 'tools/prepare_pigen_build.py') }}
-        run: |
-          echo "key=pigen-base-rootfs-v2-${RUNNER_OS}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${BASE_ROOTFS_CACHE_HASH}" >> "$GITHUB_OUTPUT"
-
-      - name: Prepare pi-gen work directory
-        run: mkdir -p "${RUNNER_TEMP}/pigen-work"
-
-      # Cache the prepared OS and stable PetCam package root filesystem, not just
-      # Docker's pi-gen builder image or individual downloaded .deb files.
-      # Bump pigen-base-rootfs-v2 when intentionally refreshing base OS or stable package versions.
-      - name: Restore reusable OS and package base root filesystem
-        id: base-rootfs-cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/pigen-base-rootfs.tar
-          key: ${{ steps.base-rootfs-cache-key.outputs.key }}
-          restore-keys: |
-            pigen-base-rootfs-v2-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
-
-      - name: Prepare build caches
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/pigen-apt-cache
-          key: pigen-apt-v3-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-${{ hashFiles('config', 'stage-petcam-base/**', 'tools/prepare_pigen_build.py') }}
-          restore-keys: |
-            pigen-apt-v3-${{ runner.os }}-trixie-6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78-
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Add PetCam image stage and configure pi-gen caches
-        run: |
-          mkdir -p "${RUNNER_TEMP}/pigen-apt-cache/partial" "${RUNNER_TEMP}/pigen-work"
-          cp config pi-gen/config
-          cp -a stage-petcam-base pi-gen/stage-petcam-base
-          cp -a stage-petcam pi-gen/stage-petcam
-          if [[ "${{ steps.base-rootfs-cache.outputs.cache-hit }}" == "true" ]]; then
-            echo "Restoring cached prepared base root filesystem; skipping upstream OS and stable package stages."
-            sudo tar --numeric-owner --xattrs --acls -xpf "${RUNNER_TEMP}/pigen-base-rootfs.tar" -C "${RUNNER_TEMP}/pigen-work"
-            touch pi-gen/stage0/SKIP pi-gen/stage1/SKIP pi-gen/stage2/SKIP pi-gen/stage-petcam-base/SKIP
-          else
-            # A compatible cache from an earlier commit is valid for this pinned base.
-            rm -f "${RUNNER_TEMP}/pigen-base-rootfs.tar"
-          fi
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            RELEASE_VERSION="${GITHUB_REF_NAME#v}"
-          else
-            RELEASE_VERSION="${{ inputs.release_version }}"
-          fi
-          if [[ ! "${RELEASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Release tag must be vMAJOR.MINOR.PATCH; got ${GITHUB_REF_NAME}." >&2
-            exit 1
-          fi
-          printf '%s\n' "${RELEASE_VERSION}" > pi-gen/stage-petcam/00-install-files/files/usr/local/lib/petcam/VERSION
-          touch pi-gen/stage2/SKIP_IMAGES
-          chmod 0755 pi-gen/stage-petcam-base/prerun.sh
-          chmod 0755 pi-gen/stage-petcam/prerun.sh
-          chmod 0755 pi-gen/stage-petcam/00-install-files/00-run.sh
-          mkdir -p pi-gen/deploy
-          python3 tools/prepare_pigen_build.py pi-gen
-
-      - name: Build Raspberry Pi OS image
-        id: pigen-build
-        run: |
-          set -euo pipefail
-          BUILD_STARTED="$(date +%s)"
-          APT_CACHE_BEFORE="$(du -sb "${RUNNER_TEMP}/pigen-apt-cache" | cut -f1)"
-          cd pi-gen
-          PIGEN_DOCKER_OPTS="--mount type=bind,src=${RUNNER_TEMP}/pigen-apt-cache,dst=/apt-cache -e APT_ARCHIVE_CACHE=/apt-cache --mount type=bind,src=${RUNNER_TEMP}/pigen-work,dst=/pi-gen/work"
-          PIGEN_DOCKER_OPTS="${PIGEN_DOCKER_OPTS}" ./build-docker.sh
-          BUILD_FINISHED="$(date +%s)"
-          # pi-gen runs as root in Docker and leaves APT cache entries (including
-          # partial/) root-owned. Restore runner ownership so metrics collection
-          # and actions/cache post-job archiving can read the complete cache.
-          sudo chown -R "$(id -u):$(id -g)" "${RUNNER_TEMP}/pigen-apt-cache"
-          # Cache the prepared OS and stable package rootfs for subsequent builds. Tar preserves
-          # numeric ownership, ACLs, xattrs, hardlinks, and device metadata.
-          if [[ "${{ steps.base-rootfs-cache.outputs.cache-hit }}" != "true" ]]; then
-            sudo tar --numeric-owner --xattrs --acls -cpf "${RUNNER_TEMP}/pigen-base-rootfs.tar" -C "${RUNNER_TEMP}/pigen-work" PetCamOS/stage-petcam-base/rootfs
-            sudo chown "$(id -u):$(id -g)" "${RUNNER_TEMP}/pigen-base-rootfs.tar"
-            chmod 0644 "${RUNNER_TEMP}/pigen-base-rootfs.tar"
-          fi
-          BASE_ROOTFS_CACHE_HIT="${{ steps.base-rootfs-cache.outputs.cache-hit }}"
-          BASE_ROOTFS_CACHE_BYTES=0
-          if [[ -f "${RUNNER_TEMP}/pigen-base-rootfs.tar" ]]; then
-            BASE_ROOTFS_CACHE_BYTES="$(stat -c '%s' "${RUNNER_TEMP}/pigen-base-rootfs.tar")"
-          fi
-          APT_CACHE_AFTER="$(du -sb "${RUNNER_TEMP}/pigen-apt-cache" | cut -f1)"
-          APT_CACHE_FILES="$(find "${RUNNER_TEMP}/pigen-apt-cache" -type f -name '*.deb' | wc -l)"
-          mkdir -p "${RUNNER_TEMP}/pigen-build-metrics"
-          cat > "${RUNNER_TEMP}/pigen-build-metrics/build-timing.txt" <<EOF
-          pi-gen commit: 6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78
-          Raspberry Pi OS release: trixie
-          Build started (epoch): ${BUILD_STARTED}
-          Build finished (epoch): ${BUILD_FINISHED}
-          pi-gen build duration seconds: $((BUILD_FINISHED - BUILD_STARTED))
-          APT archive cache bytes before: ${APT_CACHE_BEFORE}
-          APT archive cache bytes after: ${APT_CACHE_AFTER}
-          Cached .deb files after build: ${APT_CACHE_FILES}
-          Base rootfs cache hit: ${BASE_ROOTFS_CACHE_HIT}
-          Base rootfs cache archive bytes: ${BASE_ROOTFS_CACHE_BYTES}
-          EOF
-          cat "${RUNNER_TEMP}/pigen-build-metrics/build-timing.txt" >> "${GITHUB_STEP_SUMMARY}"
-
-      - name: Upload pi-gen build logs and timing metrics
-        if: always() && steps.pigen-build.outcome != 'skipped'
+      - name: Upload pi-gen build logs
+        if: always() && steps.pigen.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
-          name: pigen-build-diagnostics-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/pigen-build-metrics/**
-            pi-gen/deploy/*.log
+          name: pigen-build-logs-${{ github.run_id }}
+          path: pi-gen/deploy/*.log
           if-no-files-found: warn
           retention-days: 30
+
+      - name: Prepare containerized image validation
+        env:
+          IMAGE_PATH: ${{ steps.pigen.outputs.image-path }}
+          IMAGE_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/petcam-os-${{ github.ref_name }}.img.xz
+        run: |
+          set -euo pipefail
+          mkdir -p .build
+          curl --fail --silent --show-error \
+            https://raw.githubusercontent.com/raspberrypi/rpi-imager/main/doc/json-schema/os-list-schema.json \
+            -o .build/os-list-schema.json
+          IMAGE_PATH="${IMAGE_PATH#${GITHUB_WORKSPACE}/}"
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            IMAGE_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          fi
+          {
+            echo "IMAGE_PATH=${IMAGE_PATH}"
+            echo "IMAGE_URL=${IMAGE_URL}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Set up Docker Buildx for native BuildKit caching
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image assembly and validation container
+        run: docker compose --file build/compose.yaml build
+
+      - name: Validate image and generate Imager catalogue
+        run: docker compose --file build/compose.yaml run --rm image-validation
+
+      - name: Upload manually built image
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: petcam-os-${{ steps.version.outputs.release_version }}
+          path: |
+            ${{ steps.pigen.outputs.image-path }}
+            petcam-os-os-list.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Prepare and publish signed application update
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
           PETCAM_UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.PETCAM_UPDATE_SIGNING_PRIVATE_KEY }}
+          IMAGE_PATH: ${{ steps.pigen.outputs.image-path }}
         run: |
           set -euo pipefail
           if [[ -z "${PETCAM_UPDATE_SIGNING_PRIVATE_KEY}" ]]; then
@@ -318,35 +230,17 @@ jobs:
             exit 1
           fi
 
-          mapfile -t IMAGES < <(find pi-gen/deploy -maxdepth 1 -type f -name '*.img.xz' -print)
-          if [[ "${#IMAGES[@]}" -ne 1 ]]; then
-            echo "Expected exactly one .img.xz image; found ${#IMAGES[@]}." >&2
+          if [[ ! -f "${IMAGE_PATH}" ]]; then
+            echo "pi-gen action image output is missing: ${IMAGE_PATH}" >&2
             exit 1
           fi
           IMAGE_NAME="petcam-os-${TAG}.img.xz"
-          cp "${IMAGES[0]}" "${IMAGE_NAME}"
-          IMAGE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${IMAGE_NAME}"
-          python3 tools/create_imager_os_list.py "${IMAGE_NAME}" --image-url "${IMAGE_URL}"
-          python3 -m pip install --disable-pip-version-check jsonschema
-          curl --fail --silent --show-error https://raw.githubusercontent.com/raspberrypi/rpi-imager/main/doc/json-schema/os-list-schema.json -o os-list-schema.json
-          python3 - <<'PY'
-          import json
-          from jsonschema import validate
-          with open("os-list-schema.json", encoding="utf-8") as stream:
-              schema = json.load(stream)
-          with open("petcam-os-os-list.json", encoding="utf-8") as stream:
-              catalogue = json.load(stream)
-          validate(catalogue, schema)
-          entry = catalogue["os_list"][0]
-          assert entry["init_format"] == "cloudinit-rpi"
-          assert entry["url"].startswith("https://")
-          print("PetCam Imager OS sublist passed Raspberry Pi's published JSON schema.")
-          PY
+          cp "${IMAGE_PATH}" "${IMAGE_NAME}"
 
           RAW_IMAGE="${RUNNER_TEMP}/petcam-os.img"
           ROOTFS_MOUNT="${RUNNER_TEMP}/petcam-rootfs"
           RELEASE_DIR="${RUNNER_TEMP}/petcam-update-release"
-          xz --decompress --stdout "${IMAGES[0]}" > "${RAW_IMAGE}"
+          xz --decompress --stdout "${IMAGE_PATH}" > "${RAW_IMAGE}"
           LOOP_DEVICE="$(sudo losetup --find --show --partscan "${RAW_IMAGE}")"
           cleanup() {
             sudo umount "${ROOTFS_MOUNT}" 2>/dev/null || true
