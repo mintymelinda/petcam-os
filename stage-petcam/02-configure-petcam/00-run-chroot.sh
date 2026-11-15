@@ -50,17 +50,6 @@ exec /usr/bin/systemctl "$action" "petcam-stream@$profile.service"
 SCRIPT
 chmod 0755 /usr/local/sbin/petcam-stream-service
 
-cat > /usr/local/sbin/petcam-rtmp-service <<'SCRIPT'
-#!/bin/sh
-set -eu
-case "${1:-}" in
-    enable) exec /usr/bin/systemctl enable --now petcam-rtmp.service ;;
-    disable) exec /usr/bin/systemctl disable --now petcam-rtmp.service ;;
-    restart) /usr/bin/systemctl enable petcam-rtmp.service; exec /usr/bin/systemctl restart petcam-rtmp.service ;;
-    *) echo "Usage: petcam-rtmp-service enable|disable|restart" >&2; exit 2 ;;
-esac
-SCRIPT
-chmod 0755 /usr/local/sbin/petcam-rtmp-service
 cat > /usr/local/bin/petcam-diagnostics <<'SCRIPT'
 #!/bin/sh
 exec python3 /opt/petcam/current/lib/network_diagnostics.py "$@"
@@ -264,7 +253,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/opt/petcam /var/lib/petcam/update /etc/systemd/system /etc/petcam
+ReadWritePaths=/opt/petcam /var/lib/petcam/update /etc/systemd/system /etc/petcam /usr/local/sbin /etc/sudoers.d
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 [Install]
@@ -301,10 +290,10 @@ systemctl enable petcam-stream.service
 
 cat > /etc/sudoers.d/petcam-web <<'SUDO'
 petcam ALL=(root) NOPASSWD: /usr/bin/systemctl restart petcam-stream.service, /usr/local/sbin/petcam-stream-service, /usr/local/bin/petcam-update check, /usr/bin/systemctl start petcam-update.service, /usr/bin/journalctl -u petcam-update.service -n 20 --no-pager -o cat
-petcam ALL=(root) NOPASSWD: /usr/local/sbin/petcam-rtmp-service enable, /usr/local/sbin/petcam-rtmp-service disable, /usr/local/sbin/petcam-rtmp-service restart
 SUDO
 chmod 0440 /etc/sudoers.d/petcam-web
 visudo -cf /etc/sudoers.d/petcam-web
+visudo -cf /etc/sudoers.d/petcam-rtmp
 
 cat > /usr/local/sbin/petcam-create-web-cert <<'SCRIPT'
 #!/bin/sh
