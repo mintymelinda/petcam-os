@@ -1341,7 +1341,7 @@ class Handler(BaseHTTPRequestHandler):
                 ]
                 if load_rtmp_config()["enabled"]:
                     commands.append((
-                        ["sudo", "/usr/bin/systemctl", "restart", "petcam-rtmp.service"],
+                        ["sudo", "-n", "/usr/local/sbin/petcam-rtmp-service", "restart"],
                         30, "Unable to restart OBS output after changing MJPEG consumer settings.",
                     ))
                 updated = apply_service_config_transaction(
@@ -1360,7 +1360,7 @@ class Handler(BaseHTTPRequestHandler):
                 ]
                 if load_rtmp_config()["enabled"]:
                     commands.append((
-                        ["sudo", "/usr/bin/systemctl", "restart", "petcam-rtmp.service"],
+                        ["sudo", "-n", "/usr/local/sbin/petcam-rtmp-service", "restart"],
                         30, "Unable to restart OBS output after changing MJPEG consumer settings.",
                     ))
                 updated = apply_service_config_transaction(
