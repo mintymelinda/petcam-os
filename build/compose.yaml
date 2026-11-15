@@ -1,0 +1,21 @@
+services:
+  image-validation:
+    image: petcam-image-validation:local
+    build:
+      context: ..
+      dockerfile: build/Dockerfile
+      cache_from:
+        - type=gha,scope=petcam-image-validation
+      cache_to:
+        - type=gha,scope=petcam-image-validation,mode=max
+    working_dir: /workspace
+    environment:
+      IMAGE_PATH: ${IMAGE_PATH:?Set IMAGE_PATH to the pi-gen action output}
+      IMAGE_URL: ${IMAGE_URL:?Set IMAGE_URL to the published HTTPS image URL}
+      RELEASE_VERSION: ${RELEASE_VERSION:?Set RELEASE_VERSION}
+      IMAGE_SCHEMA_PATH: /workspace/.build/os-list-schema.json
+    volumes:
+      - ..:/workspace
+    read_only: true
+    tmpfs:
+      - /tmp
