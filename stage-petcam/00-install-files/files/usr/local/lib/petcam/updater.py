@@ -91,7 +91,7 @@ def write_update_state(stage: str, message: str = "", **details: object) -> None
     if stage in ("complete", "failed"):
         state["finished_at"] = now
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(state, sort_keys=True) + "\\n", encoding="utf-8")
+    temporary.write_text(json.dumps(state, sort_keys=True) + "\n", encoding="utf-8")
     os.chmod(temporary, 0o644)
     os.replace(temporary, path)
 
