@@ -39,6 +39,25 @@ class UpdateProgressTests(unittest.TestCase):
                 self.assertNotIn("finished_at", second)
                 self.assertGreaterEqual(second["started_at"], first["started_at"])
 
+    def test_start_update_queues_oneshot_service_without_waiting_for_install(self):
+        results = [
+            mock.Mock(returncode=3, stdout="", stderr=""),
+            mock.Mock(returncode=0, stdout="", stderr=""),
+        ]
+        with mock.patch.object(UPDATER, "subprocess") as subprocess_mock:
+            subprocess_mock.run.side_effect = results
+            UPDATER.start_update()
+        self.assertEqual(subprocess_mock.run.call_args_list[1].args[0], [
+            "sudo", "-n", "/usr/bin/systemctl", "start", "--no-block", "petcam-update.service"
+        ])
+
+    def test_start_update_does_not_queue_a_second_active_install(self):
+        with mock.patch.object(UPDATER, "subprocess") as subprocess_mock:
+            subprocess_mock.run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
+            with self.assertRaisesRegex(UPDATER.UpdateError, "already running"):
+                UPDATER.start_update()
+        subprocess_mock.run.assert_called_once()
+
     def test_failed_installer_command_includes_exit_code_and_stderr(self):
         result = mock.Mock(returncode=1, stderr="permission denied", stdout="")
         message = UPDATER.command_failure("Restarting PetCam web service", result)
