@@ -39,8 +39,8 @@ class BuildPipelineContractTests(unittest.TestCase):
         dockerfile = (ROOT / "build/Dockerfile").read_text(encoding="utf-8")
         self.assertIn("docker/setup-buildx-action@v3", workflow)
         self.assertIn("docker/build-push-action@v6", workflow)
-        self.assertIn("cache-from: type=gha,scope=petcam-image-validation", workflow)
-        self.assertIn("cache-to: type=gha,scope=petcam-image-validation,mode=max", workflow)
+        self.assertIn("cache-from: type=gha,scope=petcam-image-assembly", workflow)
+        self.assertIn("cache-to: type=gha,scope=petcam-image-assembly,mode=max", workflow)
         self.assertIn("docker compose --file build/compose.yaml run --rm --no-build image-assembly", workflow)
         self.assertIn("image-assembly:", compose)
         self.assertIn("build/requirements.txt", dockerfile)
@@ -59,13 +59,14 @@ class BuildPipelineContractTests(unittest.TestCase):
         self.assertIn('entry.get("architecture") != "armhf"', validator)
 
     def test_containerized_post_build_validates_image_and_raspberry_pi_schema(self):
-        validator = (ROOT / "tools/validate_image_build.py").read_text(encoding="utf-8")
+        validator = (ROOT / "tools/assemble_image.py").read_text(encoding="utf-8")
         self.assertIn("create_imager_os_list.py", validator)
         self.assertIn("qemu-arm-static", validator)
         self.assertIn("losetup", validator)
         self.assertIn("validate(instance=catalogue, schema=schema)", validator)
         self.assertIn("IMAGE_SCHEMA_PATH", validator)
-        self.assertIn("IMAGE_PATH", validator)
+        self.assertIn("BASE_IMAGE_PATH", validator)
+        self.assertIn("OUTPUT_IMAGE_PATH", validator)
 
     def test_release_signing_and_publish_gates_are_preserved(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
