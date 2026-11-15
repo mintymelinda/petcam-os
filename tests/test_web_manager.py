@@ -317,7 +317,7 @@ class WebManagerTests(unittest.TestCase):
                 mock.patch.object(MODULE, "save_rtmp_config") as save_rtmp, \
                 mock.patch.object(MODULE, "load_timelapse_config", return_value={"enabled": False}), \
                 mock.patch.object(MODULE, "load_motion_config", return_value={"enabled": False}), \
-                mock.patch.object(MODULE.Path, "is_file", return_value=True), \
+                mock.patch.object(MODULE, "check_gstreamer_runtime"), \
                 mock.patch.object(MODULE, "apply_config") as apply, \
                 mock.patch.object(MODULE.subprocess, "run", side_effect=[
                     mock.Mock(returncode=1), mock.Mock(returncode=0, stderr=""),
@@ -568,11 +568,16 @@ class WebManagerTests(unittest.TestCase):
         self.assertNotIn('rtmp-encoder', MODULE.PAGE)
         self.assertIn("saved camera settings are selected", MODULE.PAGE)
 
-    def test_explicit_h264_capture_uses_native_v4l2_and_mpegts_transport(self):
+    def test_explicit_h264_capture_hands_v4l2_to_gstreamer_rtsp(self):
         script = Path("stage-petcam/02-configure-petcam/00-run-chroot.sh").read_text()
+        server = Path("stage-petcam/00-install-files/files/usr/local/lib/petcam/rtmp_output.py").read_text()
         self.assertIn('if [[ "$FORMAT" == "H264" ]]', script)
-        self.assertIn("-input_format h264", script)
-        self.assertIn("udp://127.0.0.1:10000", script)
+        self.assertIn("start_native_h264", script)
+        self.assertIn("exec /usr/bin/sleep infinity", script)
+        self.assertIn("v4l2src", server)
+        self.assertIn("rtph264pay", server)
+        self.assertNotIn("ffmpeg", script.lower())
+        self.assertNotIn("udp://127.0.0.1:10000", script)
         self.assertIn("H.264 capture cannot run while timelapse or motion detection requires MJPEG", script)
 
     def test_browser_source_is_rejected_when_h264_capture_is_active(self):
