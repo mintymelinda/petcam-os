@@ -34,7 +34,7 @@ def required(name: str) -> str:
 
 def run_target(rootfs: Path, script_path: str) -> None:
     run(
-        "chroot", str(rootfs), "/usr/bin/qemu-arm-static",
+        "chroot", str(rootfs), "/usr/bin/qemu-arm-static", "-L", "/",
         "/bin/bash", "-e", script_path,
     )
 
