@@ -39,6 +39,12 @@ class UpdateProgressTests(unittest.TestCase):
                 self.assertNotIn("finished_at", second)
                 self.assertGreaterEqual(second["started_at"], first["started_at"])
 
+    def test_failed_installer_command_includes_exit_code_and_stderr(self):
+        result = mock.Mock(returncode=1, stderr="permission denied", stdout="")
+        message = UPDATER.command_failure("Restarting PetCam web service", result)
+        self.assertIn("exit 1", message)
+        self.assertIn("permission denied", message)
+
     def test_manager_reports_persisted_active_stage_after_reconnect(self):
         with tempfile.TemporaryDirectory() as directory:
             state_file = Path(directory) / "status.json"
