@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish PetCam video to its local RTSP endpoint for OBS to consume."""
+"""Serve PetCam camera video over RTSP with GStreamer (no transcoding)."""
 
 from __future__ import annotations
 
@@ -8,19 +8,15 @@ import json
 import logging
 import os
 import re
-import shutil
 import signal
-import socket
-import subprocess
-import threading
+import shlex
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 CONFIG_PATH = Path(os.environ.get("PETCAM_RTMP_CONFIG", "/etc/petcam/rtmp.json"))
 STATUS_PATH = Path(os.environ.get("PETCAM_RTMP_STATUS", "/run/petcam/rtmp-status.json"))
 RTSP_URL = "rtsp://127.0.0.1:8554/petcam"
+CAMERA_STATUS_PATH = Path("/var/lib/petcam/camera-status.json")
 DEFAULTS = {"enabled": False}
 
 
@@ -60,8 +56,6 @@ def load_config(path=CONFIG_PATH):
     except (OSError, json.JSONDecodeError) as error:
         raise RTMPConfigError(f"Unable to read OBS output settings: {error}") from error
     config = validate_config(values)
-    # Migrate existing RTMP installations and remove the now-unneeded external
-    # destination and stream key from persistent configuration.
     if isinstance(values, dict) and any(key not in DEFAULTS for key in values):
         _write_config(config, path)
     return config
@@ -77,217 +71,158 @@ def public_config(config):
     return dict(config)
 
 
-def build_ffmpeg_command(config, input_url="http://127.0.0.1:8081/stream", native_h264=False):
-    config = validate_config(config)
-    if not config["enabled"]:
-        raise RTMPConfigError("OBS output is disabled.")
-    if not shutil.which("ffmpeg"):
-        raise RTMPConfigError("FFmpeg is not installed.")
-    command = [
-        "ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin",
-        "-rw_timeout", "15000000",
-    ]
-    if native_h264:
-        command.extend([
-            "-thread_queue_size", "512", "-probesize", "32",
-            "-analyzeduration", "0", "-f", "mpegts", "-i",
-            "udp://127.0.0.1:10000?fifo_size=1000000&overrun_nonfatal=1",
-            "-map", "0:v:0", "-an", "-c:v", "copy",
-        ])
-    else:
-        command.extend([
-            "-f", "mpjpeg", "-i", input_url,
-            "-map", "0:v:0", "-an", "-c:v", "copy",
-        ])
-    command.extend([
-        "-progress", "pipe:1", "-stats_period", "1", "-nostats",
-        "-rtsp_transport", "tcp", "-f", "rtsp", RTSP_URL,
-    ])
-    return command
-
-
-def native_h264_available(status_url="http://127.0.0.1:8081/status", timeout=25):
-    """Detect the live native H.264 capture process using its PID marker."""
-    marker = Path("/var/lib/petcam/camera-status.json")
+def load_camera_status(path=CAMERA_STATUS_PATH):
     try:
-        status = json.loads(marker.read_text(encoding="utf-8"))
-        pid = int(status.get("pid", 0))
-        if status.get("native_h264") is True and pid > 1:
-            os.kill(pid, 0)
-            command_line = Path(f"/proc/{pid}/cmdline").read_bytes().decode(errors="replace")
-            if "ffmpeg" in command_line and "h264" in command_line.lower():
-                active = subprocess.run(
-                    ["systemctl", "is-active", "--quiet", "petcam-stream.service"],
-                    check=False, timeout=2,
-                ).returncode == 0
-                if active:
-                    return True
-    except (OSError, ValueError, TypeError, subprocess.SubprocessError):
-        pass
-    deadline = time.monotonic() + timeout
-    while True:
-        try:
-            with urllib.request.urlopen(status_url, timeout=2) as response:
-                status = json.loads(response.read(65536))
-            return isinstance(status, dict) and status.get("native_h264") is True
-        except urllib.error.HTTPError as error:
-            if error.code in (404, 405):
-                return False
-            if time.monotonic() >= deadline:
-                return False
-            time.sleep(0.25)
-        except (OSError, ValueError, urllib.error.URLError):
-            if time.monotonic() >= deadline:
-                return False
-            time.sleep(0.25)
+        status = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(status, dict):
+        return {}
+    pid = status.get("pid")
+    if not isinstance(pid, int) or pid <= 1:
+        return {}
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return {}
+    return status
 
 
-def start_rtsp_server():
-    binary = Path(__file__).resolve().parents[1] / "bin" / "mediamtx"
-    if not binary.is_file():
-        raise SystemExit("Bundled MediaMTX RTSP server is missing from this PetCam release.")
-    runtime_config = STATUS_PATH.parent / "mediamtx.yml"
-    runtime_config.parent.mkdir(parents=True, exist_ok=True)
-    runtime_config.write_text("""logLevel: info
-logDestinations: [stdout]
-rtsp: yes
-rtspAddress: :8554
-rtmp: no
-hls: no
-webrtc: no
-srt: no
-api: no
-metrics: no
-pprof: no
-playback: no
-authMethod: internal
-authInternalUsers:
-  - user: any
-    pass:
-    ips: ["127.0.0.1", "::1"]
-    permissions:
-      - action: publish
-        path: petcam
-      - action: read
-        path: petcam
-  - user: any
-    pass:
-    ips: []
-    permissions:
-      - action: read
-        path: petcam
-paths:
-  petcam:
-    source: publisher
-""", encoding="utf-8")
-    if not os.access(binary, os.X_OK):
-        raise SystemExit("Bundled MediaMTX RTSP server is not executable.")
-    process = subprocess.Popen(
-        [str(binary), str(runtime_config)],
-        start_new_session=True,
+def native_h264_available(status_url=None, timeout=0, marker_path=CAMERA_STATUS_PATH):
+    """Detect the native V4L2 H.264 capture selection held by petcam-stream."""
+    del status_url, timeout
+    status = load_camera_status(marker_path)
+    return status.get("native_h264") is True and bool(status.get("device"))
+
+
+def build_gstreamer_launch(camera_status, mjpeg_url="http://127.0.0.1:8081/stream"):
+    """Build a GStreamer RTSP factory pipeline; compressed video is never decoded."""
+    if camera_status.get("native_h264") is True:
+        device = camera_status.get("device", "")
+        resolution = camera_status.get("resolution", "")
+        fps = camera_status.get("fps", "")
+        if not re.fullmatch(r"/dev/(?:video[0-9]+|v4l/by-id/[A-Za-z0-9._:+_-]+)", device):
+            raise RTMPConfigError("Native H.264 camera device path is invalid.")
+        if not re.fullmatch(r"[1-9][0-9]{0,4}x[1-9][0-9]{0,4}", str(resolution)):
+            raise RTMPConfigError("Native H.264 resolution is invalid.")
+        if not re.fullmatch(r"[1-9][0-9]{0,2}", str(fps)):
+            raise RTMPConfigError("Native H.264 frame rate is invalid.")
+        width, height = resolution.split("x", 1)
+        return (
+            f"( v4l2src device={shlex.quote(device)} ! "
+            f"video/x-h264,width={width},height={height},framerate={fps}/1 ! "
+            "h264parse config-interval=-1 ! "
+            "rtph264pay name=pay0 pt=96 config-interval=1 )"
+        )
+    if mjpeg_url != "http://127.0.0.1:8081/stream":
+        raise RTMPConfigError("MJPEG source URL must be the local PetCam stream.")
+    return (
+        '( souphttpsrc location="http://127.0.0.1:8081/stream" is-live=true do-timestamp=true ! '
+        "multipartdemux ! jpegparse ! rtpjpegpay name=pay0 pt=26 )"
     )
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        if process.poll() is not None:
-            raise SystemExit(f"MediaMTX exited during startup with status {process.returncode}.")
-        try:
-            with socket.create_connection(("127.0.0.1", 8554), timeout=0.5):
-                return process
-        except OSError:
-            time.sleep(0.2)
-    process.terminate()
-    raise SystemExit("MediaMTX did not open the local RTSP listener within 10 seconds.")
+
+
+def _write_status(state, source, path=STATUS_PATH):
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "state": state,
+        "active": state == "publishing",
+        "fps": None,
+        "updated_at": time.time(),
+        "source": source,
+    }
+    temporary = target.with_name(target.name + ".tmp")
+    temporary.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    os.replace(temporary, target)
+
+
+def check_gstreamer_runtime():
+    """Validate the RTSP server bindings and the elements used by both camera modes."""
+    _GLib, Gst, _GstRtspServer = _load_gstreamer()
+    required = ("v4l2src", "h264parse", "rtph264pay", "souphttpsrc", "multipartdemux", "jpegparse", "rtpjpegpay")
+    missing = [name for name in required if Gst.ElementFactory.find(name) is None]
+    if missing:
+        raise RTMPConfigError("Required GStreamer element(s) are missing: " + ", ".join(missing))
+    return True
+
+
+def _load_gstreamer():
+    try:
+        import gi
+        gi.require_version("Gst", "1.0")
+        gi.require_version("GstRtspServer", "1.0")
+        from gi.repository import GLib, Gst, GstRtspServer
+    except (ImportError, ValueError) as error:
+        raise RTMPConfigError(
+            "GStreamer RTSP Server bindings are missing. Install python3-gi and gir1.2-gst-rtsp-server-1.0."
+        ) from error
+    Gst.init(None)
+    return GLib, Gst, GstRtspServer
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="validate OBS output settings and FFmpeg availability")
+    parser.add_argument("--check", action="store_true", help="validate GStreamer RTSP dependencies and camera selection")
     args = parser.parse_args()
     config = load_config()
     if not config["enabled"]:
-        logging.info("OBS output is disabled; publisher will remain stopped.")
-        STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        STATUS_PATH.write_text(json.dumps({
-            "state": "disabled", "active": False, "fps": None,
-            "updated_at": time.time(), "source": None,
-        }) + "\n", encoding="utf-8")
+        logging.info("OBS RTSP output is disabled; server will remain stopped.")
+        _write_status("disabled", None, STATUS_PATH)
         return
-    native_h264 = native_h264_available()
-    command = build_ffmpeg_command(config, native_h264=native_h264)
+
+    camera_status = load_camera_status()
+    native_h264 = camera_status.get("native_h264") is True
+    source = "native_h264" if native_h264 else "mjpeg_copy"
+    launch = build_gstreamer_launch(camera_status)
+    check_gstreamer_runtime()
+    GLib, _Gst, GstRtspServer = _load_gstreamer()
     if args.check:
-        binary = Path(__file__).resolve().parents[1] / "bin" / "mediamtx"
-        if not binary.is_file() or not os.access(binary, os.X_OK):
-            raise SystemExit("Bundled MediaMTX RTSP server is missing or not executable.")
-        print(json.dumps({**public_config(config), "source": "native_h264" if native_h264 else "mjpeg_copy",
-                          "rtsp_url": "rtsp://<petcam-host>:8554/petcam"}))
+        print(json.dumps({
+            **public_config(config),
+            "source": source,
+            "pipeline": launch,
+            "rtsp_url": "rtsp://<petcam-host>:8554/petcam",
+        }))
         return
-    rtsp_server = start_rtsp_server()
+
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    logging.info("Starting OBS RTSP feed using %s", "native H.264 stream copy" if native_h264 else "MJPEG packet copy")
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
-    stopping = False
-    latest_fps = None
+    server = GstRtspServer.RTSPServer()
+    server.set_address("0.0.0.0")
+    server.set_service("8554")
+    mounts = server.get_mount_points()
+    factory = GstRtspServer.RTSPMediaFactory()
+    factory.set_shared(True)
+    factory.set_launch(launch)
 
-    def forward_stderr():
-        for raw_line in process.stderr:
-            logging.warning("FFmpeg: %s", raw_line.rstrip())
+    current_state = {"value": "starting"}
 
-    stderr_reader = threading.Thread(target=forward_stderr, name="obs-ffmpeg-logs", daemon=True)
-    stderr_reader.start()
+    def set_state(state):
+        current_state["value"] = state
+        _write_status(state, source)
 
-    def write_status(state):
-        STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "state": state, "active": state == "publishing",
-            "fps": latest_fps, "updated_at": time.time(),
-            "source": "native_h264" if native_h264 else "mjpeg_copy",
-        }
-        temporary = STATUS_PATH.with_name(STATUS_PATH.name + ".tmp")
-        temporary.write_text(json.dumps(payload) + "\n", encoding="utf-8")
-        os.replace(temporary, STATUS_PATH)
+    def media_configured(_factory, media):
+        logging.info("GStreamer RTSP media configured from %s", source)
+        media.connect("prepared", lambda _media: set_state("publishing"))
+        media.connect("unprepared", lambda _media: set_state("starting"))
+
+    factory.connect("media-configure", media_configured)
+    mounts.add_factory("/petcam", factory)
+    if server.attach(None) == 0:
+        raise RTMPConfigError("GStreamer RTSP server could not attach to the GLib main context.")
+    _write_status("starting", source)
+    logging.info("Serving %s directly over RTSP at %s", source, RTSP_URL)
+    loop = GLib.MainLoop()
 
     def stop(_signum, _frame):
-        nonlocal stopping
-        stopping = True
-        if process.poll() is None:
-            process.terminate()
+        loop.quit()
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    write_status("starting")
     try:
-        for raw_line in process.stdout:
-            line = raw_line.strip()
-            if line.startswith("fps="):
-                try:
-                    latest_fps = float(line.split("=", 1)[1])
-                except ValueError:
-                    latest_fps = None
-                write_status("publishing")
-            elif line.startswith("progress="):
-                write_status("publishing" if line.endswith(("continue", "end")) else "starting")
-        code = process.wait()
-        write_status("stopped" if stopping and code == 0 else "failed" if code else "stopped")
-        if code and not stopping:
-            raise SystemExit(code)
+        loop.run()
     finally:
-        if process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
-        stderr_reader.join(timeout=2)
-        if stopping:
-            write_status("stopped")
-        if rtsp_server.poll() is None:
-            rtsp_server.terminate()
-            try:
-                rtsp_server.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                rtsp_server.kill()
-                rtsp_server.wait()
+        _write_status("stopped", source)
 
 
 if __name__ == "__main__":

@@ -41,7 +41,6 @@ REQUIRED_FILES = (
     "lib/camera.py",
     "lib/csi_stream.py",
     "lib/rtmp_output.py",
-    "bin/mediamtx",
     "bin/petcam-rtmp-service",
     "etc/sudoers.d/petcam-rtmp",
     "lib/web_manager.py",
@@ -434,7 +433,6 @@ def validate_release(directory: Path, version: str) -> None:
         raise UpdateError("Release's embedded manifest does not match the signed release")
     (directory / "lib/start-stream.sh").chmod(0o755)
     (directory / "vendor/bin/ustreamer").chmod(0o755)
-    (directory / "bin/mediamtx").chmod(0o755)
 
 
 def install_runtime_integration_files(

@@ -25,7 +25,7 @@ from wifi_metrics import collect_network_performance
 from timelapse import load_config as load_timelapse_config, save_config as save_timelapse_config, state_snapshot as timelapse_snapshot
 from motion_detection import load_config as load_motion_config, save_config as save_motion_config, state_snapshot as motion_snapshot, FRAMES as MOTION_FRAMES
 from light_sensor import load_config as load_light_config, save_config as save_light_config, read_status as light_sensor_status
-from rtmp_output import load_config as load_rtmp_config, save_config as save_rtmp_config, public_config as public_rtmp_config
+from rtmp_output import load_config as load_rtmp_config, save_config as save_rtmp_config, public_config as public_rtmp_config, check_gstreamer_runtime
 from web_auth import SESSION_TTL, get_session, initialize_password, invalidate_session, is_configured, new_session, verify_password
 
 CONFIG = Path("/etc/petcam/petcam.conf")
@@ -192,7 +192,7 @@ async function refreshLiveStatus(){try{const d=await request("/api/live-status")
 
 async function refreshSystemInfo(){try{const data=await request("/api/system");$("installed-version").textContent="Installed version: "+(data.installed_version||"unknown")}catch(error){$("installed-version").textContent="Installed version unavailable: "+error.message}}
 
-async function refreshRTMP(){try{const data=await request("/api/rtmp");rtmpSettings=data.config||{enabled:false};syncOutputModeControls();let sourceLabel="";if(data.status?.source==="native_h264")sourceLabel="native H.264 stream copy";else if(data.status?.source==="mjpeg_copy")sourceLabel="MJPEG packet copy";let statusText="OBS RTSP feed: "+(data.status?.state||"stopped")+".";if(!data.status?.ffmpeg_available)statusText="FFmpeg is missing. Install it with sudo apt-get install ffmpeg.";else if(data.status?.active){statusText="OBS RTSP feed is running";if(sourceLabel)statusText+=" ("+sourceLabel+")";statusText+="."}$("rtmp-status").textContent=statusText}catch(error){$("rtmp-status").textContent="OBS feed status unavailable: "+error.message}}
+async function refreshRTMP(){try{const data=await request("/api/rtmp");rtmpSettings=data.config||{enabled:false};syncOutputModeControls();let sourceLabel="";if(data.status?.source==="native_h264")sourceLabel="native H.264 stream copy";else if(data.status?.source==="mjpeg_copy")sourceLabel="MJPEG packet copy";let statusText="OBS RTSP feed: "+(data.status?.state||"stopped")+".";if(data.status?.active){statusText="OBS RTSP feed is running";if(sourceLabel)statusText+=" ("+sourceLabel+")";statusText+="."}$("rtmp-status").textContent=statusText}catch(error){$("rtmp-status").textContent="OBS feed status unavailable: "+error.message}}
 async function saveRTMP(){if(h264ModeSelectedOrActive()){syncOutputModeControls();return}const data={enabled:$("rtmp-enabled").checked};$("save-rtmp").disabled=true;$("rtmp-status").textContent="Saving OBS output settings…";try{const result=await request("/api/rtmp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});let sourceLabel="";if(result.status?.source==="native_h264")sourceLabel="native H.264 stream copy";else if(result.status?.source==="mjpeg_copy")sourceLabel="MJPEG packet copy";let statusText="Settings saved; OBS feed: "+(result.status?.state||"stopped")+".";if(result.status?.active){statusText="OBS feed started";if(sourceLabel)statusText+=" ("+sourceLabel+")";statusText+="."}$("rtmp-status").textContent=statusText}catch(error){$("rtmp-status").textContent="Unable to save OBS output settings: "+error.message}finally{$("save-rtmp").disabled=false}}$("save-rtmp").onclick=saveRTMP;$("refresh-rtmp").onclick=refreshRTMP;
 function renderStatCards(root,items){root.replaceChildren();for(const [label,value] of items){const card=document.createElement("div"),name=document.createElement("small"),reading=document.createElement("strong");card.style.cssText="background:#1a1d22;border:1px solid #383e47;border-radius:8px;padding:.7rem;min-width:0";name.className="muted";name.textContent=label;reading.style.cssText="display:block;font-size:1.05rem;overflow-wrap:anywhere;margin-top:.2rem";reading.textContent=value===null||value===undefined||value===""?"Not available":String(value);card.append(name,reading);root.append(card)}}
 async function refreshStatistics(data=null){try{const d=data||await request("/api/live-status"),capture=d.capture_status||{},stream=d.stream_metrics||{},network=d.network_status||{},clients=stream.clients||[],system=d.system_metrics||{},wifi=network.wifi||{};const fps=capture.latest_captured_fps,delivered=clients.length?Math.max(...clients.map(client=>Number(client.average_fps||client.window_fps||0))):null,signal=wifi.signal_dbm,rtmp=d.rtmp_output_status||{};const bars=!wifi.connected?0:signal===null||signal===undefined?null:signal>=-50?4:signal>=-60?3:signal>=-67?2:signal>=-75?1:0;const labels=["none","weak","poor","good","excellent"];const reception=bars===null?"unknown":labels[bars];const metrics=[["Camera FPS",fps?Number(fps).toFixed(1):"Not reported"],["OBS Feed FPS (RTSP)",rtmp.active&&rtmp.fps!==null&&rtmp.fps!==undefined&&Number.isFinite(Number(rtmp.fps))?Number(rtmp.fps).toFixed(1):rtmp.enabled?(rtmp.state==="stalled"?"No recent output telemetry":rtmp.state):"Disabled"],["MJPEG delivered FPS (forwarded JPEG FPS)",delivered===null?"No active viewers":delivered.toFixed(1)],["Wi-Fi signal",reception+(signal===null||signal===undefined?"":" · "+signal+" dBm")+" · "+(bars===null?"—":"▮".repeat(bars)+"▯".repeat(4-bars))],["CPU",system.cpu_percent===null||system.cpu_percent===undefined?"Not available":Number(system.cpu_percent).toFixed(1)+"%"],["Memory",system.memory_used_mb===undefined?"Not available":system.memory_used_mb+" / "+system.memory_total_mb+" MiB"],["Network Up / Down",network.tx_mbps===undefined?"Not available":Number(network.tx_mbps).toFixed(2)+" / "+Number(network.rx_mbps||0).toFixed(2)+" Mbps"]];renderStatCards($("system-health-grid"),metrics);$("statistics-updated").textContent="Updated "+new Date(d.capture_status_updated_at*1000).toLocaleTimeString()+" · OBS feed: "+(rtmp.enabled?(rtmp.state||"starting"):"disabled")+"; MJPEG delivery is measured separately."}catch(error){$("statistics-updated").textContent="Statistics unavailable: "+error.message}}
@@ -412,15 +412,13 @@ def live_capture_status():
         pid = int(marker.get("pid", 0))
         if marker.get("native_h264") is True and pid > 1:
             os.kill(pid, 0)
-            command_line = Path(f"/proc/{pid}/cmdline").read_bytes().decode(errors="replace")
-            if "ffmpeg" in command_line and "h264" in command_line.lower():
-                result = {"active_capture_format": "H264", "active_resolution": config.get("RESOLUTION"),
-                          "configured_fps": config.get("FPS"), "capture_mode": "native_h264"}
-                status = json.loads(Path("/run/petcam/rtmp-status.json").read_text(encoding="utf-8"))
-                if status.get("source") == "native_h264":
-                    result["latest_captured_fps"] = status.get("fps")
-                    result["rtsp_output_ready"] = status.get("active") is True and status.get("state") == "publishing"
-                return result
+            result = {"active_capture_format": "H264", "active_resolution": config.get("RESOLUTION"),
+                      "configured_fps": config.get("FPS"), "capture_mode": "native_h264"}
+            status = json.loads(Path("/run/petcam/rtmp-status.json").read_text(encoding="utf-8"))
+            if status.get("source") == "native_h264":
+                result["latest_captured_fps"] = status.get("fps")
+                result["rtsp_output_ready"] = status.get("active") is True and status.get("state") == "publishing"
+            return result
     except (OSError, ValueError, TypeError, ProcessLookupError):
         pass
 
@@ -761,10 +759,12 @@ def save_selection(data):
         ).returncode == 0
 
     if requested_h264:
-        if not Path("/usr/bin/ffmpeg").is_file():
-            raise RuntimeError("FFmpeg is required for native H.264 RTSP output.")
         if load_timelapse_config().get("enabled") or load_motion_config().get("enabled"):
             raise ValueError("Disable timelapse and motion detection before selecting H.264; both require the MJPEG capture feed.")
+        try:
+            check_gstreamer_runtime()
+        except ValueError as error:
+            raise RuntimeError(str(error)) from error
 
     camera_applied = False
     try:
@@ -1377,8 +1377,11 @@ class Handler(BaseHTTPRequestHandler):
                 current_camera = parse_config(CONFIG)
                 if current_camera.get("FORMAT") == "H264" and data.get("enabled") is not True:
                     raise RuntimeError("OBS RTSP output is forced on while H.264 capture is selected.")
-                if data.get("enabled") and not Path("/usr/bin/ffmpeg").is_file():
-                    raise RuntimeError("FFmpeg is not installed. Run sudo apt-get update && sudo apt-get install ffmpeg, then save these settings again.")
+                if data.get("enabled"):
+                    try:
+                        check_gstreamer_runtime()
+                    except ValueError as error:
+                        raise RuntimeError(str(error)) from error
                 current = load_rtmp_config()
                 was_active = subprocess.run(
                     ["systemctl", "is-active", "--quiet", "petcam-rtmp.service"],
@@ -1483,7 +1486,6 @@ def rtmp_status_snapshot():
         state = "stalled"
     return {
         "enabled": config["enabled"],
-        "ffmpeg_available": Path("/usr/bin/ffmpeg").is_file(),
         "active": active_service and state == "publishing",
         "state": state,
         "fps": status.get("fps") if fresh else None,

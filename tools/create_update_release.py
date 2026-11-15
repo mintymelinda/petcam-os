@@ -17,7 +17,6 @@ REQUIRED_FILES = (
     "lib/camera.py",
     "lib/csi_stream.py",
     "lib/rtmp_output.py",
-    "bin/mediamtx",
     "lib/web_manager.py",
     "lib/web_auth.py",
     "lib/health_monitor.py",
@@ -41,6 +40,9 @@ REQUIRED_FILES = (
 # update archives only; do not reintroduce it into the current image release tree.
 COMPATIBILITY_FILES = {
     "lib/camera_profiles.py": b'"""Compatibility marker for pre-v0.2.3 updaters."""\n',
+    # Existing field updaters require this archive member even though the
+    # current image and release no longer ship or execute MediaMTX.
+    "bin/mediamtx": b'#!/bin/sh\necho "MediaMTX was replaced by the GStreamer RTSP server." >&2\nexit 1\n',
 }
 MAX_ARCHIVE = 300 * 1024 * 1024
 

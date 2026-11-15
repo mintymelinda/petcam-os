@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 CONFIG_PATH = Path(os.environ.get("PETCAM_CONFIG_PATH", "/etc/petcam/petcam.conf"))
+CAMERA_STATUS_PATH = Path("/var/lib/petcam/camera-status.json")
 LAST_GOOD_PATH = Path(os.environ.get("PETCAM_LAST_GOOD_PATH", str(CONFIG_PATH.with_name(CONFIG_PATH.name + ".last-good"))))
 DEFAULTS = {
     "SOURCE": "auto",
@@ -225,30 +226,129 @@ def wait_for_stream(port: int, timeout: int = 30) -> bool:
     return False
 
 
-def wait_for_native_h264(timeout: int = 30) -> bool:
-    """Wait for native H.264 MPEG-TS packets from the selected USB camera."""
-    receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        receiver.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        receiver.bind(("127.0.0.1", 10000))
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            receiver.settimeout(max(0.05, deadline - time.monotonic()))
-            try:
-                packet, _address = receiver.recvfrom(65536)
-            except socket.timeout:
+def _read_rtsp_response(connection, buffer: bytearray):
+    while b"\r\n\r\n" not in buffer:
+        chunk = connection.recv(4096)
+        if not chunk:
+            raise OSError("RTSP server closed the connection before its response headers.")
+        buffer.extend(chunk)
+    header_end = buffer.index(b"\r\n\r\n") + 4
+    header_block = bytes(buffer[:header_end])
+    lines = header_block.decode("iso-8859-1").split("\r\n")
+    status = lines[0]
+    headers = {}
+    for line in lines[1:]:
+        if ":" in line:
+            key, value = line.split(":", 1)
+            headers[key.strip().lower()] = value.strip()
+    body_length = int(headers.get("content-length", "0"))
+    while len(buffer) < header_end + body_length:
+        chunk = connection.recv(4096)
+        if not chunk:
+            raise OSError("RTSP server closed the connection before its response body.")
+        buffer.extend(chunk)
+    body = bytes(buffer[header_end:header_end + body_length])
+    del buffer[:header_end + body_length]
+    return status, headers, body
+
+
+def _read_h264_rtp_packet(connection, buffer: bytearray, deadline: float) -> bool:
+    while time.monotonic() < deadline:
+        while len(buffer) < 4:
+            connection.settimeout(max(0.1, deadline - time.monotonic()))
+            chunk = connection.recv(4096)
+            if not chunk:
                 return False
-            if packet:
-                return True
-        return False
-    except OSError:
-        return False
-    finally:
-        receiver.close()
+            buffer.extend(chunk)
+        if buffer[0] != 0x24:
+            del buffer[0]
+            continue
+        channel = buffer[1]
+        packet_length = int.from_bytes(buffer[2:4], "big")
+        while len(buffer) < packet_length + 4:
+            connection.settimeout(max(0.1, deadline - time.monotonic()))
+            chunk = connection.recv(4096)
+            if not chunk:
+                return False
+            buffer.extend(chunk)
+        packet = bytes(buffer[4:4 + packet_length])
+        del buffer[:4 + packet_length]
+        if channel != 0 or len(packet) < 13 or packet[1] & 0x7F != 96:
+            continue
+        header_length = 12 + (packet[0] & 0x0F) * 4
+        if packet[0] & 0x10:
+            if len(packet) < header_length + 4:
+                continue
+            extension_length = int.from_bytes(packet[header_length + 2:header_length + 4], "big")
+            header_length += 4 + extension_length * 4
+        if len(packet) <= header_length:
+            continue
+        nal_type = packet[header_length] & 0x1F
+        if nal_type in range(1, 24) or nal_type in (24, 28, 29):
+            return True
+    return False
+
+
+def wait_for_native_h264(timeout: int = 30) -> bool:
+    """Require a real H.264 RTP packet from the local GStreamer RTSP endpoint."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        buffer = bytearray()
+        try:
+            with socket.create_connection(("127.0.0.1", 8554), timeout=1) as connection:
+                connection.settimeout(1)
+                connection.sendall(
+                    "DESCRIBE rtsp://127.0.0.1:8554/petcam RTSP/1.0\r\n"
+                    "CSeq: 1\r\n"
+                    "Accept: application/sdp\r\n\r\n".encode("ascii")
+                )
+                status, headers, sdp = _read_rtsp_response(connection, buffer)
+                if " 200 " not in status or b"m=video " not in sdp or b"H264/90000" not in sdp.upper():
+                    continue
+                control = next(
+                    (line.split(":", 1)[1].strip() for line in sdp.decode("utf-8", errors="replace").splitlines()
+                     if line.startswith("a=control:") and line != "a=control:*"),
+                    None,
+                )
+                if not control:
+                    continue
+                base_uri = headers.get("content-base", "rtsp://127.0.0.1:8554/petcam/")
+                track_uri = control if control.startswith("rtsp://") else base_uri.rstrip("/") + "/" + control.lstrip("/")
+                connection.sendall(
+                    f"SETUP {track_uri} RTSP/1.0\r\n"
+                    "CSeq: 2\r\n"
+                    "Transport: RTP/AVP/TCP;unicast;interleaved=0-1\r\n\r\n".encode("ascii")
+                )
+                setup_status, setup_headers, _body = _read_rtsp_response(connection, buffer)
+                session = setup_headers.get("session", "").split(";", 1)[0]
+                if " 200 " not in setup_status or not session:
+                    continue
+                connection.sendall(
+                    f"PLAY rtsp://127.0.0.1:8554/petcam RTSP/1.0\r\n"
+                    "CSeq: 3\r\n"
+                    f"Session: {session}\r\n"
+                    "Range: npt=0.000-\r\n\r\n".encode("ascii")
+                )
+                play_status, _play_headers, _play_body = _read_rtsp_response(connection, buffer)
+                if " 200 " not in play_status:
+                    continue
+                if _read_h264_rtp_packet(connection, buffer, min(deadline, time.monotonic() + 3)):
+                    return True
+        except (OSError, ValueError, TimeoutError):
+            pass
+        time.sleep(min(0.25, max(0, deadline - time.monotonic())))
+    return False
 
 
 def wait_for_configured_capture(config: dict[str, str], ready=wait_for_stream) -> bool:
-    if config.get("FORMAT") == "H264":
+    native_h264 = config.get("FORMAT") == "H264"
+    if not native_h264 and config.get("FORMAT") == "auto":
+        try:
+            marker = json.loads(CAMERA_STATUS_PATH.read_text(encoding="utf-8"))
+            native_h264 = isinstance(marker, dict) and marker.get("native_h264") is True
+        except (OSError, ValueError):
+            native_h264 = False
+    if native_h264:
         return wait_for_native_h264()
     return ready(int(config["PORT"]))
 
@@ -262,6 +362,19 @@ def restart_capture() -> None:
     )
     if result.returncode:
         raise ConfigApplyError(result.stderr.strip() or "Unable to restart the camera stream service.")
+
+    # The RTSP server opens V4L2 after petcam-stream publishes the selected mode.
+    try:
+        output_config = json.loads(Path("/etc/petcam/rtmp.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        output_config = {"enabled": False}
+    if output_config.get("enabled") is True:
+        output_command = ["/usr/local/sbin/petcam-rtmp-service", "restart"]
+        if os.geteuid() != 0:
+            output_command = ["sudo", "-n", *output_command]
+        output = subprocess.run(output_command, capture_output=True, text=True, timeout=30, check=False)
+        if output.returncode:
+            raise ConfigApplyError(output.stderr.strip() or "Unable to start the GStreamer RTSP server.")
 
 
 def _apply_config_transaction(
