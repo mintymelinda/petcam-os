@@ -134,7 +134,7 @@ class ImageLayoutTests(unittest.TestCase):
         workflow = WORKFLOW.read_text()
         self.assertIn("runs-on: ubuntu-24.04-arm", workflow)
         self.assertIn("uses: usimd/pi-gen-action@v1.11.0", workflow)
-        self.assertIn("stage-list: stage0 stage1 stage2 stage-petcam-base stage-petcam", workflow)
+        self.assertIn("stage-list: stage0 stage1 stage2", workflow)
         self.assertIn("if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'", workflow)
         self.assertNotIn("warm-base-cache:", workflow)
         self.assertNotIn("actions/cache@", workflow)
