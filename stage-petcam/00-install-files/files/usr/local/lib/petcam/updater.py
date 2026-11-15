@@ -78,12 +78,14 @@ def write_update_state(stage: str, message: str = "", **details: object) -> None
     except (OSError, ValueError):
         pass
     now = time.time()
+    if stage == "checking":
+        previous = {}
     state = {
         **previous,
         "stage": stage,
         "message": message,
         "updated_at": now,
-        "started_at": previous.get("started_at", now) if stage not in ("complete", "failed") else previous.get("started_at", now),
+        "started_at": previous.get("started_at", now),
         **details,
     }
     if stage in ("complete", "failed"):
