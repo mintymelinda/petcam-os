@@ -51,6 +51,34 @@ class HealthMonitorTests(unittest.TestCase):
         self.assertEqual(report["recovery_count"], 4)
         self.assertEqual(report["next_recovery_at"], 0)
 
+
+    def test_native_h264_health_uses_rtsp_not_mjpeg_probes(self):
+        with mock.patch.object(MODULE, "parse_config", return_value={"FORMAT": "H264"}), \
+                mock.patch.object(MODULE, "native_h264_capture_active", return_value=True), \
+                mock.patch.object(MODULE, "native_h264_rtsp_ready", return_value=True), \
+                mock.patch.object(MODULE, "probe_stream") as probe, \
+                mock.patch.object(MODULE, "service_snapshot", side_effect=lambda name: self.active), \
+                mock.patch.object(MODULE, "restart_service") as restart:
+            report = MODULE.check_health(now=1000)
+        self.assertEqual(report["state"], "healthy")
+        self.assertEqual(report["capture_mode"], "native_h264")
+        self.assertTrue(report["backend_stream_ready"])
+        self.assertTrue(report["rtsp_output_ready"])
+        self.assertIsNone(report["public_stream_ready"])
+        probe.assert_not_called()
+        restart.assert_not_called()
+
+    def test_native_h264_rtsp_failure_restarts_only_publisher(self):
+        with mock.patch.object(MODULE, "parse_config", return_value={"FORMAT": "H264"}), \
+                mock.patch.object(MODULE, "native_h264_capture_active", return_value=True), \
+                mock.patch.object(MODULE, "native_h264_rtsp_ready", return_value=False), \
+                mock.patch.object(MODULE, "service_snapshot", side_effect=lambda name: self.active), \
+                mock.patch.object(MODULE, "restart_service", return_value=(True, "")) as restart:
+            report = MODULE.check_health(now=1000)
+        self.assertEqual(report["state"], "recovering")
+        self.assertEqual(report["recovery_target"], "petcam-rtmp.service")
+        restart.assert_called_once_with("petcam-rtmp.service")
+
     def test_health_recovery_pauses_during_config_transaction(self):
         with mock.patch.object(MODULE, "config_transaction_guard", return_value=contextlib.nullcontext(False)), \
                 mock.patch.object(MODULE, "service_snapshot") as snapshot, \
