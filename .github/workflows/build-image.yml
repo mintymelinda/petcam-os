@@ -64,6 +64,8 @@ jobs:
             stage-petcam/00-install-files/files/usr/local/lib/petcam/health_monitor.py \
             stage-petcam/00-install-files/files/usr/local/lib/petcam/config.py \
             stage-petcam/00-install-files/files/usr/local/lib/petcam/network_diagnostics.py \
+            stage-petcam/00-install-files/files/usr/local/lib/petcam/wifi_metrics.py \
+            stage-petcam/00-install-files/files/usr/local/lib/petcam/updater.py \
             stage-petcam/00-install-files/files/usr/local/lib/petcam/factory_reset.py \
             stage-petcam/00-install-files/files/usr/local/lib/petcam/home_assistant.py \
             stage-petcam/00-install-files/files/usr/local/lib/petcam/timelapse.py \
