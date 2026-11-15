@@ -959,7 +959,7 @@ def start_update():
     if status.returncode == 0:
         raise RuntimeError("An update is already running. Reconnect to its progress instead of starting it again.")
     result = subprocess.run(
-        ["sudo", "-n", "/usr/bin/systemctl", "start", "petcam-update.service"],
+        ["sudo", "-n", "/usr/bin/systemctl", "start", "--no-block", "petcam-update.service"],
         capture_output=True, text=True, timeout=10, check=False,
     )
     if result.returncode:
