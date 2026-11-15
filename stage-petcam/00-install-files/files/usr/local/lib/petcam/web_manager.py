@@ -715,13 +715,15 @@ def save_selection(data):
             check=False, timeout=5,
         ).returncode == 0
 
+    if requested_h264 or previous_camera.get("FORMAT") == "H264":
+        if rtmp_was_active:
+            set_rtmp_service("disable")
+
     if requested_h264:
         if not Path("/usr/bin/ffmpeg").is_file():
             raise RuntimeError("FFmpeg is required for native H.264 RTSP output.")
         if load_timelapse_config().get("enabled") or load_motion_config().get("enabled"):
             raise ValueError("Disable timelapse and motion detection before selecting H.264; both require the MJPEG capture feed.")
-        if rtmp_was_active:
-            set_rtmp_service("disable")
         save_rtmp_config({**previous_rtmp, "enabled": True})
 
     camera_applied = False
@@ -730,7 +732,7 @@ def save_selection(data):
         camera_applied = True
         current_rtmp = load_rtmp_config()
         if current_rtmp["enabled"]:
-            set_rtmp_service("enable" if requested_h264 or not rtmp_was_active else "restart")
+            set_rtmp_service("enable" if requested_h264 or previous_camera.get("FORMAT") == "H264" or not rtmp_was_active else "restart")
         elif rtmp_was_active:
             set_rtmp_service("disable")
         return updated
