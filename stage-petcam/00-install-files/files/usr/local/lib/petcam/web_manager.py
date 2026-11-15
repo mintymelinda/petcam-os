@@ -631,6 +631,37 @@ def set_camera_control(data):
         raise RuntimeError(result.stderr.strip() or "Unable to update camera control")
     return read_camera_controls(camera)
 
+def _run_service_commands(commands):
+    for command, timeout, failure_message in commands:
+        result = subprocess.run(
+            command, capture_output=True, text=True, timeout=timeout, check=False,
+        )
+        if result.returncode:
+            raise RuntimeError(result.stderr.strip() or failure_message)
+
+
+def apply_service_config_transaction(save, previous, candidate, commands, rollback_commands):
+    """Persist a feature config only when its dependent services transition successfully."""
+    updated = save(candidate)
+    try:
+        _run_service_commands(commands)
+    except Exception as apply_error:
+        try:
+            save(previous)
+        except Exception as restore_error:
+            raise RuntimeError(
+                f"Applying the new settings failed ({apply_error}); restoring the previous settings also failed ({restore_error})."
+            ) from apply_error
+        try:
+            _run_service_commands(rollback_commands)
+        except Exception as rollback_error:
+            raise RuntimeError(
+                f"New settings failed ({apply_error}); previous settings were restored, but service recovery failed ({rollback_error})."
+            ) from apply_error
+        raise
+    return updated
+
+
 def set_rtmp_service(action):
     result = subprocess.run(
         ["sudo", "/usr/local/sbin/petcam-rtmp-service", action],
@@ -1308,40 +1339,38 @@ class Handler(BaseHTTPRequestHandler):
                 if data.get("enabled") and parse_config(CONFIG).get("FORMAT") == "H264":
                     raise RuntimeError("Switch the camera back to MJPEG before enabling timelapse; timelapse requires MJPEG frames.")
                 current = load_timelapse_config()
-                updated = save_timelapse_config({**current, **data})
-                capture_restart = subprocess.run(
-                    ["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
-                    capture_output=True, text=True, timeout=45, check=False,
-                )
-                if capture_restart.returncode:
-                    raise RuntimeError(capture_restart.stderr.strip() or "Unable to restart camera after changing timelapse settings.")
+                commands = [
+                    (["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
+                     45, "Unable to restart camera after changing timelapse settings."),
+                ]
                 if load_rtmp_config()["enabled"]:
-                    rtmp_restart = subprocess.run(
+                    commands.append((
                         ["sudo", "/usr/bin/systemctl", "restart", "petcam-rtmp.service"],
-                        capture_output=True, text=True, timeout=30, check=False,
-                    )
-                    if rtmp_restart.returncode:
-                        raise RuntimeError(rtmp_restart.stderr.strip() or "Unable to restart OBS output after changing MJPEG consumer settings.")
+                        30, "Unable to restart OBS output after changing MJPEG consumer settings.",
+                    ))
+                updated = apply_service_config_transaction(
+                    save_timelapse_config, current, {**current, **data},
+                    commands, commands,
+                )
                 self.send_json(200, {"ok": True, "config": updated})
                 return
             if path == "/api/motion":
                 if data.get("enabled") and parse_config(CONFIG).get("FORMAT") == "H264":
                     raise RuntimeError("Switch the camera back to MJPEG before enabling motion detection; motion detection requires MJPEG frames.")
                 current = load_motion_config()
-                updated = save_motion_config({**current, **data})
-                capture_restart = subprocess.run(
-                    ["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
-                    capture_output=True, text=True, timeout=45, check=False,
-                )
-                if capture_restart.returncode:
-                    raise RuntimeError(capture_restart.stderr.strip() or "Unable to restart camera after changing motion settings.")
+                commands = [
+                    (["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
+                     45, "Unable to restart camera after changing motion settings."),
+                ]
                 if load_rtmp_config()["enabled"]:
-                    rtmp_restart = subprocess.run(
+                    commands.append((
                         ["sudo", "/usr/bin/systemctl", "restart", "petcam-rtmp.service"],
-                        capture_output=True, text=True, timeout=30, check=False,
-                    )
-                    if rtmp_restart.returncode:
-                        raise RuntimeError(rtmp_restart.stderr.strip() or "Unable to restart OBS output after changing MJPEG consumer settings.")
+                        30, "Unable to restart OBS output after changing MJPEG consumer settings.",
+                    ))
+                updated = apply_service_config_transaction(
+                    save_motion_config, current, {**current, **data},
+                    commands, commands,
+                )
                 self.send_json(200, {"ok": True, "config": updated})
                 return
             if path == "/api/light-sensor":
@@ -1359,22 +1388,26 @@ class Handler(BaseHTTPRequestHandler):
                     ["systemctl", "is-active", "--quiet", "petcam-rtmp.service"],
                     check=False, timeout=5,
                 ).returncode == 0
-                updated = save_rtmp_config({**current, **data})
-                action = ("restart" if was_active else "enable") if updated["enabled"] else "disable"
-                capture_restart = subprocess.run(
-                    ["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
-                    capture_output=True, text=True, timeout=45, check=False,
+                candidate = {**current, **data}
+                action = ("restart" if was_active else "enable") if candidate["enabled"] else "disable"
+                previous_action = (
+                    ("restart" if was_active else "enable") if current["enabled"] else "disable"
                 )
-                if capture_restart.returncode:
-                    raise RuntimeError(
-                        capture_restart.stderr.strip() or "Unable to restart the camera with the saved OBS output settings."
-                    )
-                result = subprocess.run(
-                    ["sudo", "/usr/local/sbin/petcam-rtmp-service", action],
-                    capture_output=True, text=True, timeout=30, check=False,
+                commands = [
+                    (["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
+                     45, "Unable to restart the camera with the saved OBS output settings."),
+                    (["sudo", "/usr/local/sbin/petcam-rtmp-service", action],
+                     30, "Unable to update OBS output service state."),
+                ]
+                rollback_commands = [
+                    (["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
+                     45, "Unable to restart the camera with the restored OBS output settings."),
+                    (["sudo", "/usr/local/sbin/petcam-rtmp-service", previous_action],
+                     30, "Unable to restore OBS output service state."),
+                ]
+                updated = apply_service_config_transaction(
+                    save_rtmp_config, current, candidate, commands, rollback_commands,
                 )
-                if result.returncode:
-                    raise RuntimeError(result.stderr.strip() or "Unable to update OBS output service state.")
                 self.send_json(200, {"ok": True, "config": public_rtmp_config(updated), "status": rtmp_status_snapshot()})
                 return
             if path == "/api/logout":

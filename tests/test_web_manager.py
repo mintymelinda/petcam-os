@@ -16,6 +16,33 @@ SPEC.loader.exec_module(MODULE)
 
 class WebManagerTests(unittest.TestCase):
 
+    def test_feature_config_transaction_restores_config_and_services_on_failure(self):
+        previous = {"enabled": False, "interval_seconds": 300}
+        candidate = {"enabled": True, "interval_seconds": 120}
+        saved = []
+        save = lambda value: saved.append(dict(value)) or dict(value)
+        commands = [
+            (["systemctl", "restart", "petcam-stream.service"], 45, "capture restart failed"),
+            (["systemctl", "restart", "petcam-rtmp.service"], 30, "publisher restart failed"),
+        ]
+        rollback_commands = [
+            (["systemctl", "restart", "petcam-stream.service"], 45, "capture rollback failed"),
+            (["systemctl", "restart", "petcam-rtmp.service"], 30, "publisher rollback failed"),
+        ]
+        results = [
+            mock.Mock(returncode=0, stderr=""),
+            mock.Mock(returncode=1, stderr="publisher failed"),
+            mock.Mock(returncode=0, stderr=""),
+            mock.Mock(returncode=0, stderr=""),
+        ]
+        with mock.patch.object(MODULE.subprocess, "run", side_effect=results) as run:
+            with self.assertRaisesRegex(RuntimeError, "publisher failed"):
+                MODULE.apply_service_config_transaction(
+                    save, previous, candidate, commands, rollback_commands,
+                )
+        self.assertEqual(saved, [candidate, previous])
+        self.assertEqual(run.call_count, 4)
+
     def test_manager_page_uses_configured_device_hostname_for_stream_urls(self):
         class Request:
             path = "/"
