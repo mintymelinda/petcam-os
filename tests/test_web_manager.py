@@ -304,7 +304,7 @@ class WebManagerTests(unittest.TestCase):
         self.assertEqual(apply.call_args.args[0]["FORMAT"], "H264")
         save_rtmp.assert_called_once_with({"enabled": True})
         self.assertEqual(run.call_args.args[0], [
-            "sudo", "/usr/local/sbin/petcam-rtmp-service", "enable"
+            "sudo", "-n", "/usr/local/sbin/petcam-rtmp-service", "enable"
         ])
 
     def test_h264_selection_is_rejected_when_mjpeg_consumers_are_enabled(self):
