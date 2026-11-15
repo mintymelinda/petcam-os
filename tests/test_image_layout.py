@@ -66,6 +66,7 @@ class ImageLayoutTests(unittest.TestCase):
         )
         self.assertIn("visudo -cf /etc/sudoers.d/petcam-rtmp", script)
         self.assertIn("/usr/bin/systemctl start --no-block petcam-update.service", script)
+        self.assertIn("ReadWritePaths=/etc/petcam /var/lib/petcam /run/sudo/ts", script)
         self.assertIn(
             "/usr/bin/journalctl -u petcam-stream.service -n 300 --no-pager",
             script,
