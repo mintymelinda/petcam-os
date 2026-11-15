@@ -168,7 +168,7 @@ def main():
     config = load_config()
     if not config["enabled"]:
         logging.info("OBS RTSP output is disabled; server will remain stopped.")
-        _write_status("disabled", None)
+        _write_status("disabled", None, STATUS_PATH)
         return
 
     camera_status = load_camera_status()
