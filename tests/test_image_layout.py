@@ -58,6 +58,15 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn('/opt/petcam/current/lib/web_manager.py', script)
         self.assertIn('/opt/petcam/current/lib/csi_stream.py', script)
 
+    def test_updater_sandbox_can_install_privileged_assets(self):
+        script = CONFIGURE.read_text()
+        self.assertIn(
+            "ReadWritePaths=/opt/petcam /var/lib/petcam/update /etc/systemd/system /etc/petcam /usr/local/sbin /etc/sudoers.d",
+            script,
+        )
+        self.assertIn("visudo -cf /etc/sudoers.d/petcam-rtmp", script)
+        self.assertNotIn("cat > /usr/local/sbin/petcam-rtmp-service", script)
+
     def test_stream_backend_uses_loopback_port_separate_from_web_ui(self):
         script = CONFIGURE.read_text()
         self.assertIn('PORT=8081', script)
