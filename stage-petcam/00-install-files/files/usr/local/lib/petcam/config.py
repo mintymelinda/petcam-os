@@ -226,14 +226,14 @@ def wait_for_stream(port: int, timeout: int = 30) -> bool:
 
 
 def _read_rtsp_response(connection, buffer: bytearray):
-    while b"\\r\\n\\r\\n" not in buffer:
+    while b"\r\n\r\n" not in buffer:
         chunk = connection.recv(4096)
         if not chunk:
             raise OSError("RTSP server closed the connection before its response headers.")
         buffer.extend(chunk)
-    header_end = buffer.index(b"\\r\\n\\r\\n") + 4
+    header_end = buffer.index(b"\r\n\r\n") + 4
     header_block = bytes(buffer[:header_end])
-    lines = header_block.decode("iso-8859-1").split("\\r\\n")
+    lines = header_block.decode("iso-8859-1").split("\r\n")
     status = lines[0]
     headers = {}
     for line in lines[1:]:
@@ -293,9 +293,9 @@ def wait_for_native_h264(timeout: int = 30) -> bool:
             with socket.create_connection(("127.0.0.1", 8554), timeout=1) as connection:
                 connection.settimeout(1)
                 connection.sendall(
-                    "DESCRIBE rtsp://127.0.0.1:8554/petcam RTSP/1.0\\r\\n"
-                    "CSeq: 1\\r\\n"
-                    "Accept: application/sdp\\r\\n\\r\\n".encode("ascii")
+                    "DESCRIBE rtsp://127.0.0.1:8554/petcam RTSP/1.0\r\n"
+                    "CSeq: 1\r\n"
+                    "Accept: application/sdp\r\n\r\n".encode("ascii")
                 )
                 status, headers, sdp = _read_rtsp_response(connection, buffer)
                 if " 200 " not in status or b"m=video " not in sdp or b"H264/90000" not in sdp.upper():
@@ -310,19 +310,19 @@ def wait_for_native_h264(timeout: int = 30) -> bool:
                 base_uri = headers.get("content-base", "rtsp://127.0.0.1:8554/petcam/")
                 track_uri = control if control.startswith("rtsp://") else base_uri.rstrip("/") + "/" + control.lstrip("/")
                 connection.sendall(
-                    f"SETUP {track_uri} RTSP/1.0\\r\\n"
-                    "CSeq: 2\\r\\n"
-                    "Transport: RTP/AVP/TCP;unicast;interleaved=0-1\\r\\n\\r\\n".encode("ascii")
+                    f"SETUP {track_uri} RTSP/1.0\r\n"
+                    "CSeq: 2\r\n"
+                    "Transport: RTP/AVP/TCP;unicast;interleaved=0-1\r\n\r\n".encode("ascii")
                 )
                 setup_status, setup_headers, _body = _read_rtsp_response(connection, buffer)
                 session = setup_headers.get("session", "").split(";", 1)[0]
                 if " 200 " not in setup_status or not session:
                     continue
                 connection.sendall(
-                    f"PLAY rtsp://127.0.0.1:8554/petcam RTSP/1.0\\r\\n"
-                    "CSeq: 3\\r\\n"
-                    f"Session: {session}\\r\\n"
-                    "Range: npt=0.000-\\r\\n\\r\\n".encode("ascii")
+                    f"PLAY rtsp://127.0.0.1:8554/petcam RTSP/1.0\r\n"
+                    "CSeq: 3\r\n"
+                    f"Session: {session}\r\n"
+                    "Range: npt=0.000-\r\n\r\n".encode("ascii")
                 )
                 play_status, _play_headers, _play_body = _read_rtsp_response(connection, buffer)
                 if " 200 " not in play_status:
