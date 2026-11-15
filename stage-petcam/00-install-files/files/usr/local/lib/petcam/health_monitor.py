@@ -93,15 +93,14 @@ def probe_stream(url: str, timeout: int) -> bool:
 
 
 def native_h264_capture_active() -> bool:
-    """Return true only while the marked native H.264 FFmpeg process is alive."""
+    """Return true while the marked camera-mode supervisor process is alive."""
     try:
         marker = json.loads(CAMERA_STATUS_FILE.read_text(encoding="utf-8"))
         pid = int(marker.get("pid", 0))
         if marker.get("native_h264") is not True or pid <= 1:
             return False
         os.kill(pid, 0)
-        command_line = Path(f"/proc/{pid}/cmdline").read_bytes().decode(errors="replace")
-        return "ffmpeg" in command_line and "h264" in command_line.lower()
+        return True
     except (OSError, ValueError, TypeError):
         return False
 
