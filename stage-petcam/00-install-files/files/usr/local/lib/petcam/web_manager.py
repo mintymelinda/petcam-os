@@ -182,7 +182,7 @@ function selectedCaptureMode(){try{return JSON.parse($("mode").value)}catch(erro
 function h264ModeSelectedOrActive(){return (activeConfig?.SOURCE==="usb"&&activeConfig?.FORMAT==="H264")||selectedCaptureMode()?.format==="H264"}
 function syncOutputModeControls(){const forced=h264ModeSelectedOrActive();$("rtmp-enabled").checked=forced||!!rtmpSettings.enabled;$("rtmp-enabled").disabled=forced;$("save-rtmp").disabled=forced;document.querySelectorAll("[data-browser-feed-link]").forEach(link=>{link.closest("p").hidden=forced});$("h264-mode-note").hidden=!forced}
 function projectedPixelRate(mode){return mode.width*mode.height*mode.fps}
-function exceedsPerformanceBudget(camera,mode){const budget=Number(camera?.hardware_budget_pixels_per_second||0);return budget>0&&projectedPixelRate(mode)>budget}
+function exceedsPerformanceBudget(camera,mode){if(mode.format==="H264")return false;const budget=Number(camera?.hardware_budget_pixels_per_second||0);return budget>0&&projectedPixelRate(mode)>budget}
 function confirmPerformanceOverride(camera,mode){if(!exceedsPerformanceBudget(camera,mode))return false;const estimate=projectedPixelRate(mode),budget=Number(camera.hardware_budget_pixels_per_second);return confirm("Performance warning: this capture mode is estimated at "+estimate.toLocaleString()+" pixels/second, above the "+camera.hardware_tier+" device guideline of "+budget.toLocaleString()+" pixels/second. It may cause low frame rates, dropped frames, or an unresponsive camera stream. Use this mode anyway?")}
 function showSelectedModeWarning(){const c=inventory[+$("camera").value],raw=$("mode").value;if(!c||!raw)return;const mode=JSON.parse(raw);if(exceedsPerformanceBudget(c,mode))$("message").textContent="Performance warning: this capture mode exceeds the estimated "+c.hardware_tier+" device budget. You can still apply it after confirming the warning.";else $("message").textContent=mode.format==="H264"?"H.264 selected. The HTTP Browser Source will be disabled and OBS RTSP output will be forced on.":"Selected mode is within the estimated device performance budget.";syncOutputModeControls()}
 function activeCameraMatches(camera,config){if(!config)return false;if(config.SOURCE==="usb")return camera.kind==="usb"&&(config.USB_PHYSICAL_PATH?camera.physical_path===config.USB_PHYSICAL_PATH:camera.device===config.DEVICE);if(config.SOURCE==="csi")return camera.kind==="csi"&&(config.CSI_DEVICE_PATH?camera.device_path===config.CSI_DEVICE_PATH:String(camera.camera)===String(config.CAMERA));return false}
@@ -700,7 +700,7 @@ def save_selection(data):
         }
     estimated_pixels_per_second = width * height * float(fps)
     pixel_budget = PIXEL_BUDGETS[model_tier(read_model())]
-    if estimated_pixels_per_second > pixel_budget and data.get("allow_performance_override") is not True:
+    if values["FORMAT"] != "H264" and estimated_pixels_per_second > pixel_budget and data.get("allow_performance_override") is not True:
         raise ValueError(
             "This capture mode exceeds the estimated performance budget for this device. "
             "Confirm the warning to use it anyway, or choose a lower resolution or FPS."
