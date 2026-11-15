@@ -138,7 +138,7 @@ class UpdateArchiveTests(unittest.TestCase):
             for name, content in files.items():
                 info = tarfile.TarInfo(name)
                 info.size = len(content)
-                info.mode = 0o755 if name.endswith((".sh", "ustreamer")) or name == "bin/mediamtx" else 0o644
+                info.mode = 0o755 if name.endswith((".sh", "ustreamer")) or name in ("bin/mediamtx", "bin/petcam-rtmp-service") else 0o644
                 bundle.addfile(info, io.BytesIO(content))
         return stream.getvalue()
 
@@ -281,6 +281,8 @@ class UpdateArchiveTests(unittest.TestCase):
             "etc/petcam/home-assistant.conf": b"MQTT_ENABLED=false\n",
             "etc/petcam/rtmp.json": b"{\"enabled\":false}\n",
             "bin/mediamtx": b"MediaMTX binary",
+            "bin/petcam-rtmp-service": b"#!/bin/sh\n",
+            "etc/sudoers.d/petcam-rtmp": b"petcam ALL=(root) NOPASSWD: /usr/local/sbin/petcam-rtmp-service restart\n",
             "lib/start-stream.sh": b"#!/bin/sh\n",
             "vendor/bin/ustreamer": b"binary",
         }
@@ -290,6 +292,7 @@ class UpdateArchiveTests(unittest.TestCase):
             validate_release(root, "1.2.3")
             self.assertTrue((root / "vendor/bin/ustreamer").stat().st_mode & 0o111)
             self.assertTrue((root / "bin/mediamtx").stat().st_mode & 0o111)
+            self.assertTrue((root / "bin/petcam-rtmp-service").stat().st_mode & 0o111)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             safe_extract(self.archive({"VERSION": b"9.9.9"}), root)
