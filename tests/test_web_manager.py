@@ -61,9 +61,6 @@ class WebManagerTests(unittest.TestCase):
         self.assertNotIn('/api/password', MODULE.PAGE)
 
     def test_browser_source_shows_camera_connection_status_and_retries(self):
-        browser_source = MODULE.StreamHandler.do_GET.__code__
-        self.assertIn("Camera stream unavailable", MODULE.inspect.getsource(MODULE.StreamHandler.do_GET)) if hasattr(MODULE, "inspect") else None
-        self.assertIn('id="status"', MODULE.StreamHandler.do_GET.__code__.co_consts[1] if False else MODULE.PAGE) if False else None
         source = Path("stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py").read_text()
         self.assertIn('id="status">Connecting to PetCam camera...', source)
         self.assertIn('image.onerror=', source)
