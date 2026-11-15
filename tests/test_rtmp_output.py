@@ -80,6 +80,17 @@ class OBSOutputTests(unittest.TestCase):
         self.assertIn("rtpjpegpay", pipeline)
         self.assertNotIn("ffmpeg", pipeline)
 
+    def test_runtime_check_requires_all_gstreamer_plugins(self):
+        class Factory:
+            @staticmethod
+            def find(name):
+                return object() if name != "h264parse" else None
+
+        fake_gst = type("FakeGst", (), {"ElementFactory": Factory})
+        with patch.object(MODULE, "_load_gstreamer", return_value=(None, fake_gst, None)):
+            with self.assertRaisesRegex(MODULE.RTMPConfigError, "h264parse"):
+                MODULE.check_gstreamer_runtime()
+
     def test_camera_marker_requires_a_live_capture_service_pid(self):
         with tempfile.TemporaryDirectory() as directory:
             marker = Path(directory) / "camera-status.json"
