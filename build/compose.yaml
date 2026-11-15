@@ -1,17 +1,18 @@
 services:
-  image-validation:
-    image: petcam-image-validation:local
+  image-assembly:
+    image: petcam-image-assembly:local
     build:
       context: ..
       dockerfile: build/Dockerfile
     working_dir: /workspace
-    environment:
-      IMAGE_PATH: ${IMAGE_PATH:?Set IMAGE_PATH to the pi-gen action output}
-      IMAGE_URL: ${IMAGE_URL:?Set IMAGE_URL to the published HTTPS image URL}
-      RELEASE_VERSION: ${RELEASE_VERSION:?Set RELEASE_VERSION}
-      IMAGE_SCHEMA_PATH: /workspace/.build/os-list-schema.json
+    privileged: true
     volumes:
       - ..:/workspace
-    read_only: true
-    tmpfs:
-      - /tmp
+      - /dev:/dev
+      - /run/udev:/run/udev:ro
+    environment:
+      BASE_IMAGE_PATH: \${BASE_IMAGE_PATH:?Set BASE_IMAGE_PATH to the raw pi-gen image}
+      OUTPUT_IMAGE_PATH: \${OUTPUT_IMAGE_PATH:?Set OUTPUT_IMAGE_PATH to the assembled image path}
+      IMAGE_URL: \${IMAGE_URL:?Set IMAGE_URL to the published HTTPS image URL}
+      RELEASE_VERSION: \${RELEASE_VERSION:?Set RELEASE_VERSION}
+      IMAGE_SCHEMA_PATH: /workspace/.build/os-list-schema.json
