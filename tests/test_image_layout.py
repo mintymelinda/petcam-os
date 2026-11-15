@@ -94,7 +94,7 @@ class ImageLayoutTests(unittest.TestCase):
             STAGE / "00-install-files/files/usr/local/lib/petcam/web_manager.py"
         ).read_text())
 
-    def test_ustreamer_build_is_part_of_the_cached_base_rootfs(self):
+    def test_ustreamer_build_is_part_of_the_petcam_base_image(self):
         build_script = USTREAMER_BUILD.read_text()
         configure_script = CONFIGURE.read_text()
         packages = BASE_PACKAGES.read_text().splitlines()
@@ -114,7 +114,7 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn('cp -a /opt/petcam/ustreamer/.', configure_script)
         self.assertNotIn("git -C /opt/ustreamer fetch", configure_script)
         self.assertIn("apt-get purge -y --auto-remove", build_script)
-        self.assertIn("umount /var/cache/apt/archives", build_script)
+        self.assertNotIn("APT_ARCHIVE_CACHE", build_script)
         self.assertNotIn("apt-get purge -y --auto-remove", configure_script)
         script = configure_script
         self.assertIn("chown root:petcam /etc/petcam", script)
@@ -130,16 +130,16 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn('case "$action" in\n    start|restart|enable)', script)
         self.assertNotIn(r"\nchmod", script)
 
-    def test_main_branch_seeds_cache_shared_by_release_tags(self):
+    def test_image_workflow_uses_the_new_arm_action_without_pi_gen_caches(self):
         workflow = WORKFLOW.read_text()
-        self.assertIn("warm-base-cache:", workflow)
-        self.assertIn("github.ref == 'refs/heads/main' || github.ref_type == 'tag'", workflow)
-        self.assertIn("needs: validate", workflow)
-        self.assertIn("actions/cache/restore@v4", workflow)
-        self.assertIn("lookup-only: true", workflow)
-        self.assertIn("actions/cache/save@v4", workflow)
-        self.assertIn("pigen-base-rootfs-v2-", workflow)
-        self.assertIn('STAGE_LIST="stage0 stage1 stage2 stage-petcam-base"', workflow)
+        self.assertIn("runs-on: ubuntu-24.04-arm", workflow)
+        self.assertIn("uses: usimd/pi-gen-action@v1.11.0", workflow)
+        self.assertIn("stage-list: stage0 stage1 stage2 stage-petcam-base stage-petcam", workflow)
+        self.assertIn("if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'", workflow)
+        self.assertNotIn("warm-base-cache:", workflow)
+        self.assertNotIn("actions/cache@", workflow)
+        self.assertNotIn("APT_ARCHIVE_CACHE", workflow)
+        self.assertNotIn("pigen-base-rootfs-v2-", workflow)
 
     def test_home_assistant_mqtt_is_optional_and_disabled_by_default(self):
         script = CONFIGURE.read_text()
