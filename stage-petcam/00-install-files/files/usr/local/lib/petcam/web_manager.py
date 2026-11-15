@@ -1398,7 +1398,7 @@ class Handler(BaseHTTPRequestHandler):
                 rollback_commands = [
                     (["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
                      45, "Unable to restart the camera with the restored OBS output settings."),
-                    (["sudo", "/usr/local/sbin/petcam-rtmp-service", previous_action],
+                    (["sudo", "-n", "/usr/local/sbin/petcam-rtmp-service", previous_action],
                      30, "Unable to restore OBS output service state."),
                 ]
                 updated = apply_service_config_transaction(
