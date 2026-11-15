@@ -92,22 +92,31 @@ def native_h264_available(status_url=None, timeout=0, marker_path=CAMERA_STATUS_
     """Detect the native V4L2 H.264 capture selection held by petcam-stream."""
     del status_url, timeout
     status = load_camera_status(marker_path)
-    return status.get("native_h264") is True and bool(status.get("device"))
+    return status.get("native_h264") is True and (bool(status.get("device")) or status.get("backend") == "csi")
 
 
 def build_gstreamer_launch(camera_status, mjpeg_url="http://127.0.0.1:8081/stream"):
     """Build a GStreamer RTSP factory pipeline; compressed video is never decoded."""
     if camera_status.get("native_h264") is True:
-        device = camera_status.get("device", "")
         resolution = camera_status.get("resolution", "")
         fps = camera_status.get("fps", "")
-        if not re.fullmatch(r"/dev/(?:video[0-9]+|v4l/by-id/[A-Za-z0-9._:+_-]+)", device):
-            raise RTMPConfigError("Native H.264 camera device path is invalid.")
         if not re.fullmatch(r"[1-9][0-9]{0,4}x[1-9][0-9]{0,4}", str(resolution)):
             raise RTMPConfigError("Native H.264 resolution is invalid.")
         if not re.fullmatch(r"[1-9][0-9]{0,2}", str(fps)):
             raise RTMPConfigError("Native H.264 frame rate is invalid.")
         width, height = resolution.split("x", 1)
+        if camera_status.get("backend") == "csi":
+            port = camera_status.get("tcp_port", 8556)
+            if not isinstance(port, int) or not 1 <= port <= 65535:
+                raise RTMPConfigError("CSI H.264 bridge port is invalid.")
+            return (
+                f"( tcpclientsrc host=127.0.0.1 port={port} do-timestamp=true ! "
+                "h264parse config-interval=-1 ! "
+                "rtph264pay name=pay0 pt=96 config-interval=1 )"
+            )
+        device = camera_status.get("device", "")
+        if not re.fullmatch(r"/dev/(?:video[0-9]+|v4l/by-id/[A-Za-z0-9._:+_-]+)", device):
+            raise RTMPConfigError("Native H.264 camera device path is invalid.")
         return (
             f"( v4l2src device={shlex.quote(device)} ! "
             f"video/x-h264,width={width},height={height},framerate={fps}/1 ! "
@@ -140,7 +149,7 @@ def _write_status(state, source, path=STATUS_PATH):
 def check_gstreamer_runtime():
     """Validate the RTSP server bindings and the elements used by both camera modes."""
     _GLib, Gst, _GstRtspServer = _load_gstreamer()
-    required = ("v4l2src", "h264parse", "rtph264pay", "souphttpsrc", "multipartdemux", "jpegparse", "rtpjpegpay")
+    required = ("v4l2src", "tcpclientsrc", "h264parse", "rtph264pay", "souphttpsrc", "multipartdemux", "jpegparse", "rtpjpegpay")
     missing = [name for name in required if Gst.ElementFactory.find(name) is None]
     if missing:
         raise RTMPConfigError("Required GStreamer element(s) are missing: " + ", ".join(missing))
@@ -173,7 +182,7 @@ def main():
 
     camera_status = load_camera_status()
     native_h264 = camera_status.get("native_h264") is True
-    source = "native_h264" if native_h264 else "mjpeg_copy"
+    source = ("native_h264_csi" if camera_status.get("backend") == "csi" else "native_h264") if native_h264 else "mjpeg_copy"
     launch = build_gstreamer_launch(camera_status)
     check_gstreamer_runtime()
     GLib, _Gst, GstRtspServer = _load_gstreamer()

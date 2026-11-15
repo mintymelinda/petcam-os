@@ -51,7 +51,7 @@ The image installs PetCam application files into versioned releases under `/opt/
 
 ## Camera stream and management
 
-PetCam selects a capture backend automatically. USB UVC cameras use [µStreamer](https://github.com/pikvm/ustreamer), preferring native MJPEG passthrough and using CPU JPEG encoding for supported raw formats when necessary. CSI modules use Raspberry Pi's `rpicam-vid` stack and are encoded to MJPEG.
+PetCam selects a capture backend automatically. USB UVC cameras use [µStreamer](https://github.com/pikvm/ustreamer), preferring native MJPEG passthrough and using CPU JPEG encoding for supported raw formats when necessary. CSI modules use Raspberry Pi's `rpicam-vid` stack and default to MJPEG. When OBS RTSP output is enabled, MJPEG consumers are disabled, and a Raspberry Pi hardware H.264 encoder is positively detected, CSI capture uses that hardware encoder and sends the compressed stream directly to GStreamer RTSP. Boards without the encoder (including Raspberry Pi 5) retain MJPEG; software H.264 encoding is never used.
 
 - OBS stream: `http://petcam.local:8080/stream`
 - Authenticated manager: `https://petcam.local:8443/`
@@ -99,7 +99,7 @@ An optional MQTT 3.1.1 publisher exposes health and stream-status entities throu
 
 ### OBS RTSP output
 
-An optional GStreamer RTSP server exposes the camera feed to OBS. USB cameras with native H.264 support are served directly from V4L2 as RTP without decoding or re-encoding; MJPEG cameras retain the existing browser feed and can be packetized for RTSP. See [docs/rtmp-output.md](docs/rtmp-output.md).
+An optional GStreamer RTSP server exposes the camera feed to OBS. USB cameras with native H.264 support are served directly from V4L2 as RTP without decoding or re-encoding. CSI cameras use the Raspberry Pi hardware H.264 encoder only when its V4L2 encode node is confirmed; otherwise they retain MJPEG. H.264 capture disables the browser feed and is packetized directly for RTSP without software encoding. See [docs/rtmp-output.md](docs/rtmp-output.md).
 
 ## Runtime status and diagnostics
 

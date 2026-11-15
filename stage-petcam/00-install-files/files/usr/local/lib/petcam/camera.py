@@ -334,6 +334,30 @@ def discover_devices(sysfs_root=Path("/sys/class/video4linux"), dev_root=Path("/
                 break
     return devices
 
+def detect_hardware_h264_encoder(sysfs_root=Path("/sys/class/video4linux"), dev_root=Path("/dev")):
+    """Return a confirmed Raspberry Pi hardware H.264 encoder node, never a software fallback."""
+    for entry in sorted(sysfs_root.glob("video*")):
+        try:
+            name = (entry / "name").read_text(encoding="utf-8").strip().lower()
+        except OSError:
+            continue
+        if "bcm2835-codec-encode" not in name:
+            continue
+        device = dev_root / entry.name
+        if not device.exists():
+            continue
+        try:
+            result = subprocess.run(
+                ["v4l2-ctl", "--device", str(device), "--list-formats"],
+                capture_output=True, text=True, check=False, timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if result.returncode == 0 and re.search(r"['\"]H264['\"]|H\.264", result.stdout, re.IGNORECASE):
+            return {"available": True, "device": str(device), "encoder": name, "format": "H264"}
+    return {"available": False, "device": None, "encoder": None, "format": None}
+
+
 def ustreamer_format(pixel_format):
     """Translate V4L2 native JPEG fourcc values to µStreamer passthrough format."""
     return "MJPEG" if pixel_format in NATIVE_JPEG_FORMATS else pixel_format
@@ -415,7 +439,7 @@ def select_mode(devices, tier):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("discover", "select", "select-h264", "discover-csi", "select-csi", "status"))
+    parser.add_argument("command", choices=("discover", "select", "select-h264", "discover-csi", "select-csi", "h264-encoder", "status"))
     parser.add_argument("--device")
     parser.add_argument("--physical-path")
     parser.add_argument("--camera", type=int)
@@ -443,6 +467,10 @@ def main():
     if args.command == "discover-csi":
         print(json.dumps({"model": model, "tier": tier, "csi_cameras": discover_csi_cameras()}, indent=2))
         return 0
+    if args.command == "h264-encoder":
+        result = detect_hardware_h264_encoder()
+        print(json.dumps(result))
+        return 0 if result["available"] else 1
     if args.command == "select-csi":
         try:
             selected_csi = select_csi_mode(
@@ -643,6 +671,21 @@ def main():
         "dropped_frames_note": "The active capture backend does not expose a reliable cumulative dropped-frame counter; not inferred.",
         "bitrate_note": "The MJPEG stream rate is sampled locally for one second; interface transmit rate includes all non-loopback traffic.",
     }
+    try:
+        marker = json.loads(Path("/var/lib/petcam/camera-status.json").read_text(encoding="utf-8"))
+        marker_pid = int(marker.get("pid", 0))
+        if marker.get("native_h264") is True and marker_pid > 1:
+            os.kill(marker_pid, 0)
+            report.update({
+                "active_backend": marker.get("backend", report["active_backend"]),
+                "active_capture_format": "H264",
+                "active_resolution": marker.get("resolution", report["active_resolution"]),
+                "active_camera_device": f"CSI camera {marker.get('camera')}" if marker.get("backend") == "csi" else marker.get("device"),
+                "hardware_encoder": marker.get("encoder"),
+                "capture_mode": "native_h264_csi" if marker.get("backend") == "csi" else "native_h264",
+            })
+    except (OSError, ValueError, TypeError, ProcessLookupError):
+        pass
     print(json.dumps(report, indent=2))
     return 0 if status == "active" else 1
 

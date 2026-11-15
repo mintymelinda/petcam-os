@@ -111,7 +111,7 @@ def native_h264_rtsp_ready(now: float | None = None) -> bool:
     try:
         status = json.loads(RTSP_STATUS_FILE.read_text(encoding="utf-8"))
         age = now - float(status.get("updated_at", 0))
-        return (status.get("source") == "native_h264"
+        return (status.get("source") in ("native_h264", "native_h264_csi")
                 and status.get("state") == "publishing"
                 and status.get("active") is True
                 and 0 <= age <= RTSP_STATUS_MAX_AGE_SECONDS)

@@ -174,6 +174,35 @@ class CameraDiscoveryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             MODULE.select_csi_mode(cameras, "pi5", resolution="123x456")
 
+    def test_hardware_h264_encoder_requires_codec_encode_node_and_h264_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sysfs = root / "sys/class/video4linux"
+            dev = root / "dev"
+            node = sysfs / "video11"
+            node.mkdir(parents=True)
+            dev.mkdir()
+            (node / "name").write_text("bcm2835-codec-encode")
+            (dev / "video11").touch()
+            result = type("Result", (), {"returncode": 0, "stdout": "ioctl: VIDIOC_ENUM_FMT\\n [0]: 'H264' (H.264, compressed)\\n"})()
+            with patch.object(MODULE.subprocess, "run", return_value=result) as run:
+                detected = MODULE.detect_hardware_h264_encoder(sysfs, dev)
+            self.assertTrue(detected["available"])
+            self.assertEqual(detected["device"], str(dev / "video11"))
+            self.assertIn("--list-formats", run.call_args.args[0])
+
+    def test_hardware_h264_encoder_rejects_software_or_non_encoder_nodes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sysfs = root / "sys/class/video4linux"
+            dev = root / "dev"
+            node = sysfs / "video11"
+            node.mkdir(parents=True)
+            dev.mkdir()
+            (node / "name").write_text("rpivid-decoder")
+            (dev / "video11").touch()
+            self.assertFalse(MODULE.detect_hardware_h264_encoder(sysfs, dev)["available"])
+
     def test_model_tiers(self):
         self.assertEqual(MODULE.model_tier("Raspberry Pi Zero W Rev 1.1"), "zero")
         self.assertEqual(MODULE.model_tier("Raspberry Pi Zero 2 W Rev 1.0"), "zero2")

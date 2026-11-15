@@ -10,7 +10,7 @@ Use the page URL as an OBS Browser Source:
 http://PETCAM_HOST:8080/
 ```
 
-The page contains a transparent, full-size image element backed by the existing MJPEG HTTP stream. PetCam forwards the MJPEG multipart response unchanged. There is no dashboard preview connection and no additional camera capture process. This source is available while the camera is operating in MJPEG mode. Selecting an advertised USB H.264 mode disables the HTTP Browser Source and forces RTSP output on. The manager hides the Browser Source links while H.264 is active or selected, and the HTTP endpoint returns 503 with instructions to use RTSP. Timelapse and motion detection must be disabled before applying H.264 because both consume MJPEG frames.
+The page contains a transparent, full-size image element backed by the existing MJPEG HTTP stream. PetCam forwards the MJPEG multipart response unchanged. There is no dashboard preview connection and no additional camera capture process. This source is available while the camera is operating in MJPEG mode. Selecting an advertised USB H.264 mode disables the HTTP Browser Source and forces RTSP output on. CSI capture also switches to H.264 when RTSP is enabled and PetCam confirms a Raspberry Pi hardware H.264 encoder; in that mode the Browser Source is disabled. The manager hides the Browser Source links while H.264 is active or selected, and the HTTP endpoint returns 503 with instructions to use RTSP. Timelapse and motion detection must be disabled before applying H.264 because both consume MJPEG frames.
 
 ## RTSP Media Source
 
@@ -20,11 +20,11 @@ For MJPEG capture, enable **System → OBS Output → Enable OBS RTSP feed** to 
 rtsp://PETCAM_HOST:8554/petcam
 ```
 
-When H.264 is selected, PetCam captures the advertised V4L2 H.264 mode and packetizes the camera's existing H.264 bitstream directly as RTP for RTSP. Otherwise, the MJPEG path packet-copies the original JPEG frames into RTSP. Neither path decodes, scales, changes frame rate, or re-encodes video. USB H.264 capture is served directly by GStreamer's RTSP server. CSI cameras retain their MJPEG capture/browser feed and do not use the removed FFmpeg-based H.264 side path. Output controls are limited to enable/disable because the camera's advertised capture mode determines the stream format.
+When USB H.264 is selected, PetCam captures the advertised V4L2 H.264 mode and packetizes the camera's existing H.264 bitstream directly as RTP for RTSP. For CSI, PetCam first verifies a `bcm2835-codec-encode` V4L2 node advertising H.264 output. Only then does it start `rpicam-vid --codec h264 --inline`, bridge the compressed byte stream locally, and packetize it with GStreamer. If no hardware encoder is confirmed, CSI remains on its existing MJPEG path; PetCam never falls back to software H.264 encoding. Neither H.264 path decodes or re-encodes video. The MJPEG path packet-copies the original JPEG frames into RTSP. Output controls are limited to enable/disable because the camera's advertised capture mode determines the stream format.
 
 ## MJPEG-only features
 
-Timelapse and motion detection continue to consume the MJPEG capture stream. They are not moved to H.264 and do not start a second camera capture session. Both features must remain disabled while H.264 capture is selected; PetCam rejects attempts to enable either one until the camera is returned to MJPEG mode.
+Timelapse and motion detection continue to consume the MJPEG capture stream. They are not moved to H.264 and do not start a second camera capture session. Both features must remain disabled while H.264 capture is active; CSI automatically remains on MJPEG whenever either feature needs the browser stream.
 
 ## Network and troubleshooting
 
