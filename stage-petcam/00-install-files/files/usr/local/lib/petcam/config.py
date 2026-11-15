@@ -228,9 +228,9 @@ def wait_for_stream(port: int, timeout: int = 30) -> bool:
 def wait_for_native_h264(timeout: int = 30) -> bool:
     """Wait until the local GStreamer RTSP server advertises an H.264 video track."""
     request = (
-        "DESCRIBE rtsp://127.0.0.1:8554/petcam RTSP/1.0\\r\\n"
-        "CSeq: 1\\r\\n"
-        "Accept: application/sdp\\r\\n\\r\\n"
+        "DESCRIBE rtsp://127.0.0.1:8554/petcam RTSP/1.0\r\n"
+        "CSeq: 1\r\n"
+        "Accept: application/sdp\r\n\r\n"
     ).encode("ascii")
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -244,7 +244,7 @@ def wait_for_native_h264(timeout: int = 30) -> bool:
                     if not chunk:
                         break
                     response.extend(chunk)
-                    if b"\\r\\n\\r\\n" in response and b"m=video " in response:
+                    if b"\r\n\r\n" in response and b"m=video " in response:
                         break
             payload = bytes(response)
             if (
@@ -274,6 +274,19 @@ def restart_capture() -> None:
     )
     if result.returncode:
         raise ConfigApplyError(result.stderr.strip() or "Unable to restart the camera stream service.")
+
+    # The RTSP server opens V4L2 after petcam-stream publishes the selected mode.
+    try:
+        output_config = json.loads(Path("/etc/petcam/rtmp.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        output_config = {"enabled": False}
+    if output_config.get("enabled") is True:
+        output_command = ["/usr/local/sbin/petcam-rtmp-service", "restart"]
+        if os.geteuid() != 0:
+            output_command = ["sudo", "-n", *output_command]
+        output = subprocess.run(output_command, capture_output=True, text=True, timeout=30, check=False)
+        if output.returncode:
+            raise ConfigApplyError(output.stderr.strip() or "Unable to start the GStreamer RTSP server.")
 
 
 def _apply_config_transaction(
