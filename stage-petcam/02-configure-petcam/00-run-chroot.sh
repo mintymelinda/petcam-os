@@ -93,7 +93,7 @@ start_usb() {
     rm -f /run/petcam/camera-status.json
     rtmp_enabled="$(python3 -c 'import json,pathlib; p=pathlib.Path("/etc/petcam/rtmp.json"); print(str(bool(json.loads(p.read_text()).get("enabled")) if p.exists() else False).lower())')"
     mjpeg_consumers="$(python3 -c 'import json,pathlib; paths=[pathlib.Path("/var/lib/petcam/timelapse/config.json"),pathlib.Path("/var/lib/petcam/motion/config.json")]; print(str(any(bool(json.loads(p.read_text()).get("enabled")) for p in paths if p.exists())).lower())')"
-    if [[ "$rtmp_enabled" == "true" && "$mjpeg_consumers" != "true" ]]; then
+    if [[ "$rtmp_enabled" == "true" && "$mjpeg_consumers" != "true" && "$FORMAT" == "auto" ]]; then
         h264_args=(select-h264 --resolution "$RESOLUTION" --fps "$FPS")
         if [[ -n "$USB_PHYSICAL_PATH" ]]; then h264_args+=(--physical-path "$USB_PHYSICAL_PATH"); fi
         if [[ -n "$DEVICE" ]]; then h264_args+=(--device "$DEVICE"); fi

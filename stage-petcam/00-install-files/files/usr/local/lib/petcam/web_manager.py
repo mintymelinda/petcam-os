@@ -1148,11 +1148,23 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/timelapse":
                 current = load_timelapse_config()
                 updated = save_timelapse_config({**current, **data})
+                capture_restart = subprocess.run(
+                    ["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
+                    capture_output=True, text=True, timeout=45, check=False,
+                )
+                if capture_restart.returncode:
+                    raise RuntimeError(capture_restart.stderr.strip() or "Unable to restart camera after changing timelapse settings.")
                 self.send_json(200, {"ok": True, "config": updated})
                 return
             if path == "/api/motion":
                 current = load_motion_config()
                 updated = save_motion_config({**current, **data})
+                capture_restart = subprocess.run(
+                    ["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
+                    capture_output=True, text=True, timeout=45, check=False,
+                )
+                if capture_restart.returncode:
+                    raise RuntimeError(capture_restart.stderr.strip() or "Unable to restart camera after changing motion settings.")
                 self.send_json(200, {"ok": True, "config": updated})
                 return
             if path == "/api/light-sensor":
