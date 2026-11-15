@@ -86,7 +86,7 @@ jobs:
 
   build-image:
     name: Build Raspberry Pi OS image
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'feature/arm64-containerized-image-build')
     needs: validate
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 180
@@ -209,7 +209,7 @@ jobs:
         run: docker compose --file build/compose.yaml run --rm --no-build image-assembly
 
       - name: Upload manually built image
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'feature/arm64-containerized-image-build')
         uses: actions/upload-artifact@v4
         with:
           name: petcam-os-${{ steps.version.outputs.release_version }}
