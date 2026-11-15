@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import apply_config, ensure_config_lock, parse_config
-from camera import PIXEL_BUDGETS, USTREAMER_FORMATS, camera_identity, mode_supports_fps, model_tier, read_model
+from camera import PIXEL_BUDGETS, USTREAMER_FORMATS, camera_identity, discover_csi_cameras, discover_devices, mode_supports_fps, model_tier, read_model
 from network_diagnostics import collect_diagnostics, create_support_bundle
 from wifi_metrics import collect_network_performance
 from timelapse import load_config as load_timelapse_config, save_config as save_timelapse_config, state_snapshot as timelapse_snapshot
@@ -328,20 +328,16 @@ if(autoCheck.checked)checkUpdates();updateStatus();
 </script></body></html>"""
 
 
-def run_camera(command):
-    result = subprocess.run(["/usr/local/bin/petcam-camera", *command],
-                            capture_output=True, text=True, timeout=30, check=False)
-    if result.returncode:
-        raise RuntimeError(result.stderr.strip() or "Camera discovery failed")
-    return json.loads(result.stdout)
-
-
 def camera_inventory():
-    usb = run_camera(["discover"])
+    # Use the discovery functions from the same camera module imported above.
+    # Calling a separately installed CLI wrapper here can silently run a
+    # different revision and omit camera formats supported by this manager.
+    usb_devices = discover_devices()
+    csi_cameras = discover_csi_cameras()
     tier = model_tier(read_model())
     performance_budget = PIXEL_BUDGETS[tier]
     result = []
-    for item in usb.get("usb_devices", []):
+    for item in usb_devices:
         camera = {"kind": "usb", "device": item["device"],
                   "physical_path": item.get("physical_path", ""),
                   "label": f'USB · {item["device"]}', "modes": [mode for mode in item["modes"] if mode["format"] in (USTREAMER_FORMATS | {"H264"})]}
@@ -350,7 +346,7 @@ def camera_inventory():
             **camera, "id": identity["id"], "stable_identity": identity["stable_identity"],
             "hardware_tier": tier, "hardware_budget_pixels_per_second": performance_budget,
         })
-    for item in usb.get("csi_cameras", []):
+    for item in csi_cameras:
         camera = {"kind": "csi", "camera": item["index"], "sensor": item["sensor"],
                   "device_path": item.get("device_path", ""), "label": f'CSI · {item["sensor"]} (camera {item["index"]})',
                   "modes": item["modes"]}
