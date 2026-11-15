@@ -84,6 +84,21 @@ class OBSOutputTests(unittest.TestCase):
         with patch.object(MODULE.urllib.request, "urlopen", return_value=response):
             self.assertTrue(MODULE.native_h264_available(timeout=0))
 
+    def test_disabled_output_exits_cleanly_without_starting_services(self):
+        with tempfile.TemporaryDirectory() as directory:
+            status_path = Path(directory) / "rtmp-status.json"
+            with patch.object(MODULE, "load_config", return_value={"enabled": False}), \
+                    patch.object(MODULE, "STATUS_PATH", status_path), \
+                    patch.object(MODULE, "native_h264_available") as detect, \
+                    patch.object(MODULE, "start_rtsp_server") as start:
+                with patch("sys.argv", ["rtmp_output.py"]):
+                    self.assertIsNone(MODULE.main())
+            detect.assert_not_called()
+            start.assert_not_called()
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+            self.assertEqual(status["state"], "disabled")
+            self.assertFalse(status["active"])
+
     def test_disabled_output_cannot_build_publisher_command(self):
         config = MODULE.validate_config({"enabled": False})
         with patch.object(MODULE.shutil, "which", return_value="/usr/bin/ffmpeg"):

@@ -149,6 +149,15 @@ class WebManagerTests(unittest.TestCase):
         self.assertEqual(request.errors[0][0], 503)
         self.assertIn("unavailable", request.errors[0][1].lower())
 
+    def test_rtmp_status_treats_systemd_timeout_as_stopped(self):
+        with mock.patch.object(MODULE, "load_rtmp_config", return_value={"enabled": False}), \
+                mock.patch.object(
+                    MODULE.subprocess, "run", side_effect=MODULE.subprocess.TimeoutExpired("systemctl", 1),
+                ):
+            status = MODULE.rtmp_status_snapshot()
+        self.assertFalse(status["active"])
+        self.assertEqual(status["state"], "stopped")
+
     def test_rtmp_status_reports_measured_fps_from_private_runtime_state(self):
         with tempfile.TemporaryDirectory() as directory:
             status_file = Path(directory) / "rtmp-status.json"

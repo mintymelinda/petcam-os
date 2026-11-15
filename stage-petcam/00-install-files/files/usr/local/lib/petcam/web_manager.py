@@ -1462,10 +1462,15 @@ class StreamHandler(BaseHTTPRequestHandler):
 
 def rtmp_status_snapshot():
     config = load_rtmp_config()
-    active_service = subprocess.run(
-        ["systemctl", "is-active", "--quiet", "petcam-rtmp.service"],
-        check=False, timeout=5,
-    ).returncode == 0
+    try:
+        active_service = subprocess.run(
+            ["systemctl", "is-active", "--quiet", "petcam-rtmp.service"],
+            check=False, timeout=1,
+        ).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        # A delayed systemd response must not turn the entire status API into
+        # HTTP 500 or block every dashboard refresh.
+        active_service = False
     status = {}
     try:
         status = json.loads(RTMP_STATUS_FILE.read_text(encoding="utf-8"))
