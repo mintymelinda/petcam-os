@@ -412,15 +412,13 @@ def live_capture_status():
         pid = int(marker.get("pid", 0))
         if marker.get("native_h264") is True and pid > 1:
             os.kill(pid, 0)
-            command_line = Path(f"/proc/{pid}/cmdline").read_bytes().decode(errors="replace")
-            if "ffmpeg" in command_line and "h264" in command_line.lower():
-                result = {"active_capture_format": "H264", "active_resolution": config.get("RESOLUTION"),
-                          "configured_fps": config.get("FPS"), "capture_mode": "native_h264"}
-                status = json.loads(Path("/run/petcam/rtmp-status.json").read_text(encoding="utf-8"))
-                if status.get("source") == "native_h264":
-                    result["latest_captured_fps"] = status.get("fps")
-                    result["rtsp_output_ready"] = status.get("active") is True and status.get("state") == "publishing"
-                return result
+            result = {"active_capture_format": "H264", "active_resolution": config.get("RESOLUTION"),
+                      "configured_fps": config.get("FPS"), "capture_mode": "native_h264"}
+            status = json.loads(Path("/run/petcam/rtmp-status.json").read_text(encoding="utf-8"))
+            if status.get("source") == "native_h264":
+                result["latest_captured_fps"] = status.get("fps")
+                result["rtsp_output_ready"] = status.get("active") is True and status.get("state") == "publishing"
+            return result
     except (OSError, ValueError, TypeError, ProcessLookupError):
         pass
 
