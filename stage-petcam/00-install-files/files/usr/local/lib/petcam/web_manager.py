@@ -910,6 +910,9 @@ def proxy_stream(handler, port):
     """Proxy MJPEG, returning a useful HTTP error if capture is not ready yet."""
     query = parse_qs(urlparse(handler.path).query)
     source = ("obs_media_source" if query.get("client") == ["obs-media-source"] else "browser_source")
+    if parse_config(CONFIG).get("FORMAT") == "H264":
+        handler.send_error(503, "HTTP MJPEG streaming is disabled while H.264 capture is selected. Use the OBS RTSP Media Source.")
+        return
     client_id = register_stream_client(source)
     parser_state = {
         "previous_byte": None,
@@ -1282,6 +1285,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, set_camera_control(data))
                 return
             if path == "/api/timelapse":
+                if data.get("enabled") and parse_config(CONFIG).get("FORMAT") == "H264":
+                    raise RuntimeError("Switch the camera back to MJPEG before enabling timelapse; timelapse requires MJPEG frames.")
                 current = load_timelapse_config()
                 updated = save_timelapse_config({**current, **data})
                 capture_restart = subprocess.run(
@@ -1300,6 +1305,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"ok": True, "config": updated})
                 return
             if path == "/api/motion":
+                if data.get("enabled") and parse_config(CONFIG).get("FORMAT") == "H264":
+                    raise RuntimeError("Switch the camera back to MJPEG before enabling motion detection; motion detection requires MJPEG frames.")
                 current = load_motion_config()
                 updated = save_motion_config({**current, **data})
                 capture_restart = subprocess.run(
