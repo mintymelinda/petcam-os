@@ -168,7 +168,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Prepare post-image assembly inputs
+      - name: Prepare post-pi-gen assembly inputs
         env:
           BASE_IMAGE_PATH: ${{ steps.pigen.outputs.image-path }}
           IMAGE_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/petcam-os-${{ github.ref_name }}.img.xz
