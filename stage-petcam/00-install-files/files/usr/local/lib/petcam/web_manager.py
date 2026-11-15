@@ -759,12 +759,12 @@ def save_selection(data):
         ).returncode == 0
 
     if requested_h264:
+        if load_timelapse_config().get("enabled") or load_motion_config().get("enabled"):
+            raise ValueError("Disable timelapse and motion detection before selecting H.264; both require the MJPEG capture feed.")
         try:
             check_gstreamer_runtime()
         except ValueError as error:
             raise RuntimeError(str(error)) from error
-        if load_timelapse_config().get("enabled") or load_motion_config().get("enabled"):
-            raise ValueError("Disable timelapse and motion detection before selecting H.264; both require the MJPEG capture feed.")
 
     camera_applied = False
     try:
