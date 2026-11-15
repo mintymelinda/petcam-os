@@ -9,6 +9,7 @@ from contextlib import contextmanager
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
@@ -34,7 +35,7 @@ DEFAULTS = {
 }
 FORMATS = {
     "MJPG", "MJPEG", "JPEG", "YUYV", "YVYU", "UYVY",
-    "YUV420", "YVU420", "RGB565", "RGB24", "GREY",
+    "YUV420", "YVU420", "RGB565", "RGB24", "GREY", "H264",
 }
 DEVICE_PATTERN = re.compile(r"^/dev/(?:video[0-9]+|v4l/by-id/[A-Za-z0-9._:+-]+)$")
 USB_PHYSICAL_PATH_PATTERN = re.compile(r"^/sys/devices/[A-Za-z0-9._:@/+\-]+$")
@@ -83,8 +84,8 @@ def validate_config(values: dict[str, Any], check_hardware: bool = False) -> dic
         raise ConfigError("A physical camera path requires SOURCE=usb or SOURCE=csi.")
 
     config["FORMAT"] = "auto" if config["FORMAT"].lower() == "auto" else config["FORMAT"].upper()
-    if config["FORMAT"] != "auto" and config["FORMAT"] not in FORMATS:
-        raise ConfigError(f"FORMAT must be auto or one of: {', '.join(sorted(FORMATS))}.")
+.join(sorted(FORMATS))}.")
+', '.join(sorted(FORMATS))}.")
 
     resolution = config["RESOLUTION"]
     if resolution != "auto":
@@ -222,6 +223,34 @@ def wait_for_stream(port: int, timeout: int = 30) -> bool:
     return False
 
 
+def wait_for_native_h264(timeout: int = 30) -> bool:
+    """Wait for native H.264 MPEG-TS packets from the selected USB camera."""
+    receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        receiver.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        receiver.bind(("127.0.0.1", 10000))
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            receiver.settimeout(max(0.05, deadline - time.monotonic()))
+            try:
+                packet, _address = receiver.recvfrom(65536)
+            except socket.timeout:
+                return False
+            if packet:
+                return True
+        return False
+    except OSError:
+        return False
+    finally:
+        receiver.close()
+
+
+def wait_for_configured_capture(config: dict[str, str], ready=wait_for_stream) -> bool:
+    if config.get("FORMAT") == "H264":
+        return wait_for_native_h264()
+    return ready(int(config["PORT"]))
+
+
 def restart_capture() -> None:
     command = ["/usr/bin/systemctl", "restart", "petcam-stream.service"]
     if os.geteuid() != 0:
@@ -258,13 +287,14 @@ def _apply_config_transaction(
     _atomic_write(path, serialize_config(candidate))
     try:
         restart()
-        if not ready(int(candidate["PORT"])):
-            raise ConfigApplyError("The new camera settings did not produce an MJPEG frame before the startup timeout.")
+        if not wait_for_configured_capture(candidate, ready):
+            expected = "native H.264 packets" if candidate["FORMAT"] == "H264" else "an MJPEG frame"
+            raise ConfigApplyError(f"The new camera settings did not produce {expected} before the startup timeout.")
     except Exception as apply_error:
         _atomic_write(path, previous_content)
         try:
             restart()
-            restored = ready(int(previous["PORT"]))
+            restored = wait_for_configured_capture(previous, ready)
         except Exception as rollback_error:
             raise ConfigApplyError(
                 f"New settings failed ({apply_error}); previous settings were restored, but restarting them failed ({rollback_error})."
