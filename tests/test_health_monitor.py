@@ -40,6 +40,21 @@ class HealthMonitorTests(unittest.TestCase):
         self.config_guard_patch.stop()
         self.directory.cleanup()
 
+    def test_rtmp_restart_uses_installed_scoped_helper(self):
+        completed = mock.Mock(returncode=0, stderr="")
+        with mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(MODULE.restart_service("petcam-rtmp.service"), (True, ""))
+        self.assertEqual(run.call_args.args[0], [
+            "sudo", "-n", "/usr/local/sbin/petcam-rtmp-service", "restart",
+        ])
+
+    def test_restart_service_rejects_unknown_service_names(self):
+        with mock.patch.object(MODULE.subprocess, "run") as run:
+            succeeded, error = MODULE.restart_service("arbitrary.service")
+        self.assertFalse(succeeded)
+        self.assertIn("unsupported", error.lower())
+        run.assert_not_called()
+
     def test_healthy_backend_and_public_proxy_clear_failure_streak(self):
         MODULE.save_state({"consecutive_failures": 3, "recovery_count": 4, "next_recovery_at": 900})
         with mock.patch.object(MODULE, "probe_stream", side_effect=[True, True]):
