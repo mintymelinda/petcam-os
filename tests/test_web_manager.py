@@ -439,7 +439,7 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn('id="rtmp-output"', MODULE.PAGE)
         self.assertIn('id="obs-rtsp-url"', MODULE.PAGE)
         self.assertIn('id="obs-rtsp-url" type="text"', MODULE.PAGE)
-        self.assertIn('http://petcam.local:8080/', MODULE.PAGE)
+        self.assertIn('http://__PETCAM_HOST__:8080/', MODULE.PAGE)
         self.assertNotIn('id="live-preview"', MODULE.PAGE)
         self.assertNotIn('rtmp-encoder', MODULE.PAGE)
         self.assertIn("saved camera settings are selected", MODULE.PAGE)
