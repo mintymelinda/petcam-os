@@ -4,10 +4,6 @@ services:
     build:
       context: ..
       dockerfile: build/Dockerfile
-      cache_from:
-        - type=gha,scope=petcam-image-validation
-      cache_to:
-        - type=gha,scope=petcam-image-validation,mode=max
     working_dir: /workspace
     environment:
       IMAGE_PATH: ${IMAGE_PATH:?Set IMAGE_PATH to the pi-gen action output}
