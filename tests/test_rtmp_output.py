@@ -97,17 +97,18 @@ class OBSOutputTests(unittest.TestCase):
     def test_disabled_output_exits_cleanly_without_starting_server(self):
         with tempfile.TemporaryDirectory() as directory:
             status_path = Path(directory) / "rtmp-status.json"
-            with patch.object(MODULE, "load_config", return_value={"enabled": False}), \\
-                    patch.object(MODULE, "STATUS_PATH", status_path), \\
-                    patch.object(MODULE, "native_h264_available") as detect, \\
-                    patch.object(MODULE, "_load_gstreamer") as load:
-                with patch("sys.argv", ["rtmp_output.py"]):
-                    self.assertIsNone(MODULE.main())
+            with patch.object(MODULE, "load_config", return_value={"enabled": False}):
+                with patch.object(MODULE, "STATUS_PATH", status_path):
+                    with patch.object(MODULE, "native_h264_available") as detect:
+                        with patch.object(MODULE, "_load_gstreamer") as load:
+                            with patch("sys.argv", ["rtmp_output.py"]):
+                                self.assertIsNone(MODULE.main())
             detect.assert_not_called()
             load.assert_not_called()
             status = json.loads(status_path.read_text(encoding="utf-8"))
             self.assertEqual(status["state"], "disabled")
             self.assertFalse(status["active"])
+
 
 
 if __name__ == "__main__":
