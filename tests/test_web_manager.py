@@ -15,6 +15,40 @@ SPEC.loader.exec_module(MODULE)
 
 
 class WebManagerTests(unittest.TestCase):
+
+    def test_manager_page_uses_configured_device_hostname_for_stream_urls(self):
+        class Request:
+            path = "/"
+
+            def __init__(self):
+                self.headers = {}
+                self.wfile = io.BytesIO()
+                self.headers_sent = []
+
+            def send_response(self, status):
+                self.status = status
+
+            def send_header(self, name, value):
+                self.headers_sent.append((name, value))
+
+            def end_headers(self):
+                pass
+
+        request = Request()
+        with mock.patch.object(MODULE.socket, "gethostname", return_value="kittycam"):
+            MODULE.Handler.do_GET(request)
+        page = request.wfile.getvalue().decode()
+        self.assertEqual(request.status, 200)
+        self.assertIn("http://kittycam.local:8080/", page)
+        self.assertIn("rtsp://kittycam.local:8554/petcam", page)
+        self.assertNotIn("petcam.local", page)
+        self.assertNotIn("__PETCAM_HOST__", page)
+
+    def test_device_mdns_hostname_preserves_configured_domain(self):
+        with mock.patch.object(MODULE.socket, "gethostname", return_value="kittycam"):
+            self.assertEqual(MODULE.device_mdns_hostname(), "kittycam.local")
+        with mock.patch.object(MODULE.socket, "gethostname", return_value="kittycam.example.net"):
+            self.assertEqual(MODULE.device_mdns_hostname(), "kittycam.example.net")
     def test_management_page_uses_the_four_tab_layout(self):
         self.assertIn("Refresh", MODULE.PAGE)
         self.assertIn("Browser Source", MODULE.PAGE)
