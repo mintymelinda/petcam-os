@@ -177,8 +177,8 @@ class UpdateArchiveTests(unittest.TestCase):
             (release / "systemd/petcam-rtmp.service").write_text("[Service]\nExecStart=rtmp\n")
             (release / "etc/petcam/home-assistant.conf").write_text("MQTT_ENABLED=false\n")
             (release / "etc/petcam/rtmp.json").write_text("{\"enabled\":false}\n")
-            (release / "bin/petcam-rtmp-service").write_text("#!/bin/sh\\nexit 0\\n")
-            (release / "etc/sudoers.d/petcam-rtmp").write_text("petcam ALL=(root) NOPASSWD: /usr/local/sbin/petcam-rtmp-service restart\\n")
+            (release / "bin/petcam-rtmp-service").write_text("#!/bin/sh\nexit 0\n")
+            (release / "etc/sudoers.d/petcam-rtmp").write_text("petcam ALL=(root) NOPASSWD: /usr/local/sbin/petcam-rtmp-service restart\n")
             config_path = etc_root / "petcam/home-assistant.conf"
             config_path.parent.mkdir(parents=True)
             config_path.write_text("MQTT_ENABLED=true\nMQTT_PASSWORD=preserve-me\n")
@@ -201,9 +201,9 @@ class UpdateArchiveTests(unittest.TestCase):
             self.assertEqual((etc_root / "systemd/system/petcam-rtmp.service").read_text(), "[Service]\nExecStart=rtmp\n")
             helper = root / "usr/local/sbin/petcam-rtmp-service"
             sudoers = etc_root / "sudoers.d/petcam-rtmp"
-            self.assertEqual(helper.read_text(), "#!/bin/sh\\nexit 0\\n")
+            self.assertEqual(helper.read_text(), "#!/bin/sh\nexit 0\n")
             self.assertEqual(helper.stat().st_mode & 0o777, 0o755)
-            self.assertEqual(sudoers.read_text(), "petcam ALL=(root) NOPASSWD: /usr/local/sbin/petcam-rtmp-service restart\\n")
+            self.assertEqual(sudoers.read_text(), "petcam ALL=(root) NOPASSWD: /usr/local/sbin/petcam-rtmp-service restart\n")
             self.assertEqual(sudoers.stat().st_mode & 0o777, 0o440)
             chown.assert_any_call(helper, 0, 0)
             chown.assert_any_call(sudoers, 0, 0)
@@ -223,8 +223,8 @@ class UpdateArchiveTests(unittest.TestCase):
             (release / "systemd/petcam-rtmp.service").write_text("[Service]\n")
             (release / "etc/petcam/home-assistant.conf").write_text("MQTT_ENABLED=false\n")
             (release / "etc/petcam/rtmp.json").write_text("{\"enabled\":false}\n")
-            (release / "bin/petcam-rtmp-service").write_text("#!/bin/sh\\nexit 0\\n")
-            (release / "etc/sudoers.d/petcam-rtmp").write_text("petcam ALL=(root) NOPASSWD: /usr/local/sbin/petcam-rtmp-service restart\\n")
+            (release / "bin/petcam-rtmp-service").write_text("#!/bin/sh\nexit 0\n")
+            (release / "etc/sudoers.d/petcam-rtmp").write_text("petcam ALL=(root) NOPASSWD: /usr/local/sbin/petcam-rtmp-service restart\n")
             with mock.patch("updater.grp.getgrnam", return_value=mock.Mock(gr_gid=1000)), \
                     mock.patch("updater.os.geteuid", return_value=1000):
                 install_runtime_integration_files(release, root / "etc", root / "usr")
