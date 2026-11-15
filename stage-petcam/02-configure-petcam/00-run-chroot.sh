@@ -290,6 +290,7 @@ systemctl enable petcam-stream.service
 
 cat > /etc/sudoers.d/petcam-web <<'SUDO'
 petcam ALL=(root) NOPASSWD: /usr/bin/systemctl restart petcam-stream.service, /usr/local/sbin/petcam-stream-service, /usr/local/bin/petcam-update check, /usr/bin/systemctl start --no-block petcam-update.service, /usr/bin/journalctl -u petcam-update.service -n 20 --no-pager -o cat
+petcam ALL=(root) NOPASSWD: /usr/bin/journalctl -u petcam-stream.service -n 300 --no-pager, /usr/bin/journalctl -u petcam-stream.service -u petcam-web.service -n 120 --no-pager -o short-iso
 SUDO
 chmod 0440 /etc/sudoers.d/petcam-web
 visudo -cf /etc/sudoers.d/petcam-web
