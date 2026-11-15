@@ -205,7 +205,13 @@ def main():
     args = parser.parse_args()
     config = load_config()
     if not config["enabled"]:
-        raise SystemExit("OBS output is disabled.")
+        logging.info("OBS output is disabled; publisher will remain stopped.")
+        STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        STATUS_PATH.write_text(json.dumps({
+            "state": "disabled", "active": False, "fps": None,
+            "updated_at": time.time(), "source": None,
+        }) + "\n", encoding="utf-8")
+        return
     native_h264 = native_h264_available()
     command = build_ffmpeg_command(config, native_h264=native_h264)
     if args.check:
