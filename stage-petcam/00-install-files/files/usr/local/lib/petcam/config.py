@@ -84,8 +84,10 @@ def validate_config(values: dict[str, Any], check_hardware: bool = False) -> dic
         raise ConfigError("A physical camera path requires SOURCE=usb or SOURCE=csi.")
 
     config["FORMAT"] = "auto" if config["FORMAT"].lower() == "auto" else config["FORMAT"].upper()
-.join(sorted(FORMATS))}.")
-', '.join(sorted(FORMATS))}.")
+    if config["FORMAT"] != "auto" and config["FORMAT"] not in FORMATS:
+        raise ConfigError(f"FORMAT must be auto or one of: {', '.join(sorted(FORMATS))}.")
+    if config["FORMAT"] == "H264" and config["SOURCE"] != "usb":
+        raise ConfigError("H264 capture requires SOURCE=usb.")
 
     resolution = config["RESOLUTION"]
     if resolution != "auto":
