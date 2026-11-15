@@ -281,7 +281,11 @@ def _read_h264_rtp_packet(connection, buffer: bytearray, deadline: float) -> boo
                 continue
             extension_length = int.from_bytes(packet[header_length + 2:header_length + 4], "big")
             header_length += 4 + extension_length * 4
-        return len(packet) > header_length
+        if len(packet) <= header_length:
+            continue
+        nal_type = packet[header_length] & 0x1F
+        if nal_type in range(1, 24) or nal_type in (24, 28, 29):
+            return True
     return False
 
 
