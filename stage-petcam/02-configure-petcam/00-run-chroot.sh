@@ -373,7 +373,7 @@ RestartSec=3
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/etc/petcam /var/lib/petcam
+ReadWritePaths=/etc/petcam /var/lib/petcam /run/sudo/ts
 
 [Install]
 WantedBy=multi-user.target
