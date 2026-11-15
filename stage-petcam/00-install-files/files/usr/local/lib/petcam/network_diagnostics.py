@@ -285,7 +285,7 @@ def _redacted_config() -> str:
 
 def _journal_excerpt() -> str:
     raw = command_output([
-        "journalctl", "-u", "petcam-stream.service", "-u", "petcam-web.service",
+        "sudo", "-n", "/usr/bin/journalctl", "-u", "petcam-stream.service", "-u", "petcam-web.service",
         "-n", "120", "--no-pager", "-o", "short-iso",
     ], timeout=8)
     if not raw:
