@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import json
-import lzma
 import os
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -33,41 +34,30 @@ def validate_package_manifest() -> None:
         )
 
 
-def validate_image(image: Path) -> None:
-    if not image.is_file() or image.suffixes[-2:] != [".img", ".xz"]:
-        raise SystemExit(f"pi-gen did not produce a valid .img.xz file: {image}")
-    try:
-        with lzma.open(image, "rb") as stream:
-            while stream.read(1024 * 1024):
-                pass
-    except (lzma.LZMAError, EOFError, OSError) as error:
-        raise SystemExit(f"Generated image failed XZ integrity validation: {error}") from error
-
-
 def main() -> int:
     image = Path(require_environment("IMAGE_PATH")).resolve()
     image_url = require_environment("IMAGE_URL")
     version = require_environment("RELEASE_VERSION")
     schema_path = Path(require_environment("IMAGE_SCHEMA_PATH")).resolve()
 
-    if not version.replace(".", "").isdigit() or version.count(".") != 2:
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
         raise SystemExit(f"Release version must be MAJOR.MINOR.PATCH: {version}")
     if not image_url.startswith("https://"):
         raise SystemExit("IMAGE_URL must use HTTPS")
     if not schema_path.is_file():
         raise SystemExit(f"Raspberry Pi Imager schema is missing: {schema_path}")
+    if not image.is_file() or image.suffixes[-2:] != [".img", ".xz"]:
+        raise SystemExit(f"pi-gen did not produce a valid .img.xz file: {image}")
 
     validate_package_manifest()
-    validate_image(image)
 
+    # create_imager_os_list streams the compressed image to calculate both
+    # compressed and expanded hashes, also proving that the XZ stream is valid.
     catalogue_path = ROOT / "petcam-os-os-list.json"
-    os_list_tool = ROOT / "tools/create_imager_os_list.py"
-    import subprocess
-
     subprocess.run(
         [
             sys.executable,
-            str(os_list_tool),
+            str(ROOT / "tools/create_imager_os_list.py"),
             str(image),
             "--image-url",
             image_url,
