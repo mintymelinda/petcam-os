@@ -55,7 +55,7 @@ class BuildPipelineContractTests(unittest.TestCase):
         requirements = (ROOT / "build/requirements.txt").read_text(encoding="utf-8")
         self.assertIn("jsonschema", requirements)
         validator = (ROOT / "tools/assemble_image.py").read_text(encoding="utf-8")
-        self.assertIn("assemble_rootfs(rootfs)", validator)
+        self.assertIn("assemble(rootfs)", validator)
         self.assertIn('entry.get("architecture") != "armhf"', validator)
 
     def test_containerized_post_build_validates_image_and_raspberry_pi_schema(self):
