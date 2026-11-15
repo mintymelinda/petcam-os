@@ -188,11 +188,19 @@ jobs:
       - name: Set up Docker Buildx for native BuildKit caching
         uses: docker/setup-buildx-action@v3
 
-      - name: Build image assembly and validation container
-        run: docker compose --file build/compose.yaml build
+      - name: Build image assembly and validation container with native layer caching
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build/Dockerfile
+          push: false
+          load: true
+          tags: petcam-image-validation:local
+          cache-from: type=gha,scope=petcam-image-validation
+          cache-to: type=gha,scope=petcam-image-validation,mode=max
 
       - name: Validate image and generate Imager catalogue
-        run: docker compose --file build/compose.yaml run --rm image-validation
+        run: docker compose --file build/compose.yaml run --rm --no-build image-validation
 
       - name: Upload manually built image
         if: github.event_name == 'workflow_dispatch'
