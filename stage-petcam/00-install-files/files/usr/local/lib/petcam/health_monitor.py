@@ -20,9 +20,6 @@ from config import config_transaction_guard, parse_config
 STATE_FILE = Path("/var/lib/petcam/health.json")
 BACKEND_STREAM_URL = "http://127.0.0.1:8081/stream"
 PUBLIC_STREAM_URL = "http://127.0.0.1:8080/stream"
-CAMERA_STATUS_FILE = Path("/var/lib/petcam/camera-status.json")
-RTSP_STATUS_FILE = Path("/run/petcam/rtmp-status.json")
-RTSP_STATUS_MAX_AGE_SECONDS = 45
 
 
 def backend_stream_url() -> str:
@@ -88,35 +85,6 @@ def probe_stream(url: str, timeout: int) -> bool:
                 return False
             return bool(response.read(1))
     except (OSError, urllib.error.URLError, TimeoutError, ValueError, http.client.HTTPException):
-        return False
-
-
-
-def native_h264_capture_active() -> bool:
-    """Return true only while the marked native H.264 FFmpeg process is alive."""
-    try:
-        marker = json.loads(CAMERA_STATUS_FILE.read_text(encoding="utf-8"))
-        pid = int(marker.get("pid", 0))
-        if marker.get("native_h264") is not True or pid <= 1:
-            return False
-        os.kill(pid, 0)
-        command_line = Path(f"/proc/{pid}/cmdline").read_bytes().decode(errors="replace")
-        return "ffmpeg" in command_line and "h264" in command_line.lower()
-    except (OSError, ValueError, TypeError):
-        return False
-
-
-def native_h264_rtsp_ready(now: float | None = None) -> bool:
-    """Require fresh publishing telemetry from the native-H.264 RTSP publisher."""
-    now = time.time() if now is None else now
-    try:
-        status = json.loads(RTSP_STATUS_FILE.read_text(encoding="utf-8"))
-        age = now - float(status.get("updated_at", 0))
-        return (status.get("source") == "native_h264"
-                and status.get("state") == "publishing"
-                and status.get("active") is True
-                and 0 <= age <= RTSP_STATUS_MAX_AGE_SECONDS)
-    except (OSError, ValueError, TypeError):
         return False
 
 
@@ -223,20 +191,9 @@ def _check_health_locked(now: float | None = None) -> dict[str, Any]:
         report["reason"] = "A PetCam service is within its startup grace period."
         return _persist(report)
 
-    configured_format = ""
-    try:
-        configured_format = parse_config().get("FORMAT", "")
-    except Exception:
-        pass
-    h264_mode = configured_format == "H264" or native_h264_capture_active()
-    report["capture_mode"] = "native_h264" if h264_mode else "mjpeg"
-    report["rtsp_output_ready"] = None
-    if h264_mode:
-        backend_ready = backend["state"] == "active" and native_h264_capture_active()
-    else:
-        backend_ready = backend["state"] == "active" and probe_stream(
-            backend_stream_url(), BACKEND_FRAME_TIMEOUT_SECONDS
-        )
+    backend_ready = backend["state"] == "active" and probe_stream(
+        backend_stream_url(), BACKEND_FRAME_TIMEOUT_SECONDS
+    )
     report["backend_stream_ready"] = backend_ready
     if not backend_ready:
         present = camera_present()
@@ -256,24 +213,6 @@ def _check_health_locked(now: float | None = None) -> dict[str, Any]:
         )
         return _recover(report, previous, "petcam-stream.service", reason, now)
 
-    if h264_mode:
-        rtsp = service_snapshot("petcam-rtmp.service")
-        if rtsp["state"] == "unknown":
-            report["state"] = "service_state_unknown"
-            report["reason"] = "RTSP publisher service state could not be read; no restart was attempted."
-            return _persist(report)
-        if _starting(rtsp):
-            report["state"] = "starting"
-            report["reason"] = "The native H.264 RTSP publisher is within its startup grace period."
-            return _persist(report)
-        rtsp_ready = rtsp["state"] == "active" and native_h264_rtsp_ready(now)
-        report["rtsp_output_ready"] = rtsp_ready
-        if not rtsp_ready:
-            return _recover(
-                report, previous, "petcam-rtmp.service",
-                "Native H.264 capture is active but the RTSP publisher is not reporting fresh output.", now,
-            )
-
     if _starting(web):
         report["state"] = "starting"
         report["reason"] = "The web proxy is within its startup grace period."
@@ -284,17 +223,13 @@ def _check_health_locked(now: float | None = None) -> dict[str, Any]:
             "The web manager process is not active while the local capture stream is healthy.", now,
         )
 
-    if h264_mode:
-        # The HTTP Browser Source is deliberately unavailable in native H.264 mode.
-        report["public_stream_ready"] = None
-    else:
-        public_ready = probe_stream(PUBLIC_STREAM_URL, PUBLIC_FRAME_TIMEOUT_SECONDS)
-        report["public_stream_ready"] = public_ready
-        if not public_ready:
-            return _recover(
-                report, previous, "petcam-web.service",
-                "The local capture stream is healthy but the public OBS stream proxy is not producing frames.", now,
-            )
+    public_ready = probe_stream(PUBLIC_STREAM_URL, PUBLIC_FRAME_TIMEOUT_SECONDS)
+    report["public_stream_ready"] = public_ready
+    if not public_ready:
+        return _recover(
+            report, previous, "petcam-web.service",
+            "The local capture stream is healthy but the public OBS stream proxy is not producing frames.", now,
+        )
 
     report["state"] = "healthy"
     report["reason"] = ""

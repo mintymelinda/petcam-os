@@ -410,24 +410,6 @@ def live_capture_status():
         config = {}
         port = 8081
 
-    # Native H.264 has no MJPEG HTTP backend. Report the selected runtime mode.
-    try:
-        marker = json.loads(Path("/var/lib/petcam/camera-status.json").read_text(encoding="utf-8"))
-        pid = int(marker.get("pid", 0))
-        if marker.get("native_h264") is True and pid > 1:
-            os.kill(pid, 0)
-            command_line = Path(f"/proc/{pid}/cmdline").read_bytes().decode(errors="replace")
-            if "ffmpeg" in command_line and "h264" in command_line.lower():
-                result = {"active_capture_format": "H264", "active_resolution": config.get("RESOLUTION"),
-                          "configured_fps": config.get("FPS"), "capture_mode": "native_h264"}
-                status = json.loads(Path("/run/petcam/rtmp-status.json").read_text(encoding="utf-8"))
-                if status.get("source") == "native_h264":
-                    result["latest_captured_fps"] = status.get("fps")
-                    result["rtsp_output_ready"] = status.get("active") is True and status.get("state") == "publishing"
-                return result
-    except (OSError, ValueError, TypeError, ProcessLookupError):
-        pass
-
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/state", timeout=2) as response:
             payload = json.loads(response.read().decode("utf-8"))

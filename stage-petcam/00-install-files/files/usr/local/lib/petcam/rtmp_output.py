@@ -107,21 +107,16 @@ def build_ffmpeg_command(config, input_url="http://127.0.0.1:8081/stream", nativ
 
 
 def native_h264_available(status_url="http://127.0.0.1:8081/status", timeout=25):
-    """Detect the live native H.264 capture process using its PID marker."""
-    marker = Path("/var/lib/petcam/camera-status.json")
+    marker = Path("/run/petcam/camera-status.json")
     try:
         status = json.loads(marker.read_text(encoding="utf-8"))
-        pid = int(status.get("pid", 0))
-        if status.get("native_h264") is True and pid > 1:
-            os.kill(pid, 0)
-            command_line = Path(f"/proc/{pid}/cmdline").read_bytes().decode(errors="replace")
-            if "ffmpeg" in command_line and "h264" in command_line.lower():
-                active = subprocess.run(
-                    ["systemctl", "is-active", "--quiet", "petcam-stream.service"],
-                    check=False, timeout=2,
-                ).returncode == 0
-                if active:
-                    return True
+        if status.get("native_h264") is True and time.time() - float(status.get("updated_at", 0)) < 60:
+            active = subprocess.run(
+                ["systemctl", "is-active", "--quiet", "petcam-stream.service"],
+                check=False, timeout=2,
+            ).returncode == 0
+            if active:
+                return True
     except (OSError, ValueError, TypeError, subprocess.SubprocessError):
         pass
     deadline = time.monotonic() + timeout

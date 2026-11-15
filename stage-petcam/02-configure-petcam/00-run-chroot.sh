@@ -113,7 +113,7 @@ start_usb() {
         h264_resolution="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["resolution"])' <<< "$h264_selection")"
         h264_fps="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["fps"])' <<< "$h264_selection")"
         mkdir -p /run/petcam
-        python3 -c 'import json,time; json.dump({"native_h264":True,"pid":os.getpid(),"updated_at":time.time()},open("/var/lib/petcam/camera-status.json","w"))'
+        python3 -c 'import json,os,time; json.dump({"native_h264":True,"pid":os.getppid(),"updated_at":time.time()},open("/var/lib/petcam/camera-status.json","w"))'
         echo "Starting selected native USB H.264 capture $h264_device at $h264_resolution, $h264_fps FPS."
         exec /usr/bin/ffmpeg -hide_banner -loglevel warning -nostdin -f v4l2 -input_format h264 -video_size "$h264_resolution" -framerate "$h264_fps" -i "$h264_device" -an -c:v copy -f mpegts "udp://127.0.0.1:10000?pkt_size=1316"
     fi
@@ -126,7 +126,7 @@ start_usb() {
             h264_resolution="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["resolution"])' <<< "$h264_selection")"
             h264_fps="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["fps"])' <<< "$h264_selection")"
             mkdir -p /run/petcam
-            python3 -c 'import json,time; json.dump({"native_h264":True,"pid":os.getpid(),"updated_at":time.time()},open("/var/lib/petcam/camera-status.json","w"))'
+            python3 -c 'import json,os,time; json.dump({"native_h264":True,"pid":os.getppid(),"updated_at":time.time()},open("/var/lib/petcam/camera-status.json","w"))'
             echo "Starting native USB H.264 capture $h264_device at $h264_resolution, $h264_fps FPS."
             exec /usr/bin/ffmpeg -hide_banner -loglevel warning -nostdin -f v4l2 -input_format h264 -video_size "$h264_resolution" -framerate "$h264_fps" -i "$h264_device" -an -c:v copy -f mpegts "udp://127.0.0.1:10000?pkt_size=1316"
         fi
