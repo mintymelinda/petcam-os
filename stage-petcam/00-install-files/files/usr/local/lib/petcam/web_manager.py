@@ -810,7 +810,7 @@ def installed_version():
 
 
 def proxy_stream(handler, port):
-    """Keep OBS/browser MJPEG responses open and measure frames actually forwarded."""
+    """Proxy MJPEG, returning a useful HTTP error if capture is not ready yet."""
     query = parse_qs(urlparse(handler.path).query)
     source = ("obs_media_source" if query.get("client") == ["obs-media-source"] else "browser_source")
     client_id = register_stream_client(source)
@@ -848,6 +848,9 @@ def proxy_stream(handler, port):
             except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                 return
             except (OSError, urllib.error.URLError, TimeoutError, http.client.HTTPException):
+                if not headers_sent:
+                    handler.send_error(503, "Camera MJPEG stream is unavailable")
+                    return
                 retry_delay = min(2.0, retry_delay * 1.7)
             time.sleep(retry_delay)
     finally:
@@ -1239,7 +1242,7 @@ class StreamHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/":
-            body = b'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PetCam Browser Source</title><style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden}img{display:block;width:100%;height:100%;object-fit:contain}</style><img src="/stream" alt="PetCam camera stream"></html>'
+            body = b'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PetCam Browser Source</title><style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden}#status{position:absolute;inset:0;display:grid;place-items:center;color:#ddd;font:16px sans-serif;text-align:center;padding:1rem;box-sizing:border-box}img{position:relative;display:block;width:100%;height:100%;object-fit:contain}img:not([data-ready]){opacity:0}</style><div id="status">Connecting to PetCam camera...</div><img id="stream" src="/stream" alt="PetCam camera stream"><script>const image=document.getElementById("stream"),status=document.getElementById("status");image.onload=()=>{image.dataset.ready="1";status.hidden=true};image.onerror=()=>{image.removeAttribute("data-ready");status.hidden=false;status.textContent="Camera stream unavailable. Check that the camera is running and MJPEG mode is enabled. Retrying...";setTimeout(()=>{image.src="/stream?retry="+Date.now()},3000)}</script></html>'
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))

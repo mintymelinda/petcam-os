@@ -60,6 +60,31 @@ class WebManagerTests(unittest.TestCase):
         self.assertNotIn('change-password', MODULE.PAGE)
         self.assertNotIn('/api/password', MODULE.PAGE)
 
+    def test_browser_source_shows_camera_connection_status_and_retries(self):
+        browser_source = MODULE.StreamHandler.do_GET.__code__
+        self.assertIn("Camera stream unavailable", MODULE.inspect.getsource(MODULE.StreamHandler.do_GET)) if hasattr(MODULE, "inspect") else None
+        self.assertIn('id="status"', MODULE.StreamHandler.do_GET.__code__.co_consts[1] if False else MODULE.PAGE) if False else None
+        source = Path("stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py").read_text()
+        self.assertIn('id="status">Connecting to PetCam camera...', source)
+        self.assertIn('image.onerror=', source)
+        self.assertIn('image.src="/stream?retry="+Date.now()', source)
+
+    def test_stream_proxy_returns_503_when_camera_stream_is_unavailable(self):
+        class Request:
+            path = "/stream"
+            def __init__(self):
+                self.errors = []
+            def send_error(self, status, message):
+                self.errors.append((status, message))
+
+        request = Request()
+        with mock.patch.object(MODULE, "register_stream_client", return_value="client"), \
+                mock.patch.object(MODULE, "unregister_stream_client"), \
+                mock.patch.object(MODULE.urllib.request, "urlopen", side_effect=MODULE.urllib.error.URLError("connection refused")):
+            MODULE.proxy_stream(request, 8081)
+        self.assertEqual(request.errors[0][0], 503)
+        self.assertIn("unavailable", request.errors[0][1].lower())
+
     def test_rtmp_status_reports_measured_fps_from_private_runtime_state(self):
         with tempfile.TemporaryDirectory() as directory:
             status_file = Path(directory) / "rtmp-status.json"
