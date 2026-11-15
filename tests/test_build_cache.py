@@ -63,7 +63,7 @@ class BuildPipelineContractTests(unittest.TestCase):
         self.assertIn("create_imager_os_list.py", validator)
         self.assertIn("qemu-arm-static", validator)
         self.assertIn("losetup", validator)
-        self.assertIn("validate(instance=catalogue, schema=schema)", validator)
+        self.assertIn("validate(instance=catalogue, schema=json.loads", validator)
         self.assertIn("IMAGE_SCHEMA_PATH", validator)
         self.assertIn("BASE_IMAGE_PATH", validator)
         self.assertIn("OUTPUT_IMAGE_PATH", validator)
