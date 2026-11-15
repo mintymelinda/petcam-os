@@ -505,10 +505,13 @@ class WebManagerTests(unittest.TestCase):
         )
 
     def test_camera_inventory_exposes_stable_identity_metadata(self):
-        with mock.patch.object(MODULE, "run_camera", return_value={
-            "usb_devices": [{"device": "/dev/v4l/by-id/usb-camera", "modes": []}],
-            "csi_cameras": [{"index": 0, "sensor": "imx708", "modes": []}],
-        }):
+        with mock.patch.object(
+            MODULE, "discover_devices",
+            return_value=[{"device": "/dev/v4l/by-id/usb-camera", "modes": []}],
+        ), mock.patch.object(
+            MODULE, "discover_csi_cameras",
+            return_value=[{"index": 0, "sensor": "imx708", "modes": []}],
+        ):
             cameras = MODULE.camera_inventory()
         self.assertEqual(len(cameras), 2)
         self.assertTrue(cameras[0]["stable_identity"])
