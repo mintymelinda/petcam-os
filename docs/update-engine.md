@@ -91,7 +91,7 @@ If the web manager health check fails, the updater restores the previous active 
 
 ## Web manager controls
 
-The manager's **Software updates** panel supports manual signed-release checks, installed and available version details, release notes and archive size, explicit install confirmation, progress/status polling, and recent updater journal output.
+The manager's **Software updates** panel supports manual signed-release checks, installed and available version details, release notes and archive size, explicit install confirmation, progress/status polling, and recent updater journal output. The updater atomically persists its current stage and timestamps in `/var/lib/petcam/update/status.json` (non-secret status only, readable by the unprivileged manager). The stages are checking, authenticating, downloading, staging, installing, restarting, verifying, and complete/failed. The browser resumes polling after a page reload or temporary manager disconnect; a lost HTTP response is not treated as proof that the install failed, and a second install request is rejected while the systemd updater is already active. A stopped updater without a terminal state is reported as interrupted/failed rather than successful. The final installed version is refreshed only after the updater reports a terminal result.
 
 A browser-local preference can trigger a check when that browser opens the PetCam manager. This is not a background schedule and does not install updates automatically. The manager remains unprivileged; its sudoers allowlist grants only fixed operations to check signed metadata, start the dedicated updater service, and read its recent journal.
 
