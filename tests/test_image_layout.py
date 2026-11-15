@@ -43,9 +43,9 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn('"$RELEASE_DIR/etc/petcam/home-assistant.conf"', script)
         self.assertIn('"architecture":"armhf"', script)
 
-    def test_timelapse_service_only_writes_to_managed_data_directory(self):
+    def test_timelapse_service_can_write_to_local_and_network_storage(self):
         service = TIMELAPSE_SERVICE.read_text()
-        self.assertIn("ReadWritePaths=/var/lib/petcam /mnt/petcam-network\\n", service)
+        self.assertIn("ReadWritePaths=/var/lib/petcam /mnt/petcam-network\n", service)
         self.assertIn("/mnt/petcam-network", service)
 
     def test_runtime_uses_stable_wrappers_and_active_release(self):
