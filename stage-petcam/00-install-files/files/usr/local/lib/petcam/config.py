@@ -226,25 +226,37 @@ def wait_for_stream(port: int, timeout: int = 30) -> bool:
 
 
 def wait_for_native_h264(timeout: int = 30) -> bool:
-    """Wait for native H.264 MPEG-TS packets from the selected USB camera."""
-    receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        receiver.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        receiver.bind(("127.0.0.1", 10000))
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            receiver.settimeout(max(0.05, deadline - time.monotonic()))
-            try:
-                packet, _address = receiver.recvfrom(65536)
-            except socket.timeout:
-                return False
-            if packet:
+    """Wait until the local GStreamer RTSP server advertises an H.264 video track."""
+    request = (
+        "DESCRIBE rtsp://127.0.0.1:8554/petcam RTSP/1.0\\r\\n"
+        "CSeq: 1\\r\\n"
+        "Accept: application/sdp\\r\\n\\r\\n"
+    ).encode("ascii")
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", 8554), timeout=1) as connection:
+                connection.settimeout(1)
+                connection.sendall(request)
+                response = bytearray()
+                while len(response) < 65536:
+                    chunk = connection.recv(4096)
+                    if not chunk:
+                        break
+                    response.extend(chunk)
+                    if b"\\r\\n\\r\\n" in response and b"m=video " in response:
+                        break
+            payload = bytes(response)
+            if (
+                b"RTSP/1.0 200" in payload
+                and b"m=video " in payload
+                and b"H264/90000" in payload.upper()
+            ):
                 return True
-        return False
-    except OSError:
-        return False
-    finally:
-        receiver.close()
+        except OSError:
+            pass
+        time.sleep(0.25)
+    return False
 
 
 def wait_for_configured_capture(config: dict[str, str], ready=wait_for_stream) -> bool:
