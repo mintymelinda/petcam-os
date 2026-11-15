@@ -78,6 +78,17 @@ RESOLUTION="${RESOLUTION:-auto}"
 FPS="${FPS:-auto}"
 CSI_QUALITY="${CSI_QUALITY:-70}"
 
+start_native_h264() {
+    local selection="$1"
+    local h264_device h264_resolution h264_fps
+    h264_device="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["device"])' <<< "$selection")"
+    h264_resolution="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["resolution"])' <<< "$selection")"
+    h264_fps="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["fps"])' <<< "$selection")"
+    python3 -c 'import json,os,sys,time; json.dump({"native_h264":True,"pid":os.getppid(),"device":sys.argv[1],"resolution":sys.argv[2],"fps":sys.argv[3],"updated_at":time.time()},open("/var/lib/petcam/camera-status.json","w"))' "$h264_device" "$h264_resolution" "$h264_fps"
+    echo "Native H.264 camera selected: $h264_device at $h264_resolution, $h264_fps FPS; GStreamer RTSP server owns V4L2."
+    exec /usr/bin/sleep infinity
+}
+
 start_usb() {
     rm -f /var/lib/petcam/camera-status.json
     rtmp_enabled="$(python3 -c 'import json,pathlib; p=pathlib.Path("/etc/petcam/rtmp.json"); print(str(bool(json.loads(p.read_text()).get("enabled")) if p.exists() else False).lower())')"
@@ -98,26 +109,14 @@ start_usb() {
             echo "The selected H.264 mode is no longer advertised by the USB camera." >&2
             exit 1
         fi
-        h264_device="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["device"])' <<< "$h264_selection")"
-        h264_resolution="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["resolution"])' <<< "$h264_selection")"
-        h264_fps="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["fps"])' <<< "$h264_selection")"
-        mkdir -p /run/petcam
-        python3 -c 'import json,os,time; json.dump({"native_h264":True,"pid":os.getppid(),"updated_at":time.time()},open("/var/lib/petcam/camera-status.json","w"))'
-        echo "Starting selected native USB H.264 capture $h264_device at $h264_resolution, $h264_fps FPS."
-        exec /usr/bin/ffmpeg -hide_banner -loglevel warning -nostdin -f v4l2 -input_format h264 -video_size "$h264_resolution" -framerate "$h264_fps" -i "$h264_device" -an -c:v copy -f mpegts "udp://127.0.0.1:10000?pkt_size=1316"
+        start_native_h264 "$h264_selection"
     fi
     if [[ "$rtmp_enabled" == "true" && "$mjpeg_consumers" != "true" && "$FORMAT" == "auto" ]]; then
         h264_args=(select-h264 --resolution "$RESOLUTION" --fps "$FPS")
         if [[ -n "$USB_PHYSICAL_PATH" ]]; then h264_args+=(--physical-path "$USB_PHYSICAL_PATH"); fi
         if [[ -n "$DEVICE" ]]; then h264_args+=(--device "$DEVICE"); fi
         if h264_selection="$(/usr/local/bin/petcam-camera "${h264_args[@]}" 2>/dev/null)"; then
-            h264_device="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["device"])' <<< "$h264_selection")"
-            h264_resolution="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["resolution"])' <<< "$h264_selection")"
-            h264_fps="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["fps"])' <<< "$h264_selection")"
-            mkdir -p /run/petcam
-            python3 -c 'import json,os,time; json.dump({"native_h264":True,"pid":os.getppid(),"updated_at":time.time()},open("/var/lib/petcam/camera-status.json","w"))'
-            echo "Starting native USB H.264 capture $h264_device at $h264_resolution, $h264_fps FPS."
-            exec /usr/bin/ffmpeg -hide_banner -loglevel warning -nostdin -f v4l2 -input_format h264 -video_size "$h264_resolution" -framerate "$h264_fps" -i "$h264_device" -an -c:v copy -f mpegts "udp://127.0.0.1:10000?pkt_size=1316"
+            start_native_h264 "$h264_selection"
         fi
     fi
     args=(select --format "$FORMAT" --resolution "$RESOLUTION" --fps "$FPS")
