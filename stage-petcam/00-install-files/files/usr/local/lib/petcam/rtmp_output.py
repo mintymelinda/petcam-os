@@ -102,7 +102,7 @@ def build_gstreamer_launch(camera_status, mjpeg_url="http://127.0.0.1:8081/strea
         device = camera_status.get("device", "")
         resolution = camera_status.get("resolution", "")
         fps = camera_status.get("fps", "")
-        if not re.fullmatch(r"/dev/(?:video[0-9]+|v4l/by-id/[A-Za-z0-9._:+-]+)", device):
+        if not re.fullmatch(r"/dev/(?:video[0-9]+|v4l/by-id/[A-Za-z0-9._:+_-]+)", device):
             raise RTMPConfigError("Native H.264 camera device path is invalid.")
         if not re.fullmatch(r"[1-9][0-9]{0,4}x[1-9][0-9]{0,4}", str(resolution)):
             raise RTMPConfigError("Native H.264 resolution is invalid.")
