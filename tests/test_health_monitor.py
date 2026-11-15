@@ -67,6 +67,14 @@ class HealthMonitorTests(unittest.TestCase):
         self.assertEqual(report["next_recovery_at"], 0)
 
 
+    def test_csi_native_h264_rtsp_status_is_accepted_as_ready(self):
+        status_file = Path(self.directory.name) / "rtsp-status.json"
+        status_file.write_text(__import__("json").dumps({
+            "source": "native_h264_csi", "state": "publishing", "active": True, "updated_at": 1000,
+        }))
+        with mock.patch.object(MODULE, "RTSP_STATUS_FILE", status_file):
+            self.assertTrue(MODULE.native_h264_rtsp_ready(now=1000))
+
     def test_native_h264_health_uses_rtsp_not_mjpeg_probes(self):
         with mock.patch.object(MODULE, "parse_config", return_value={"FORMAT": "H264"}), \
                 mock.patch.object(MODULE, "native_h264_capture_active", return_value=True), \

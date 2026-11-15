@@ -146,6 +146,9 @@ start_usb() {
 }
 
 start_csi() {
+    rm -f /var/lib/petcam/camera-status.json
+    rtmp_enabled="$(python3 -c 'import json,pathlib; p=pathlib.Path("/etc/petcam/rtmp.json"); print(str(bool(json.loads(p.read_text()).get("enabled")) if p.exists() else False).lower())')"
+    mjpeg_consumers="$(python3 -c 'import json,pathlib; paths=[pathlib.Path("/var/lib/petcam/timelapse/config.json"),pathlib.Path("/var/lib/petcam/motion/config.json")]; print(str(any(bool(json.loads(p.read_text()).get("enabled")) for p in paths if p.exists())).lower())')"
     args=(select-csi --resolution "$RESOLUTION" --fps "$FPS")
     if [[ -n "$CSI_DEVICE_PATH" ]]; then
         args+=(--device-path "$CSI_DEVICE_PATH")
@@ -172,6 +175,14 @@ start_csi() {
         echo "WARNING: selected CSI mode exceeds the automatic performance budget." >&2
     fi
     echo "PetCam backend: csi; hardware tier: $tier"
+    if [[ "$rtmp_enabled" == "true" && "$mjpeg_consumers" != "true" ]] && /usr/local/bin/petcam-camera h264-encoder >/dev/null 2>&1; then
+        echo "Confirmed Raspberry Pi hardware H.264 encoder; using native CSI H.264 for RTSP."
+        echo "Browser MJPEG is unavailable while native H.264 capture is active."
+        exec python3 /opt/petcam/current/lib/csi_stream.py --camera "$camera" --resolution "$resolution" --fps "$fps" --h264 --tcp-port 8556 --host 127.0.0.1 --port "$PORT"
+    fi
+    if [[ "$rtmp_enabled" == "true" && "$mjpeg_consumers" != "true" ]]; then
+        echo "No supported hardware H.264 encoder detected; retaining the CSI MJPEG path."
+    fi
     echo "Starting CSI camera index=$camera at $resolution, requested_fps=$fps, MJPEG quality=$CSI_QUALITY"
     exec python3 /opt/petcam/current/lib/csi_stream.py --camera "$camera" --resolution "$resolution" --fps "$fps" --quality "$CSI_QUALITY" --host 127.0.0.1 --port "$PORT"
 }

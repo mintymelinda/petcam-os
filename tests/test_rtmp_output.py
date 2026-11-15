@@ -63,6 +63,24 @@ class OBSOutputTests(unittest.TestCase):
         for forbidden in ("avdec_h264", "decodebin", "x264enc", "avenc_h264", "ffmpeg", "mpegts", "udp://"):
             self.assertNotIn(forbidden, pipeline)
 
+    def test_csi_hardware_h264_pipeline_reads_local_compressed_stream(self):
+        pipeline = MODULE.build_gstreamer_launch({
+            "native_h264": True, "backend": "csi", "tcp_port": 8556,
+            "resolution": "1920x1080", "fps": 30,
+        })
+        self.assertIn("tcpclientsrc host=127.0.0.1 port=8556", pipeline)
+        self.assertIn("h264parse config-interval=-1", pipeline)
+        self.assertIn("rtph264pay name=pay0 pt=96", pipeline)
+        for forbidden in ("v4l2src", "avdec_h264", "x264enc", "avenc_h264", "ffmpeg"):
+            self.assertNotIn(forbidden, pipeline)
+
+    def test_csi_h264_pipeline_rejects_invalid_bridge_port(self):
+        with self.assertRaisesRegex(MODULE.RTMPConfigError, "bridge port"):
+            MODULE.build_gstreamer_launch({
+                "native_h264": True, "backend": "csi", "tcp_port": 70000,
+                "resolution": "1280x720", "fps": 30,
+            })
+
     def test_native_h264_pipeline_rejects_invalid_camera_metadata(self):
         with self.assertRaisesRegex(MODULE.RTMPConfigError, "device path is invalid"):
             MODULE.build_gstreamer_launch({

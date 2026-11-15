@@ -127,6 +127,25 @@ class WebManagerTests(unittest.TestCase):
         self.assertNotIn('change-password', MODULE.PAGE)
         self.assertNotIn('/api/password', MODULE.PAGE)
 
+    def test_live_capture_status_reports_csi_hardware_h264_marker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "camera-status.json"
+            marker.write_text(json.dumps({
+                "pid": __import__("os").getpid(), "native_h264": True, "backend": "csi",
+                "resolution": "1920x1080", "fps": 30, "encoder": "bcm2835-codec-encode",
+            }))
+            real_path = MODULE.Path
+            def mapped_path(value):
+                if str(value) == "/var/lib/petcam/camera-status.json":
+                    return marker
+                return real_path(value)
+            with mock.patch.object(MODULE, "Path", side_effect=mapped_path), \
+                    mock.patch.object(MODULE, "parse_config", return_value={"PORT": 8081, "RESOLUTION": "auto", "FPS": "auto"}):
+                status = MODULE.live_capture_status()
+        self.assertEqual(status["active_capture_format"], "H264")
+        self.assertEqual(status["active_resolution"], "1920x1080")
+        self.assertEqual(status["capture_mode"], "native_h264_csi")
+
     def test_browser_source_shows_camera_connection_status_and_retries(self):
         source = Path("stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py").read_text()
         self.assertIn('id="status">Connecting to PetCam camera...', source)
