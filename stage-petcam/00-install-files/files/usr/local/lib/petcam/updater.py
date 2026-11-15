@@ -92,7 +92,7 @@ def write_update_state(stage: str, message: str = "", **details: object) -> None
         state["finished_at"] = now
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(state, sort_keys=True) + "\\n", encoding="utf-8")
-    os.chmod(temporary, 0o600)
+    os.chmod(temporary, 0o644)
     os.replace(temporary, path)
 
 
@@ -629,7 +629,7 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
 
     selected = status["releases"][0]
     manifest_url = str(selected["manifest_url"])
-    write_update_state("verifying", f"Verifying signed release {version}", target_version=version)
+    write_update_state("authenticating", f"Verifying signed release {version}", target_version=version)
     raw_manifest = fetch(manifest_url, MAX_MANIFEST)
     signature = fetch(manifest_url + ".sig", 4096)
     verify_signature(raw_manifest, signature, Path(config.get("PUBLIC_KEY", str(PUBLIC_KEY))))
