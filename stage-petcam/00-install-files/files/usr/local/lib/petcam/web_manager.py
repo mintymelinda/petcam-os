@@ -1336,7 +1336,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise RuntimeError("Switch the camera back to MJPEG before enabling timelapse; timelapse requires MJPEG frames.")
                 current = load_timelapse_config()
                 commands = [
-                    (["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
+                    (["sudo", "-n", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
                      45, "Unable to restart camera after changing timelapse settings."),
                 ]
                 if load_rtmp_config()["enabled"]:
@@ -1355,7 +1355,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise RuntimeError("Switch the camera back to MJPEG before enabling motion detection; motion detection requires MJPEG frames.")
                 current = load_motion_config()
                 commands = [
-                    (["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
+                    (["sudo", "-n", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
                      45, "Unable to restart camera after changing motion settings."),
                 ]
                 if load_rtmp_config()["enabled"]:
@@ -1390,13 +1390,13 @@ class Handler(BaseHTTPRequestHandler):
                     ("restart" if was_active else "enable") if current["enabled"] else "disable"
                 )
                 commands = [
-                    (["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
+                    (["sudo", "-n", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
                      45, "Unable to restart the camera with the saved OBS output settings."),
                     (["sudo", "-n", "/usr/local/sbin/petcam-rtmp-service", action],
                      30, "Unable to update OBS output service state."),
                 ]
                 rollback_commands = [
-                    (["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
+                    (["sudo", "-n", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
                      45, "Unable to restart the camera with the restored OBS output settings."),
                     (["sudo", "-n", "/usr/local/sbin/petcam-rtmp-service", previous_action],
                      30, "Unable to restore OBS output service state."),
