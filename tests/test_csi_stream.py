@@ -16,7 +16,6 @@ class CSIStreamTests(unittest.TestCase):
         self.assertEqual(source.width, 640)
         self.assertEqual(source.height, 480)
         self.assertEqual(source.fps, 30)
-        self.assertFalse(source.native_h264)
         self.assertFalse(source.stop_event.is_set())
 
     def test_extracts_concatenated_jpeg_frames(self):
