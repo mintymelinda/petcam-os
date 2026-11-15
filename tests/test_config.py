@@ -230,27 +230,58 @@ class TransactionalApplyTests(unittest.TestCase):
             self.assertTrue(MODULE.configuration_change_in_progress(self.config))
         self.assertFalse(MODULE.configuration_change_in_progress(self.config))
 
-    def test_native_h264_readiness_receives_udp_transport_packets(self):
-        class Receiver:
+    def test_native_h264_readiness_requires_rtsp_play_and_h264_rtp_packet(self):
+        sdp = (
+            "v=0\\r\\n"
+            "m=video 0 RTP/AVP 96\\r\\n"
+            "a=rtpmap:96 H264/90000\\r\\n"
+            "a=control:trackID=0\\r\\n"
+        ).encode("ascii")
+        rtp = bytes([0x80, 96, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0x65])
+        interleaved = b"$" + bytes([0]) + len(rtp).to_bytes(2, "big") + rtp
+        responses = (
+            b"RTSP/1.0 200 OK\\r\\nCSeq: 1\\r\\n"
+            b"Content-Base: rtsp://127.0.0.1:8554/petcam/\\r\\n"
+            + f"Content-Length: {len(sdp)}\\r\\n\\r\\n".encode("ascii") + sdp
+            + b"RTSP/1.0 200 OK\\r\\nCSeq: 2\\r\\nSession: test-session\\r\\n"
+            b"Transport: RTP/AVP/TCP;unicast;interleaved=0-1\\r\\nContent-Length: 0\\r\\n\\r\\n"
+            + b"RTSP/1.0 200 OK\\r\\nCSeq: 3\\r\\nSession: test-session\\r\\n"
+            b"Content-Length: 0\\r\\n\\r\\n" + interleaved
+        )
+
+        class FakeSocket:
             def __init__(self):
-                self.bound = None
+                self.remaining = bytearray(responses)
+                self.requests = []
                 self.closed = False
-            def setsockopt(self, *_args):
-                pass
-            def bind(self, address):
-                self.bound = address
-            def settimeout(self, _timeout):
-                pass
-            def recvfrom(self, _size):
-                return b"mpegts", ("127.0.0.1", 10000)
-            def close(self):
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
                 self.closed = True
 
-        receiver = Receiver()
-        with mock.patch.object(MODULE.socket, "socket", return_value=receiver):
+            def settimeout(self, _timeout):
+                pass
+
+            def sendall(self, data):
+                self.requests.append(data.decode("ascii"))
+
+            def recv(self, size):
+                chunk = bytes(self.remaining[:size])
+                del self.remaining[:size]
+                return chunk
+
+        connection = FakeSocket()
+        with mock.patch.object(MODULE.socket, "create_connection", return_value=connection):
             self.assertTrue(MODULE.wait_for_native_h264(timeout=1))
-        self.assertEqual(receiver.bound, ("127.0.0.1", 10000))
-        self.assertTrue(receiver.closed)
+        requests = "".join(connection.requests)
+        self.assertIn("DESCRIBE ", requests)
+        self.assertIn("SETUP rtsp://127.0.0.1:8554/petcam/trackID=0", requests)
+        self.assertIn("Transport: RTP/AVP/TCP;unicast;interleaved=0-1", requests)
+        self.assertIn("PLAY rtsp://127.0.0.1:8554/petcam", requests)
+        self.assertTrue(connection.closed)
+
 
     def test_configured_capture_readiness_uses_native_h264_for_h264_mode(self):
         ready = mock.Mock(return_value=True)
