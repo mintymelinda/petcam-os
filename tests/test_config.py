@@ -232,21 +232,21 @@ class TransactionalApplyTests(unittest.TestCase):
 
     def test_native_h264_readiness_requires_rtsp_play_and_h264_rtp_packet(self):
         sdp = (
-            "v=0\\r\\n"
-            "m=video 0 RTP/AVP 96\\r\\n"
-            "a=rtpmap:96 H264/90000\\r\\n"
-            "a=control:trackID=0\\r\\n"
+            "v=0\r\n"
+            "m=video 0 RTP/AVP 96\r\n"
+            "a=rtpmap:96 H264/90000\r\n"
+            "a=control:trackID=0\r\n"
         ).encode("ascii")
         rtp = bytes([0x80, 96, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0x65])
         interleaved = b"$" + bytes([0]) + len(rtp).to_bytes(2, "big") + rtp
         responses = (
-            b"RTSP/1.0 200 OK\\r\\nCSeq: 1\\r\\n"
-            b"Content-Base: rtsp://127.0.0.1:8554/petcam/\\r\\n"
-            + f"Content-Length: {len(sdp)}\\r\\n\\r\\n".encode("ascii") + sdp
-            + b"RTSP/1.0 200 OK\\r\\nCSeq: 2\\r\\nSession: test-session\\r\\n"
-            b"Transport: RTP/AVP/TCP;unicast;interleaved=0-1\\r\\nContent-Length: 0\\r\\n\\r\\n"
-            + b"RTSP/1.0 200 OK\\r\\nCSeq: 3\\r\\nSession: test-session\\r\\n"
-            b"Content-Length: 0\\r\\n\\r\\n" + interleaved
+            b"RTSP/1.0 200 OK\r\nCSeq: 1\r\n"
+            b"Content-Base: rtsp://127.0.0.1:8554/petcam/\r\n"
+            + f"Content-Length: {len(sdp)}\r\n\r\n".encode("ascii") + sdp
+            + b"RTSP/1.0 200 OK\r\nCSeq: 2\r\nSession: test-session\r\n"
+            b"Transport: RTP/AVP/TCP;unicast;interleaved=0-1\r\nContent-Length: 0\r\n\r\n"
+            + b"RTSP/1.0 200 OK\r\nCSeq: 3\r\nSession: test-session\r\n"
+            b"Content-Length: 0\r\n\r\n" + interleaved
         )
 
         class FakeSocket:
