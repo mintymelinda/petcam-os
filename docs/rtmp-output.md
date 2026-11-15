@@ -20,7 +20,7 @@ For MJPEG capture, enable **System → OBS Output → Enable OBS RTSP feed** to 
 rtsp://PETCAM_HOST:8554/petcam
 ```
 
-When H.264 is selected, PetCam captures the advertised V4L2 H.264 mode and packet-copies the MPEG-TS transport stream into RTSP. Otherwise, the MJPEG path packet-copies the original JPEG frames into RTSP. Neither path decodes, scales, changes frame rate, or re-encodes video. Output controls are limited to enable/disable because the camera's advertised capture mode determines the stream format.
+When H.264 is selected, PetCam captures the advertised V4L2 H.264 mode and packetizes the camera's existing H.264 bitstream directly as RTP for RTSP. Otherwise, the MJPEG path packet-copies the original JPEG frames into RTSP. Neither path decodes, scales, changes frame rate, or re-encodes video. USB H.264 capture is served directly by GStreamer's RTSP server. CSI cameras retain their MJPEG capture/browser feed and do not use the removed FFmpeg-based H.264 side path. Output controls are limited to enable/disable because the camera's advertised capture mode determines the stream format.
 
 ## MJPEG-only features
 
