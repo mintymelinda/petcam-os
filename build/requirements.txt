@@ -1,0 +1,2 @@
+# Python dependencies used by the containerized image validation/assembly tools.
+jsonschema>=4.23,<5
