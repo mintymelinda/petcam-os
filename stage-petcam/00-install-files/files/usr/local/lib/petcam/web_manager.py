@@ -1389,8 +1389,7 @@ class Handler(BaseHTTPRequestHandler):
                     check=False, timeout=5,
                 ).returncode == 0
                 candidate = {**current, **data}
-                updated = save_rtmp_config(candidate) if False else candidate
-                action = ("restart" if was_active else "enable") if updated["enabled"] else "disable"
+                action = ("restart" if was_active else "enable") if candidate["enabled"] else "disable"
                 previous_action = (
                     ("restart" if was_active else "enable") if current["enabled"] else "disable"
                 )
