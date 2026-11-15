@@ -258,14 +258,14 @@ class WebManagerTests(unittest.TestCase):
         }
         previous_camera = {**MODULE.parse_config(), "SOURCE": "usb", "FORMAT": "MJPG",
                            "RESOLUTION": "1280x720", "FPS": "30"}
-        with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \\
-                mock.patch.object(MODULE, "parse_config", return_value=previous_camera), \\
-                mock.patch.object(MODULE, "load_rtmp_config", side_effect=[{"enabled": False}, {"enabled": True}]), \\
-                mock.patch.object(MODULE, "save_rtmp_config") as save_rtmp, \\
-                mock.patch.object(MODULE, "load_timelapse_config", return_value={"enabled": False}), \\
-                mock.patch.object(MODULE, "load_motion_config", return_value={"enabled": False}), \\
-                mock.patch.object(MODULE.Path, "is_file", return_value=True), \\
-                mock.patch.object(MODULE, "apply_config") as apply, \\
+        with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \
+                mock.patch.object(MODULE, "parse_config", return_value=previous_camera), \
+                mock.patch.object(MODULE, "load_rtmp_config", side_effect=[{"enabled": False}, {"enabled": True}]), \
+                mock.patch.object(MODULE, "save_rtmp_config") as save_rtmp, \
+                mock.patch.object(MODULE, "load_timelapse_config", return_value={"enabled": False}), \
+                mock.patch.object(MODULE, "load_motion_config", return_value={"enabled": False}), \
+                mock.patch.object(MODULE.Path, "is_file", return_value=True), \
+                mock.patch.object(MODULE, "apply_config") as apply, \
                 mock.patch.object(MODULE.subprocess, "run", side_effect=[
                     mock.Mock(returncode=1), mock.Mock(returncode=0, stderr=""),
                 ]) as run:
@@ -284,12 +284,13 @@ class WebManagerTests(unittest.TestCase):
             "kind": "usb", "id": "usb-kiyo", "device": "/dev/video0",
             "modes": [{"format": "H264", "width": 1920, "height": 1080, "fps": [30]}],
         }
-        with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \\
-                mock.patch.object(MODULE, "parse_config", return_value=MODULE.parse_config()), \\
-                mock.patch.object(MODULE, "load_rtmp_config", return_value={"enabled": False}), \\
-                mock.patch.object(MODULE, "load_timelapse_config", return_value={"enabled": True}), \\
-                mock.patch.object(MODULE, "load_motion_config", return_value={"enabled": False}), \\
-                mock.patch.object(MODULE.Path, "is_file", return_value=True), \\
+        with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \
+                mock.patch.object(MODULE, "parse_config", return_value=MODULE.parse_config()), \
+                mock.patch.object(MODULE, "load_rtmp_config", return_value={"enabled": False}), \
+                mock.patch.object(MODULE, "load_timelapse_config", return_value={"enabled": True}), \
+                mock.patch.object(MODULE, "load_motion_config", return_value={"enabled": False}), \
+                mock.patch.object(MODULE.Path, "is_file", return_value=True), \
+                mock.patch.object(MODULE.subprocess, "run", return_value=mock.Mock(returncode=1)), \
                 mock.patch.object(MODULE, "apply_config") as apply:
             with self.assertRaisesRegex(ValueError, "Disable timelapse and motion detection"):
                 MODULE.save_selection({
