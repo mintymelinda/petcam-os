@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 CONFIG_PATH = Path(os.environ.get("PETCAM_CONFIG_PATH", "/etc/petcam/petcam.conf"))
+CAMERA_STATUS_PATH = Path("/var/lib/petcam/camera-status.json")
 LAST_GOOD_PATH = Path(os.environ.get("PETCAM_LAST_GOOD_PATH", str(CONFIG_PATH.with_name(CONFIG_PATH.name + ".last-good"))))
 DEFAULTS = {
     "SOURCE": "auto",
@@ -336,7 +337,14 @@ def wait_for_native_h264(timeout: int = 30) -> bool:
 
 
 def wait_for_configured_capture(config: dict[str, str], ready=wait_for_stream) -> bool:
-    if config.get("FORMAT") == "H264":
+    native_h264 = config.get("FORMAT") == "H264"
+    if not native_h264 and config.get("FORMAT") == "auto":
+        try:
+            marker = json.loads(CAMERA_STATUS_PATH.read_text(encoding="utf-8"))
+            native_h264 = isinstance(marker, dict) and marker.get("native_h264") is True
+        except (OSError, ValueError):
+            native_h264 = False
+    if native_h264:
         return wait_for_native_h264()
     return ready(int(config["PORT"]))
 
