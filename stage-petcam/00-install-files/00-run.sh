@@ -32,6 +32,8 @@ install -m 0644 files/usr/local/lib/petcam/csi_stream.py "$RELEASE_DIR/lib/csi_s
 install -m 0644 files/usr/local/lib/petcam/rtmp_output.py "$RELEASE_DIR/lib/rtmp_output.py"
 install -m 0644 files/etc/systemd/system/petcam-rtmp.service "$RELEASE_DIR/systemd/petcam-rtmp.service"
 install -D -m 0644 files/etc/systemd/system/petcam-rtmp.service "${ROOTFS_DIR}/etc/systemd/system/petcam-rtmp.service"
+install -D -o root -g root -m 0755 files/usr/local/sbin/petcam-rtmp-service "${ROOTFS_DIR}/usr/local/sbin/petcam-rtmp-service"
+install -D -o root -g root -m 0440 files/etc/sudoers.d/petcam-rtmp "${ROOTFS_DIR}/etc/sudoers.d/petcam-rtmp"
 install -m 0640 files/etc/petcam/rtmp.json "$RELEASE_DIR/etc/petcam/rtmp.json"
 install -D -m 0640 files/etc/petcam/rtmp.json "${ROOTFS_DIR}/etc/petcam/rtmp.json"
 install -m 0644 files/usr/local/lib/petcam/timelapse.py "$RELEASE_DIR/lib/timelapse.py"
