@@ -534,19 +534,30 @@ def atomic_activate(release: Path) -> str | None:
     return previous
 
 
+def command_failure(label: str, result: subprocess.CompletedProcess) -> str:
+    detail = (result.stderr or result.stdout or "").strip()
+    return f"{label} (exit {result.returncode})" + (f": {detail}" if detail else ": command returned no diagnostic output")
+
+
+def run_required(command: list[str], label: str) -> None:
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode:
+        raise UpdateError(command_failure(label, result))
+
+
 def restart_services() -> str:
     web = subprocess.run(
         ["systemctl", "restart", "petcam-web.service"],
         capture_output=True, text=True, check=False,
     )
     if web.returncode:
-        raise UpdateError(f"Unable to restart PetCam web service: {web.stderr.strip()}")
+        raise UpdateError(command_failure("Unable to restart PetCam web service", web))
     stream = subprocess.run(
         ["systemctl", "restart", "petcam-stream.service"],
         capture_output=True, text=True, check=False,
     )
     if stream.returncode:
-        return "Camera stream did not start; check camera connection and petcam-stream.service logs"
+        return command_failure("Camera stream did not start; check camera connection and petcam-stream.service logs", stream)
     warnings = []
     integration_active = subprocess.run(
         ["systemctl", "is-active", "--quiet", "petcam-home-assistant.service"],
@@ -558,7 +569,7 @@ def restart_services() -> str:
             capture_output=True, text=True, check=False,
         )
         if integration.returncode:
-            warnings.append("Home Assistant MQTT publisher did not restart; check petcam-home-assistant.service logs")
+            warnings.append(command_failure("Home Assistant MQTT publisher did not restart; check petcam-home-assistant.service logs", integration))
     timelapse_active = subprocess.run(
         ["systemctl", "is-active", "--quiet", "petcam-timelapse.service"],
         check=False,
@@ -569,7 +580,7 @@ def restart_services() -> str:
             capture_output=True, text=True, check=False,
         )
         if timelapse.returncode:
-            warnings.append("Timelapse worker did not restart; check petcam-timelapse.service logs")
+            warnings.append(command_failure("Timelapse worker did not restart; check petcam-timelapse.service logs", timelapse))
     motion_active = subprocess.run(
         ["systemctl", "is-active", "--quiet", "petcam-motion.service"],
         check=False,
@@ -580,7 +591,7 @@ def restart_services() -> str:
             capture_output=True, text=True, check=False,
         )
         if motion.returncode:
-            warnings.append("Motion worker did not restart; check petcam-motion.service logs")
+            warnings.append(command_failure("Motion worker did not restart; check petcam-motion.service logs", motion))
     rtmp_active = subprocess.run(
         ["systemctl", "is-active", "--quiet", "petcam-rtmp.service"],
         check=False,
@@ -591,7 +602,7 @@ def restart_services() -> str:
             capture_output=True, text=True, check=False,
         )
         if rtmp.returncode:
-            warnings.append("RTMP publisher did not restart; check petcam-rtmp.service logs")
+            warnings.append(command_failure("RTMP publisher did not restart; check petcam-rtmp.service logs", rtmp))
     return "; ".join(warnings)
 
 
@@ -662,9 +673,9 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
         switched = True
         repair_config_directory_permissions()
         install_runtime_integration_files(final)
-        subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
-        subprocess.run(["systemctl", "enable", "--now", "petcam-timelapse.service"], check=True, capture_output=True)
-        subprocess.run(["systemctl", "enable", "--now", "petcam-motion.service"], check=True, capture_output=True)
+        run_required(["systemctl", "daemon-reload"], "Reloading systemd units")
+        run_required(["systemctl", "enable", "--now", "petcam-timelapse.service"], "Enabling timelapse service")
+        run_required(["systemctl", "enable", "--now", "petcam-motion.service"], "Enabling motion service")
         write_update_state("restarting", "Restarting PetCam services", target_version=version, previous_version=old_version)
         stream_warning = restart_services()
         write_update_state("verifying", "Checking the restarted web manager", target_version=version, previous_version=old_version)
@@ -681,7 +692,7 @@ def install_update(config: dict[str, str]) -> dict[str, object]:
         if switched and old_version:
             try:
                 atomic_activate(RELEASES / old_version)
-                subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
+                run_required(["systemctl", "daemon-reload"], "Reloading systemd units during rollback")
                 restart_services()
             except Exception as rollback_error:
                 raise UpdateError(
