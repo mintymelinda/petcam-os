@@ -65,6 +65,7 @@ class ImageLayoutTests(unittest.TestCase):
             script,
         )
         self.assertIn("visudo -cf /etc/sudoers.d/petcam-rtmp", script)
+        self.assertIn("/usr/bin/systemctl start --no-block petcam-update.service", script)
         self.assertNotIn("cat > /usr/local/sbin/petcam-rtmp-service", script)
 
     def test_stream_backend_uses_loopback_port_separate_from_web_ui(self):
