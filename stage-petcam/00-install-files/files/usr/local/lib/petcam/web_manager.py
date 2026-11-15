@@ -660,7 +660,7 @@ def apply_service_config_transaction(save, previous, candidate, commands, rollba
 
 def set_rtmp_service(action):
     result = subprocess.run(
-        ["sudo", "/usr/local/sbin/petcam-rtmp-service", action],
+        ["sudo", "-n", "/usr/local/sbin/petcam-rtmp-service", action],
         capture_output=True, text=True, timeout=30, check=False,
     )
     if result.returncode:
@@ -1392,7 +1392,7 @@ class Handler(BaseHTTPRequestHandler):
                 commands = [
                     (["sudo", "/usr/bin/systemctl", "restart", "petcam-stream.service"],
                      45, "Unable to restart the camera with the saved OBS output settings."),
-                    (["sudo", "/usr/local/sbin/petcam-rtmp-service", action],
+                    (["sudo", "-n", "/usr/local/sbin/petcam-rtmp-service", action],
                      30, "Unable to update OBS output service state."),
                 ]
                 rollback_commands = [
