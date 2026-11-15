@@ -271,9 +271,9 @@ class WebManagerTests(unittest.TestCase):
                 {"format": "H264", "width": 1920, "height": 1080, "fps": [30]},
             ],
         }]
-        with mock.patch.object(MODULE, "discover_devices", return_value=usb_devices) as discover_usb, \\
-                mock.patch.object(MODULE, "discover_csi_cameras", return_value=[]) as discover_csi:
-            cameras = MODULE.camera_inventory()
+        with mock.patch.object(MODULE, "discover_devices", return_value=usb_devices) as discover_usb:
+            with mock.patch.object(MODULE, "discover_csi_cameras", return_value=[]) as discover_csi:
+                cameras = MODULE.camera_inventory()
         discover_usb.assert_called_once_with()
         discover_csi.assert_called_once_with()
         self.assertEqual({mode["format"] for mode in cameras[0]["modes"]}, {"MJPG", "H264"})
