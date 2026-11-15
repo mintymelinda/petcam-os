@@ -21,15 +21,7 @@ from pathlib import Path
 CONFIG_PATH = Path(os.environ.get("PETCAM_RTMP_CONFIG", "/etc/petcam/rtmp.json"))
 STATUS_PATH = Path(os.environ.get("PETCAM_RTMP_STATUS", "/run/petcam/rtmp-status.json"))
 RTSP_URL = "rtsp://127.0.0.1:8554/petcam"
-DEFAULTS = {
-    "enabled": False,
-    "encoder": "libx264",
-    "width": 640,
-    "height": 360,
-    "fps": 15,
-    "bitrate_kbps": 750,
-}
-ENCODERS = {"libx264", "h264_v4l2m2m"}
+DEFAULTS = {"enabled": False}
 
 
 class RTMPConfigError(ValueError):
@@ -42,15 +34,6 @@ def validate_config(values):
     config = {**DEFAULTS, **{key: value for key, value in values.items() if key in DEFAULTS}}
     if not isinstance(config["enabled"], bool):
         raise RTMPConfigError("OBS output enabled must be true or false.")
-    if config["encoder"] not in ENCODERS:
-        raise RTMPConfigError("Encoder must be libx264 or h264_v4l2m2m.")
-    for field, minimum, maximum in (
-        ("width", 160, 1920), ("height", 90, 1080),
-        ("fps", 1, 60), ("bitrate_kbps", 250, 12000),
-    ):
-        value = config[field]
-        if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
-            raise RTMPConfigError(f"{field} must be an integer from {minimum} to {maximum}.")
     return config
 
 
@@ -114,16 +97,8 @@ def build_ffmpeg_command(config, input_url="http://127.0.0.1:8081/stream", nativ
     else:
         command.extend([
             "-f", "mpjpeg", "-i", input_url,
-            "-an", "-vf",
-            f"fps={config['fps']},scale={config['width']}:{config['height']}:force_original_aspect_ratio=decrease,pad={config['width']}:{config['height']}:(ow-iw)/2:(oh-ih)/2",
-            "-pix_fmt", "yuv420p", "-c:v", config["encoder"],
-            "-b:v", f"{config['bitrate_kbps']}k",
-            "-maxrate", f"{config['bitrate_kbps']}k",
-            "-bufsize", f"{config['bitrate_kbps'] * 2}k",
-            "-g", str(config["fps"] * 2),
+            "-map", "0:v:0", "-an", "-c:v", "copy",
         ])
-        if config["encoder"] == "libx264":
-            command.extend(["-preset", "ultrafast", "-tune", "zerolatency"])
     command.extend([
         "-progress", "pipe:1", "-stats_period", "1", "-nostats",
         "-rtsp_transport", "tcp", "-f", "rtsp", RTSP_URL,
@@ -132,6 +107,18 @@ def build_ffmpeg_command(config, input_url="http://127.0.0.1:8081/stream", nativ
 
 
 def native_h264_available(status_url="http://127.0.0.1:8081/status", timeout=25):
+    marker = Path("/run/petcam/camera-status.json")
+    try:
+        status = json.loads(marker.read_text(encoding="utf-8"))
+        if status.get("native_h264") is True and time.time() - float(status.get("updated_at", 0)) < 60:
+            active = subprocess.run(
+                ["systemctl", "is-active", "--quiet", "petcam-stream.service"],
+                check=False, timeout=2,
+            ).returncode == 0
+            if active:
+                return True
+    except (OSError, ValueError, TypeError, subprocess.SubprocessError):
+        pass
     deadline = time.monotonic() + timeout
     while True:
         try:
@@ -216,23 +203,16 @@ def main():
         raise SystemExit("OBS output is disabled.")
     native_h264 = native_h264_available()
     command = build_ffmpeg_command(config, native_h264=native_h264)
-    if not native_h264:
-        encoders = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-encoders"],
-            capture_output=True, text=True, timeout=15, check=False,
-        )
-        if encoders.returncode or not re.search(r"\b" + re.escape(config["encoder"]) + r"\b", encoders.stdout):
-            raise SystemExit(f"Configured FFmpeg encoder is unavailable: {config['encoder']}")
     if args.check:
         binary = Path(__file__).resolve().parents[1] / "bin" / "mediamtx"
         if not binary.is_file() or not os.access(binary, os.X_OK):
             raise SystemExit("Bundled MediaMTX RTSP server is missing or not executable.")
-        print(json.dumps({**public_config(config), "source": "native_h264" if native_h264 else "mjpeg_transcode",
+        print(json.dumps({**public_config(config), "source": "native_h264" if native_h264 else "mjpeg_copy",
                           "rtsp_url": "rtsp://<petcam-host>:8554/petcam"}))
         return
     rtsp_server = start_rtsp_server()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    logging.info("Starting OBS RTSP feed using %s", "Picamera2 native H.264 stream copy" if native_h264 else config["encoder"])
+    logging.info("Starting OBS RTSP feed using %s", "native H.264 stream copy" if native_h264 else "MJPEG packet copy")
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
     stopping = False
     latest_fps = None
@@ -249,7 +229,7 @@ def main():
         payload = {
             "state": state, "active": state == "publishing",
             "fps": latest_fps, "updated_at": time.time(),
-            "source": "native_h264" if native_h264 else "mjpeg_transcode",
+            "source": "native_h264" if native_h264 else "mjpeg_copy",
         }
         temporary = STATUS_PATH.with_name(STATUS_PATH.name + ".tmp")
         temporary.write_text(json.dumps(payload) + "\n", encoding="utf-8")

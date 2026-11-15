@@ -17,19 +17,11 @@ class OBSOutputTests(unittest.TestCase):
     def valid_config(self, **overrides):
         return {
             "enabled": True,
-            "encoder": "libx264",
-            "width": 1280,
-            "height": 720,
-            "fps": 30,
-            "bitrate_kbps": 2500,
             **overrides,
         }
 
-    def test_output_settings_are_bounded_and_encoder_is_allowlisted(self):
-        with self.assertRaises(MODULE.RTMPConfigError):
-            MODULE.validate_config(self.valid_config(fps=0))
-        with self.assertRaises(MODULE.RTMPConfigError):
-            MODULE.validate_config(self.valid_config(encoder="shell-command"))
+    def test_output_configuration_contains_only_enabled_switch(self):
+        self.assertEqual(MODULE.validate_config(self.valid_config()), {"enabled": True})
 
     def test_public_config_contains_no_remote_destination_or_credentials(self):
         public = MODULE.public_config(MODULE.validate_config(self.valid_config()))
@@ -54,7 +46,7 @@ class OBSOutputTests(unittest.TestCase):
             loaded = MODULE.load_config(path)
             persisted_text = path.read_text(encoding="utf-8")
             persisted = json.loads(persisted_text)
-        self.assertEqual(loaded["width"], 1280)
+        self.assertEqual(loaded, {"enabled": True})
         self.assertNotIn("server_url", persisted)
         self.assertNotIn("stream_key", persisted)
         self.assertNotIn("old-private-key", persisted_text)
@@ -71,13 +63,15 @@ class OBSOutputTests(unittest.TestCase):
         self.assertIn("rtsp", command)
         self.assertEqual(command[-1], "rtsp://127.0.0.1:8554/petcam")
 
-    def test_mjpeg_fallback_encodes_and_publishes_to_local_rtsp(self):
+    def test_mjpeg_path_packet_copies_to_local_rtsp_without_transcoding(self):
         config = MODULE.validate_config(self.valid_config())
         with patch.object(MODULE.shutil, "which", return_value="/usr/bin/ffmpeg"):
             command = MODULE.build_ffmpeg_command(config)
         self.assertIn("http://127.0.0.1:8081/stream", command)
         self.assertIn("mpjpeg", command)
-        self.assertIn("libx264", command)
+        self.assertIn("copy", command)
+        for forbidden in ("libx264", "h264_v4l2m2m", "-vf", "-b:v", "-r"):
+            self.assertNotIn(forbidden, command)
         self.assertIn("rtsp", command)
         self.assertEqual(command[-1], "rtsp://127.0.0.1:8554/petcam")
 
