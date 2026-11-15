@@ -118,6 +118,8 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn('MJPEG delivered FPS', MODULE.PAGE)
         self.assertIn('Network Up / Down', MODULE.PAGE)
         self.assertIn('Wi-Fi signal', MODULE.PAGE)
+        self.assertIn("signal>=-50?4:signal>=-60?3:signal>=-67?2:signal>=-75?1:0", MODULE.PAGE)
+        self.assertIn('"▮".repeat(bars)+"▯".repeat(4-bars)', MODULE.PAGE)
         self.assertIn('Network and OBS diagnostics', MODULE.PAGE)
         self.assertIn('/api/diagnostics', MODULE.PAGE)
         self.assertIn('/api/support-bundle', MODULE.PAGE)
