@@ -10,7 +10,6 @@ import os
 import re
 import signal
 import shlex
-import subprocess
 import time
 from pathlib import Path
 
@@ -176,7 +175,7 @@ def main():
     native_h264 = camera_status.get("native_h264") is True
     source = "native_h264" if native_h264 else "mjpeg_copy"
     launch = build_gstreamer_launch(camera_status)
-    GLib, Gst, GstRtspServer = _load_gstreamer()
+    GLib, _Gst, GstRtspServer = _load_gstreamer()
     if args.check:
         print(json.dumps({
             **public_config(config),
