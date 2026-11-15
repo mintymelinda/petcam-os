@@ -81,7 +81,7 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <main id="tab-panels">
 <div id="panel-camera" class="tab-panel active" role="tabpanel" aria-labelledby="tab-camera" tabindex="0">
 <section><div class="camera-select-grid"><div><label for="camera">Camera</label><select id="camera"></select></div><div><label for="mode">Capture mode</label><select id="mode"></select></div></div><p id="message" role="status" class="muted">Discovering cameras…</p><p class="muted">Only advertised camera modes are offered.</p></section>
-<section><h2>Capture status</h2><p id="capture-rate" class="muted">Checking actual capture rate…</p><p id="capture-status-freshness" class="muted">Capture status refreshes every 5 seconds.</p><p class="muted">Browser Source: <a href="http://__PETCAM_HOST__:8080/" target="_blank" rel="noopener">http://__PETCAM_HOST__:8080/</a></p></section>
+<section><h2>Capture status</h2><p id="capture-rate" class="muted">Checking actual capture rate…</p><p id="capture-status-freshness" class="muted">Capture status refreshes every 5 seconds.</p><p id="browser-feed-primary" class="muted">Browser Source: <a data-browser-feed-link href="http://__PETCAM_HOST__:8080/" target="_blank" rel="noopener">http://__PETCAM_HOST__:8080/</a></p></section>
 <div class="camera-actions"><button id="advanced-camera-open" type="button">Advanced</button><div class="camera-actions-right"><button id="apply">Apply</button><button id="refresh" type="button" title="Refresh cameras">Refresh</button></div></div>
 <dialog id="advanced-camera-dialog" class="advanced-dialog"><div class="dialog-heading"><h2>Advanced camera controls</h2><button id="advanced-camera-close" type="button">Close</button></div><p class="muted">Edits apply automatically. Controls are refreshed every 60 seconds while this dialog is open.</p><section><div class="row" style="justify-content:space-between;align-items:center"><h2>Available controls</h2><div class="row" style="gap:.5rem"><button id="refresh-camera-controls" type="button">Refresh</button></div></div>
 <p id="camera-controls-status" class="muted" role="status">Controls for the active camera will appear here.</p>
@@ -129,7 +129,8 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <p class="muted">This exposes the camera to OBS without transcoding. PetCam does not publish to Twitch or YouTube. Add the RTSP address as an OBS Media Source. The HTTP Browser Source is available while capture is in MJPEG mode; native H.264 capture is selected for RTSP only when timelapse and motion detection are disabled.</p>
 <label style="display:flex;gap:.5rem;align-items:center"><input id="rtmp-enabled" type="checkbox"> Enable OBS RTSP feed</label>
 <label for="obs-rtsp-url">OBS Media Source URL</label><input id="obs-rtsp-url" type="text" value="rtsp://__PETCAM_HOST__:8554/petcam">
-<p class="muted">HTTP Browser Source: <a href="http://__PETCAM_HOST__:8080/" target="_blank" rel="noopener">http://__PETCAM_HOST__:8080/</a></p>
+<p id="browser-feed-rtmp" class="muted">HTTP Browser Source: <a data-browser-feed-link href="http://__PETCAM_HOST__:8080/" target="_blank" rel="noopener">http://__PETCAM_HOST__:8080/</a></p>
+<p id="h264-mode-note" class="muted" hidden>H.264 capture disables the HTTP Browser Source and forces OBS RTSP output on. Timelapse and motion detection must be disabled before applying H.264.</p>
 <p id="rtmp-status" class="muted" role="status">Checking OBS feed…</p>
 <div class="row"><button id="save-rtmp" type="button">Save OBS output settings</button><button id="refresh-rtmp" type="button">Refresh status</button></div>
 </section>
@@ -143,7 +144,7 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 <div class="row"><button id="save-light-sensor" type="button">Save light sensor settings</button></div></section></div></main>
 <footer style="text-align:center;padding:1rem 0 2rem"><small>Enjoying PetCam? <a href="https://www.paypal.me/kimmynightmare" target="_blank" rel="noopener noreferrer" style="color:#b9d8ff">Support development with PayPal</a></small></footer>
 <script>
-const $=id=>document.getElementById(id);let inventory=[],activeConfig=null,captureStatus={};
+const $=id=>document.getElementById(id);let inventory=[],activeConfig=null,captureStatus={},rtmpSettings={enabled:false};
 $("first-run-form").onsubmit=async event=>{event.preventDefault();const password=$("setup-password").value,confirmation=$("setup-password-confirm").value,message=$("setup-message"),button=$("setup-submit");if(password!==confirmation){message.textContent="The passwords do not match.";return}button.disabled=true;message.textContent="Creating administrator account…";try{const response=await fetch("/api/setup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password,password_confirmation:confirmation})});const data=await response.json();if(!response.ok)throw Error(data.error||"Initial setup failed");message.textContent="Administrator account created. Opening PetCam…";location.reload()}catch(error){message.textContent=error.message;button.disabled=false}};
 let csrfToken=null;let loginPromise=null;async function login(){if(loginPromise)return loginPromise;loginPromise=(async()=>{const setupResponse=await fetch("/api/setup/status",{cache:"no-store"});const setupState=await setupResponse.json();if(!setupResponse.ok)throw Error(setupState.error||"Unable to check initial setup");if(!setupState.configured)throw Error("Create the administrator password in the welcome panel before signing in.");return await new Promise((resolve,reject)=>{const dialog=$("login-dialog"),form=$("login-form"),password=$("login-password"),message=$("login-message"),button=$("login-submit");let settled=false;const finish=(error,data)=>{if(settled)return;settled=true;password.value="";dialog.close();if(error)reject(error);else resolve(data)};form.onsubmit=async event=>{event.preventDefault();button.disabled=true;message.textContent="Signing in…";try{const response=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:password.value})});const data=await response.json();if(!response.ok)throw Error(data.error||"Sign-in failed");csrfToken=data.csrf_token;finish(null,data)}catch(error){message.textContent=error.message;password.value="";password.focus();button.disabled=false}};dialog.oncancel=event=>{event.preventDefault();finish(Error("Sign-in cancelled"))};password.setAttribute("type","password");password.type="password";password.setAttribute("autocomplete","current-password");dialog.showModal();password.focus()})})();try{return await loginPromise}finally{loginPromise=null}}async function request(path,options={}){const headers=new Headers(options.headers||{});if(options.method&&options.method.toUpperCase()!=="GET"&&!csrfToken){let session=await fetch("/api/session");if(session.status===401){await login()}else{const state=await session.json();if(!session.ok)throw Error(state.error||session.statusText);csrfToken=state.csrf_token}}if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);let r=await fetch(path,{...options,headers});if(r.status===401){await login();if(options.method&&options.method.toUpperCase()!=="GET"&&csrfToken)headers.set("X-PetCam-CSRF",csrfToken);r=await fetch(path,{...options,headers})}const d=await r.json();if(!r.ok)throw Error(d.error||r.statusText);return d}
 
@@ -176,11 +177,14 @@ for(const button of tabButtons){
 activateTab("camera");
 refreshRTMP();
 
-function modesFor(camera){return camera.kind==="usb"?camera.modes.filter(m=>["MJPG","MJPEG","JPEG","YUYV","YVYU","UYVY","YUV420","YVU420","RGB565","RGB24","GREY"].includes(m.format)):camera.modes}
+function modesFor(camera){return camera.kind==="usb"?camera.modes.filter(m=>["MJPG","MJPEG","JPEG","YUYV","YVYU","UYVY","YUV420","YVU420","RGB565","RGB24","GREY","H264"].includes(m.format)):camera.modes}
+function selectedCaptureMode(){try{return JSON.parse($("mode").value)}catch(error){return null}}
+function h264ModeSelectedOrActive(){return (activeConfig?.SOURCE==="usb"&&activeConfig?.FORMAT==="H264")||selectedCaptureMode()?.format==="H264"}
+function syncOutputModeControls(){const forced=h264ModeSelectedOrActive();$("rtmp-enabled").checked=forced||!!rtmpSettings.enabled;$("rtmp-enabled").disabled=forced;$("save-rtmp").disabled=forced;document.querySelectorAll("[data-browser-feed-link]").forEach(link=>{link.closest("p").hidden=forced});$("h264-mode-note").hidden=!forced}
 function projectedPixelRate(mode){return mode.width*mode.height*mode.fps}
-function exceedsPerformanceBudget(camera,mode){const budget=Number(camera?.hardware_budget_pixels_per_second||0);return budget>0&&projectedPixelRate(mode)>budget}
+function exceedsPerformanceBudget(camera,mode){if(mode.format==="H264")return false;const budget=Number(camera?.hardware_budget_pixels_per_second||0);return budget>0&&projectedPixelRate(mode)>budget}
 function confirmPerformanceOverride(camera,mode){if(!exceedsPerformanceBudget(camera,mode))return false;const estimate=projectedPixelRate(mode),budget=Number(camera.hardware_budget_pixels_per_second);return confirm("Performance warning: this capture mode is estimated at "+estimate.toLocaleString()+" pixels/second, above the "+camera.hardware_tier+" device guideline of "+budget.toLocaleString()+" pixels/second. It may cause low frame rates, dropped frames, or an unresponsive camera stream. Use this mode anyway?")}
-function showSelectedModeWarning(){const c=inventory[+$("camera").value],raw=$("mode").value;if(!c||!raw)return;const mode=JSON.parse(raw);if(exceedsPerformanceBudget(c,mode))$("message").textContent="Performance warning: this capture mode exceeds the estimated "+c.hardware_tier+" device budget. You can still apply it after confirming the warning.";else $("message").textContent="Selected mode is within the estimated device performance budget."}
+function showSelectedModeWarning(){const c=inventory[+$("camera").value],raw=$("mode").value;if(!c||!raw)return;const mode=JSON.parse(raw);if(exceedsPerformanceBudget(c,mode))$("message").textContent="Performance warning: this capture mode exceeds the estimated "+c.hardware_tier+" device budget. You can still apply it after confirming the warning.";else $("message").textContent=mode.format==="H264"?"H.264 selected. The HTTP Browser Source will be disabled and OBS RTSP output will be forced on.":"Selected mode is within the estimated device performance budget.";syncOutputModeControls()}
 function activeCameraMatches(camera,config){if(!config)return false;if(config.SOURCE==="usb")return camera.kind==="usb"&&(config.USB_PHYSICAL_PATH?camera.physical_path===config.USB_PHYSICAL_PATH:camera.device===config.DEVICE);if(config.SOURCE==="csi")return camera.kind==="csi"&&(config.CSI_DEVICE_PATH?camera.device_path===config.CSI_DEVICE_PATH:String(camera.camera)===String(config.CAMERA));return false}
 function fillModes(preferred=null){const c=inventory[+$("camera").value];$("mode").replaceChildren();if(!c)return;let matched=false;for(const m of modesFor(c)){let fps=m.fps?.length?m.fps:[m.fps_range?.max||30];if(c.kind==="usb")fps=fps.filter(Number.isInteger);if(preferred&&preferred.width===m.width&&preferred.height===m.height&&(preferred.format||"CSI")===(m.format||"CSI")&&!fps.some(f=>Math.abs(f-preferred.fps)<0.1))fps=[...fps,preferred.fps];for(const f of fps){const mode={format:m.format||"CSI",width:m.width,height:m.height,fps:f};const o=document.createElement("option");o.value=JSON.stringify(mode);o.textContent=`${m.width}×${m.height} · ${f} fps · ${m.format||"CSI"}`+(exceedsPerformanceBudget(c,mode)?" · ⚠ above device estimate":"");if(preferred&&mode.width===preferred.width&&mode.height===preferred.height&&mode.format===(preferred.format||"CSI")&&Math.abs(mode.fps-preferred.fps)<0.1){o.selected=true;matched=true}$("mode").append(o)}}if(preferred&&!matched){const mode={format:preferred.format||"CSI",width:preferred.width,height:preferred.height,fps:Number(preferred.fps)};const o=document.createElement("option");o.value=JSON.stringify(mode);o.textContent=`${mode.width}×${mode.height} · ${mode.fps} fps · ${mode.format} (saved setting; not currently advertised)`;o.selected=true;$("mode").prepend(o)}$("mode").onchange=showSelectedModeWarning;showSelectedModeWarning()}
 function renderCaptureStatus(){const fps=Number(captureStatus.latest_captured_fps),configured=activeConfig?.FPS;if(Number.isFinite(fps)&&fps>0){$("capture-rate").textContent="Actual captured rate: "+fps.toFixed(1).replace(/\.0$/,"")+" FPS"+(configured&&configured!=="auto"?" · configured: "+configured+" FPS":"")+(activeConfig?.RESOLUTION&&activeConfig.RESOLUTION!=="auto"?" · "+activeConfig.RESOLUTION:"")}else $("capture-rate").textContent="Actual captured rate: not currently reported"}
@@ -188,12 +192,12 @@ async function refreshLiveStatus(){try{const d=await request("/api/live-status")
 
 async function refreshSystemInfo(){try{const data=await request("/api/system");$("installed-version").textContent="Installed version: "+(data.installed_version||"unknown")}catch(error){$("installed-version").textContent="Installed version unavailable: "+error.message}}
 
-async function refreshRTMP(){try{const data=await request("/api/rtmp");$("rtmp-enabled").checked=!!data.config?.enabled;const sourceLabel=data.status?.source==="native_h264"?"native H.264 stream copy":data.status?.source==="mjpeg_copy"?"MJPEG packet copy":"";$("rtmp-status").textContent=!data.status?.ffmpeg_available?"FFmpeg is missing. Install it with sudo apt-get install ffmpeg.":data.status?.active?("OBS RTSP feed is running"+(sourceLabel?" ("+sourceLabel+")":"")+"."):("OBS RTSP feed: "+(data.status?.state||"stopped")+".")}catch(error){$("rtmp-status").textContent="OBS feed status unavailable: "+error.message}}
-async function saveRTMP(){const data={enabled:$("rtmp-enabled").checked};$("save-rtmp").disabled=true;$("rtmp-status").textContent="Saving OBS output settings…";try{const result=await request("/api/rtmp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});const sourceLabel=result.status?.source==="native_h264"?"native H.264 stream copy":result.status?.source==="mjpeg_copy"?"MJPEG packet copy":"";$("rtmp-status").textContent=result.status?.active?("OBS feed started"+(sourceLabel?" ("+sourceLabel+")":"")+"."):("Settings saved; OBS feed: "+(result.status?.state||"stopped")+".")}catch(error){$("rtmp-status").textContent="Unable to save OBS output settings: "+error.message}finally{$("save-rtmp").disabled=false}}$("save-rtmp").onclick=saveRTMP;$("refresh-rtmp").onclick=refreshRTMP;
+async function refreshRTMP(){try{const data=await request("/api/rtmp");rtmpSettings=data.config||{enabled:false};syncOutputModeControls();const sourceLabel=data.status?.source==="native_h264"?"native H.264 stream copy":data.status?.source==="mjpeg_copy"?"MJPEG packet copy":"";$("rtmp-status").textContent=!data.status?.ffmpeg_available?"FFmpeg is missing. Install it with sudo apt-get install ffmpeg.":data.status?.active?("OBS RTSP feed is running"+(sourceLabel?" ("+sourceLabel+")")+"."):("OBS RTSP feed: "+(data.status?.state||"stopped")+".")}catch(error){$("rtmp-status").textContent="OBS feed status unavailable: "+error.message}}
+async function saveRTMP(){if(h264ModeSelectedOrActive()){syncOutputModeControls();return}const data={enabled:$("rtmp-enabled").checked};$("save-rtmp").disabled=true;$("rtmp-status").textContent="Saving OBS output settings…";try{const result=await request("/api/rtmp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});const sourceLabel=result.status?.source==="native_h264"?"native H.264 stream copy":result.status?.source==="mjpeg_copy"?"MJPEG packet copy":"";$("rtmp-status").textContent=result.status?.active?("OBS feed started"+(sourceLabel?" ("+sourceLabel+")":"")+"."):("Settings saved; OBS feed: "+(result.status?.state||"stopped")+".")}catch(error){$("rtmp-status").textContent="Unable to save OBS output settings: "+error.message}finally{$("save-rtmp").disabled=false}}$("save-rtmp").onclick=saveRTMP;$("refresh-rtmp").onclick=refreshRTMP;
 function renderStatCards(root,items){root.replaceChildren();for(const [label,value] of items){const card=document.createElement("div"),name=document.createElement("small"),reading=document.createElement("strong");card.style.cssText="background:#1a1d22;border:1px solid #383e47;border-radius:8px;padding:.7rem;min-width:0";name.className="muted";name.textContent=label;reading.style.cssText="display:block;font-size:1.05rem;overflow-wrap:anywhere;margin-top:.2rem";reading.textContent=value===null||value===undefined||value===""?"Not available":String(value);card.append(name,reading);root.append(card)}}
 async function refreshStatistics(data=null){try{const d=data||await request("/api/live-status"),capture=d.capture_status||{},stream=d.stream_metrics||{},network=d.network_status||{},clients=stream.clients||[],system=d.system_metrics||{},wifi=network.wifi||{};const fps=capture.latest_captured_fps,delivered=clients.length?Math.max(...clients.map(client=>Number(client.average_fps||client.window_fps||0))):null,signal=wifi.signal_dbm,rtmp=d.rtmp_output_status||{};const bars=!wifi.connected?0:signal===null||signal===undefined?null:signal>=-50?5:signal>=-60?4:signal>=-67?3:signal>=-75?2:1;const labels=["none","weak","poor","good","excellent"];const reception=bars===null?"unknown":labels[bars];const metrics=[["Camera FPS",fps?Number(fps).toFixed(1):"Not reported"],["OBS Feed FPS (RTSP)",rtmp.active&&rtmp.fps!==null&&rtmp.fps!==undefined&&Number.isFinite(Number(rtmp.fps))?Number(rtmp.fps).toFixed(1):rtmp.enabled?(rtmp.state==="stalled"?"No recent output telemetry":rtmp.state):"Disabled"],["MJPEG delivered FPS (forwarded JPEG FPS)",delivered===null?"No active viewers":delivered.toFixed(1)],["Wi-Fi signal",reception+(signal===null||signal===undefined?"":" · "+signal+" dBm")+" · "+(bars===null?"—":"▮".repeat(bars)+"▯".repeat(5-bars))],["CPU",system.cpu_percent===null||system.cpu_percent===undefined?"Not available":Number(system.cpu_percent).toFixed(1)+"%"],["Memory",system.memory_used_mb===undefined?"Not available":system.memory_used_mb+" / "+system.memory_total_mb+" MiB"],["Network Up / Down",network.tx_mbps===undefined?"Not available":Number(network.tx_mbps).toFixed(2)+" / "+Number(network.rx_mbps||0).toFixed(2)+" Mbps"]];renderStatCards($("system-health-grid"),metrics);$("statistics-updated").textContent="Updated "+new Date(d.capture_status_updated_at*1000).toLocaleTimeString()+" · OBS feed: "+(rtmp.enabled?(rtmp.state||"starting"):"disabled")+"; MJPEG delivery is measured separately."}catch(error){$("statistics-updated").textContent="Statistics unavailable: "+error.message}}
 $("refresh-statistics").onclick=refreshStatistics;
-async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;activeConfig=d.active_config;captureStatus=d.capture_status||{};$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});const activeIndex=inventory.findIndex(c=>activeCameraMatches(c,activeConfig));if(activeIndex>=0){$("camera").value=String(activeIndex);$("camera").options[activeIndex].textContent+=" · current"}if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{const selected=activeIndex>=0?activeConfig:null;const selectedCamera=activeIndex>=0?inventory[activeIndex]:null;const currentResolution=selected&&selected.RESOLUTION!=="auto"?selected.RESOLUTION:captureStatus.active_resolution;const currentFps=selected&&selected.FPS!=="auto"?Number(selected.FPS):Number(captureStatus.latest_captured_fps);let currentFormat=selected&&selected.FORMAT!=="auto"?selected.FORMAT:(captureStatus.active_capture_format||"CSI");if(currentFormat==="MJPEG"||currentFormat==="JPEG")currentFormat="MJPG";if(selectedCamera?.kind==="csi")currentFormat="CSI";const preferred=currentResolution&&currentResolution!=="auto"&&Number.isFinite(currentFps)&&currentFps>0?{width:Number(currentResolution.split("x")[0]),height:Number(currentResolution.split("x")[1]),fps:currentFps,format:currentFormat}:null;$("message").textContent=inventory.length+" camera(s) found. Current saved camera settings are selected.";fillModes(preferred)}renderCaptureStatus();await refreshCameraControls()}catch(e){$("message").textContent=e.message}}
+async function refresh(){ $("message").textContent="Scanning connected cameras…";try{const d=await request("/api/cameras");inventory=d.cameras;activeConfig=d.active_config;captureStatus=d.capture_status||{};$("camera").replaceChildren();inventory.forEach((c,i)=>{const o=document.createElement("option");o.value=i;o.textContent=c.label;$("camera").append(o)});const activeIndex=inventory.findIndex(c=>activeCameraMatches(c,activeConfig));if(activeIndex>=0){$("camera").value=String(activeIndex);$("camera").options[activeIndex].textContent+=" · current"}if(!inventory.length)$("message").textContent="No supported cameras detected. Connect a USB or CSI camera and refresh.";else{const selected=activeIndex>=0?activeConfig:null;const selectedCamera=activeIndex>=0?inventory[activeIndex]:null;const currentResolution=selected&&selected.RESOLUTION!=="auto"?selected.RESOLUTION:captureStatus.active_resolution;const currentFps=selected&&selected.FPS!=="auto"?Number(selected.FPS):Number(captureStatus.latest_captured_fps);let currentFormat=selected&&selected.FORMAT!=="auto"?selected.FORMAT:(captureStatus.active_capture_format||"CSI");if(currentFormat==="MJPEG"||currentFormat==="JPEG")currentFormat="MJPG";if(selectedCamera?.kind==="csi")currentFormat="CSI";const preferred=currentResolution&&currentResolution!=="auto"&&Number.isFinite(currentFps)&&currentFps>0?{width:Number(currentResolution.split("x")[0]),height:Number(currentResolution.split("x")[1]),fps:currentFps,format:currentFormat}:null;$("message").textContent=inventory.length+" camera(s) found. Current saved camera settings are selected.";fillModes(preferred)}syncOutputModeControls();renderCaptureStatus();await refreshCameraControls()}catch(e){$("message").textContent=e.message}}
 
 function cameraControlLabel(name){const labels={auto_exposure:"Auto exposure",exposure_time_absolute:"Exposure time",exposure_dynamic_framerate:"Dynamic framerate",white_balance_automatic:"Automatic white balance",white_balance_temperature:"White balance temperature",power_line_frequency:"Power-line frequency",backlight_compensation:"Backlight compensation",focus_automatic_continuous:"Continuous autofocus",focus_absolute:"Focus"};return labels[name]||name.replaceAll("_"," ").replace(/\b\w/g,letter=>letter.toUpperCase())}
 const pendingCameraControlChanges=new Map();
@@ -255,8 +259,8 @@ const advancedDialog=$("advanced-camera-dialog");
 $("advanced-camera-open").onclick=()=>{advancedDialog.showModal();refreshCameraControls();if(advancedPollHandle)clearInterval(advancedPollHandle);advancedPollHandle=setInterval(()=>{if(pendingCameraControlChanges.size===0)refreshCameraControls()},60000)};
 $("advanced-camera-close").onclick=()=>advancedDialog.close();
 advancedDialog.addEventListener("close",()=>{if(advancedPollHandle){clearInterval(advancedPollHandle);advancedPollHandle=null}if(advancedApplyHandle){clearTimeout(advancedApplyHandle);advancedApplyHandle=null}});
-$("refresh").onclick=refresh;$("camera").onchange=fillModes;
-$("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;const mode=JSON.parse(m),override=confirmPerformanceOverride(c,mode);if(exceedsPerformanceBudget(c,mode)&&!override)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,camera_id:c.id,device:c.device,physical_path:c.physical_path,device_path:c.device_path,camera:c.camera,mode,allow_performance_override:override})});await refresh();$("message").textContent="Camera settings saved. The live preview has been reconnected."}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
+$("refresh").onclick=refresh;$("camera").onchange=()=>{fillModes();syncOutputModeControls()};
+$("apply").onclick=async()=>{const c=inventory[+$("camera").value],m=$("mode").value;if(!c||!m)return;const mode=JSON.parse(m),override=confirmPerformanceOverride(c,mode);if(exceedsPerformanceBudget(c,mode)&&!override)return;$("apply").disabled=true;$("message").textContent="Applying camera settings…";try{await request("/api/select",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:c.kind,camera_id:c.id,device:c.device,physical_path:c.physical_path,device_path:c.device_path,camera:c.camera,mode,allow_performance_override:override})});await refresh();await refreshRTMP();$("message").textContent=mode.format==="H264"?"H.264 capture enabled. Use the OBS RTSP Media Source; the HTTP Browser Source is disabled.":"Camera settings saved. The live preview has been reconnected."}catch(e){$("message").textContent=e.message}finally{$("apply").disabled=false}};
 $("logout").onclick=async()=>{try{await request("/api/logout",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});csrfToken=null;location.reload()}catch(e){alert(e.message)}};
 async function refreshTimelapse(){try{const d=await request("/api/timelapse");const c=d.config,s=d.status;$("timelapse-enabled").checked=c.enabled;$("timelapse-interval").value=c.interval_seconds;$("timelapse-start").value=c.schedule_start;$("timelapse-end").value=c.schedule_end;$("timelapse-retention").value=c.retention_days;$("timelapse-storage").value=c.max_storage_mb;$("timelapse-free").value=c.min_free_mb;$("timelapse-width").value=c.max_width;$("timelapse-quality").value=c.jpeg_quality;$("timelapse-path").value=c.storage_path;$("timelapse-status").textContent="Status: "+s.state+" · "+s.frames+" frames · "+Math.round(s.storage_bytes/1048576)+" MiB"+(s.last_capture_at?" · Last capture: "+s.last_capture_at:"")+(s.last_error?" · "+s.last_error:"")}catch(e){$("timelapse-status").textContent="Timelapse status unavailable: "+e.message}}
 $("refresh-timelapse").onclick=refreshTimelapse;
@@ -340,7 +344,7 @@ def camera_inventory():
     for item in usb.get("usb_devices", []):
         camera = {"kind": "usb", "device": item["device"],
                   "physical_path": item.get("physical_path", ""),
-                  "label": f'USB · {item["device"]}', "modes": [mode for mode in item["modes"] if mode["format"] in USTREAMER_FORMATS]}
+                  "label": f'USB · {item["device"]}', "modes": [mode for mode in item["modes"] if mode["format"] in (USTREAMER_FORMATS | {"H264"})]}
         identity = camera_identity(camera)
         result.append({
             **camera, "id": identity["id"], "stable_identity": identity["stable_identity"],
@@ -609,10 +613,22 @@ def set_camera_control(data):
         raise RuntimeError(result.stderr.strip() or "Unable to update camera control")
     return read_camera_controls(camera)
 
+def set_rtmp_service(action):
+    result = subprocess.run(
+        ["sudo", "/usr/local/sbin/petcam-rtmp-service", action],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or f"Unable to {action} OBS RTSP output service.")
+
+
 def save_selection(data):
     kind = data.get("kind")
     mode = data.get("mode") or {}
+    mode_format = str(mode.get("format") or "auto").upper()
     width, height, fps = mode.get("width"), mode.get("height"), mode.get("fps")
+    if mode_format == "H264" and kind != "usb":
+        raise ValueError("Native H.264 capture is available only for USB cameras.")
     if kind not in ("usb", "csi") or not isinstance(width, int) or not isinstance(height, int):
         raise ValueError("Invalid camera selection")
     if not (1 <= width <= 10000 and 1 <= height <= 10000 and isinstance(fps, (int, float)) and 0 < fps <= 240):
@@ -661,7 +677,7 @@ def save_selection(data):
             "USB_PHYSICAL_PATH": physical_path,
             "CSI_DEVICE_PATH": "",
             "CAMERA": "auto",
-            "FORMAT": mode["format"],
+            "FORMAT": mode_format,
             "RESOLUTION": f"{width}x{height}",
             "FPS": str(int(fps)),
         }
@@ -684,12 +700,59 @@ def save_selection(data):
         }
     estimated_pixels_per_second = width * height * float(fps)
     pixel_budget = PIXEL_BUDGETS[model_tier(read_model())]
-    if estimated_pixels_per_second > pixel_budget and data.get("allow_performance_override") is not True:
+    if values["FORMAT"] != "H264" and estimated_pixels_per_second > pixel_budget and data.get("allow_performance_override") is not True:
         raise ValueError(
             "This capture mode exceeds the estimated performance budget for this device. "
             "Confirm the warning to use it anyway, or choose a lower resolution or FPS."
         )
-    return apply_config(values)
+    requested_h264 = values["FORMAT"] == "H264"
+    previous_camera = parse_config(CONFIG)
+    previous_rtmp = load_rtmp_config()
+    rtmp_was_active = False
+    if requested_h264 or previous_rtmp["enabled"]:
+        rtmp_was_active = subprocess.run(
+            ["systemctl", "is-active", "--quiet", "petcam-rtmp.service"],
+            check=False, timeout=5,
+        ).returncode == 0
+
+    if requested_h264:
+        if not Path("/usr/bin/ffmpeg").is_file():
+            raise RuntimeError("FFmpeg is required for native H.264 RTSP output.")
+        if load_timelapse_config().get("enabled") or load_motion_config().get("enabled"):
+            raise ValueError("Disable timelapse and motion detection before selecting H.264; both require the MJPEG capture feed.")
+
+    camera_applied = False
+    try:
+        if requested_h264 or previous_camera.get("FORMAT") == "H264":
+            if rtmp_was_active:
+                set_rtmp_service("disable")
+        if requested_h264:
+            save_rtmp_config({**previous_rtmp, "enabled": True})
+        updated = apply_config(values)
+        camera_applied = True
+        current_rtmp = load_rtmp_config()
+        if current_rtmp["enabled"]:
+            set_rtmp_service("enable" if requested_h264 or previous_camera.get("FORMAT") == "H264" or not rtmp_was_active else "restart")
+        elif rtmp_was_active:
+            set_rtmp_service("disable")
+        return updated
+    except Exception:
+        if requested_h264:
+            save_rtmp_config(previous_rtmp)
+        if camera_applied:
+            try:
+                if previous_camera.get("FORMAT") == "H264":
+                    set_rtmp_service("disable")
+                apply_config(previous_camera)
+                if previous_rtmp["enabled"]:
+                    set_rtmp_service("enable")
+                elif rtmp_was_active:
+                    set_rtmp_service("disable")
+            except Exception as rollback_error:
+                raise RuntimeError(f"Camera selection failed and restoring the previous camera/output settings also failed: {rollback_error}")
+        elif rtmp_was_active and previous_rtmp["enabled"]:
+            set_rtmp_service("enable")
+        raise
 
 
 def register_stream_client(source):
@@ -849,6 +912,9 @@ def proxy_stream(handler, port):
     """Proxy MJPEG, returning a useful HTTP error if capture is not ready yet."""
     query = parse_qs(urlparse(handler.path).query)
     source = ("obs_media_source" if query.get("client") == ["obs-media-source"] else "browser_source")
+    if parse_config(CONFIG).get("FORMAT") == "H264":
+        handler.send_error(503, "HTTP MJPEG streaming is disabled while H.264 capture is selected. Use the OBS RTSP Media Source.")
+        return
     client_id = register_stream_client(source)
     parser_state = {
         "previous_byte": None,
@@ -1221,6 +1287,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, set_camera_control(data))
                 return
             if path == "/api/timelapse":
+                if data.get("enabled") and parse_config(CONFIG).get("FORMAT") == "H264":
+                    raise RuntimeError("Switch the camera back to MJPEG before enabling timelapse; timelapse requires MJPEG frames.")
                 current = load_timelapse_config()
                 updated = save_timelapse_config({**current, **data})
                 capture_restart = subprocess.run(
@@ -1239,6 +1307,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"ok": True, "config": updated})
                 return
             if path == "/api/motion":
+                if data.get("enabled") and parse_config(CONFIG).get("FORMAT") == "H264":
+                    raise RuntimeError("Switch the camera back to MJPEG before enabling motion detection; motion detection requires MJPEG frames.")
                 current = load_motion_config()
                 updated = save_motion_config({**current, **data})
                 capture_restart = subprocess.run(
@@ -1261,6 +1331,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"ok": True, "config": updated})
                 return
             if path == "/api/rtmp":
+                current_camera = parse_config(CONFIG)
+                if current_camera.get("FORMAT") == "H264" and data.get("enabled") is not True:
+                    raise RuntimeError("OBS RTSP output is forced on while H.264 capture is selected.")
                 if data.get("enabled") and not Path("/usr/bin/ffmpeg").is_file():
                     raise RuntimeError("FFmpeg is not installed. Run sudo apt-get update && sudo apt-get install ffmpeg, then save these settings again.")
                 current = load_rtmp_config()
@@ -1313,6 +1386,12 @@ class StreamHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        try:
+            if parse_config(CONFIG).get("FORMAT") == "H264":
+                self.send_error(503, "HTTP Browser Source is disabled while H.264 capture is selected. Use the OBS RTSP Media Source.")
+                return
+        except Exception:
+            pass
         if path == "/":
             body = b'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PetCam Browser Source</title><style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden}#status{position:absolute;inset:0;display:grid;place-items:center;color:#ddd;font:16px sans-serif;text-align:center;padding:1rem;box-sizing:border-box}img{position:relative;display:block;width:100%;height:100%;object-fit:contain}img:not([data-ready]){opacity:0}</style><div id="status">Connecting to PetCam camera...</div><img id="stream" src="/stream" alt="PetCam camera stream"><script>const image=document.getElementById("stream"),status=document.getElementById("status");image.onload=()=>{image.dataset.ready="1";status.hidden=true};image.onerror=()=>{image.removeAttribute("data-ready");status.hidden=false;status.textContent="Camera stream unavailable. Check that the camera is running and MJPEG mode is enabled. Retrying...";setTimeout(()=>{image.src="/stream?retry="+Date.now()},3000)}</script></html>'
             self.send_response(200)

@@ -93,6 +93,30 @@ start_usb() {
     rm -f /run/petcam/camera-status.json
     rtmp_enabled="$(python3 -c 'import json,pathlib; p=pathlib.Path("/etc/petcam/rtmp.json"); print(str(bool(json.loads(p.read_text()).get("enabled")) if p.exists() else False).lower())')"
     mjpeg_consumers="$(python3 -c 'import json,pathlib; paths=[pathlib.Path("/var/lib/petcam/timelapse/config.json"),pathlib.Path("/var/lib/petcam/motion/config.json")]; print(str(any(bool(json.loads(p.read_text()).get("enabled")) for p in paths if p.exists())).lower())')"
+    if [[ "$FORMAT" == "H264" ]]; then
+        if [[ "$rtmp_enabled" != "true" ]]; then
+            echo "H.264 capture requires OBS RTSP output to be enabled." >&2
+            exit 1
+        fi
+        if [[ "$mjpeg_consumers" == "true" ]]; then
+            echo "H.264 capture cannot run while timelapse or motion detection requires MJPEG." >&2
+            exit 1
+        fi
+        h264_args=(select-h264 --resolution "$RESOLUTION" --fps "$FPS")
+        if [[ -n "$USB_PHYSICAL_PATH" ]]; then h264_args+=(--physical-path "$USB_PHYSICAL_PATH"); fi
+        if [[ -n "$DEVICE" ]]; then h264_args+=(--device "$DEVICE"); fi
+        if ! h264_selection="$(/usr/local/bin/petcam-camera "${h264_args[@]}" 2>/dev/null)"; then
+            echo "The selected H.264 mode is no longer advertised by the USB camera." >&2
+            exit 1
+        fi
+        h264_device="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["device"])' <<< "$h264_selection")"
+        h264_resolution="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["resolution"])' <<< "$h264_selection")"
+        h264_fps="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["fps"])' <<< "$h264_selection")"
+        mkdir -p /run/petcam
+        python3 -c 'import json,time; json.dump({"native_h264":True,"updated_at":time.time()},open("/run/petcam/camera-status.json","w"))'
+        echo "Starting selected native USB H.264 capture $h264_device at $h264_resolution, $h264_fps FPS."
+        exec /usr/bin/ffmpeg -hide_banner -loglevel warning -nostdin -f v4l2 -input_format h264 -video_size "$h264_resolution" -framerate "$h264_fps" -i "$h264_device" -an -c:v copy -f mpegts "udp://127.0.0.1:10000?pkt_size=1316"
+    fi
     if [[ "$rtmp_enabled" == "true" && "$mjpeg_consumers" != "true" && "$FORMAT" == "auto" ]]; then
         h264_args=(select-h264 --resolution "$RESOLUTION" --fps "$FPS")
         if [[ -n "$USB_PHYSICAL_PATH" ]]; then h264_args+=(--physical-path "$USB_PHYSICAL_PATH"); fi

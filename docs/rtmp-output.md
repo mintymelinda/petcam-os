@@ -10,21 +10,21 @@ Use the page URL as an OBS Browser Source:
 http://PETCAM_HOST:8080/
 ```
 
-The page contains a transparent, full-size image element backed by the existing MJPEG HTTP stream. PetCam forwards the MJPEG multipart response unchanged. There is no dashboard preview connection and no additional camera capture process. This source is available while the camera is operating in MJPEG mode. If a camera advertises native H.264 and RTSP output is enabled while both MJPEG-only features are disabled, PetCam selects H.264 for RTSP and the HTTP MJPEG Browser Source is unavailable until the camera returns to MJPEG mode.
+The page contains a transparent, full-size image element backed by the existing MJPEG HTTP stream. PetCam forwards the MJPEG multipart response unchanged. There is no dashboard preview connection and no additional camera capture process. This source is available while the camera is operating in MJPEG mode. Selecting an advertised USB H.264 mode disables the HTTP Browser Source and forces RTSP output on. The manager hides the Browser Source links while H.264 is active or selected, and the HTTP endpoint returns 503 with instructions to use RTSP. Timelapse and motion detection must be disabled before applying H.264 because both consume MJPEG frames.
 
 ## RTSP Media Source
 
-Enable **System → OBS Output → Enable OBS RTSP feed**, then add this address as an OBS Media Source:
+For MJPEG capture, enable **System → OBS Output → Enable OBS RTSP feed** to publish the MJPEG packet-copy path. Selecting a USB H.264 mode automatically enables and locks RTSP output on. Add this address as an OBS Media Source:
 
 ```
 rtsp://PETCAM_HOST:8554/petcam
 ```
 
-When the camera supplies native H.264 through the existing capture status interface, PetCam uses the native H.264 packet-copy path. Otherwise, the MJPEG path packet-copies the original JPEG frames into RTSP. Neither path decodes, scales, changes frame rate, or re-encodes video. Output controls are limited to enable/disable because the camera's advertised capture mode determines the stream format.
+When H.264 is selected, PetCam captures the advertised V4L2 H.264 mode and packet-copies the MPEG-TS transport stream into RTSP. Otherwise, the MJPEG path packet-copies the original JPEG frames into RTSP. Neither path decodes, scales, changes frame rate, or re-encodes video. Output controls are limited to enable/disable because the camera's advertised capture mode determines the stream format.
 
 ## MJPEG-only features
 
-Timelapse and motion detection continue to consume the MJPEG capture stream. They are not moved to H.264 and do not start a second camera capture session.
+Timelapse and motion detection continue to consume the MJPEG capture stream. They are not moved to H.264 and do not start a second camera capture session. Both features must remain disabled while H.264 capture is selected; PetCam rejects attempts to enable either one until the camera is returned to MJPEG mode.
 
 ## Network and troubleshooting
 

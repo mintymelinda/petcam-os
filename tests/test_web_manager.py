@@ -78,6 +78,10 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn("rtmp.state", MODULE.PAGE)
         self.assertIn('id="rtmp-output"', MODULE.PAGE)
         self.assertIn("OBS Media Source URL", MODULE.PAGE)
+        self.assertIn('"GREY","H264"', MODULE.PAGE)
+        self.assertIn("syncOutputModeControls", MODULE.PAGE)
+        self.assertIn("data-browser-feed-link", MODULE.PAGE)
+        self.assertIn("forces OBS RTSP output on", MODULE.PAGE)
         self.assertNotIn("rtmp://", MODULE.PAGE)
         self.assertNotIn("stream_key", MODULE.PAGE)
         self.assertNotIn("rtmp-server-url", MODULE.PAGE)
@@ -230,6 +234,70 @@ class WebManagerTests(unittest.TestCase):
         self.assertTrue(status["active"])
         self.assertEqual(status["result"], "success")
         self.assertIn("Downloading release", status["logs"])
+
+    def test_camera_inventory_exposes_advertised_h264_modes(self):
+        with mock.patch.object(MODULE, "run_camera", return_value={
+            "usb_devices": [{
+                "device": "/dev/video0",
+                "physical_path": "/sys/devices/usb1/1-1",
+                "modes": [
+                    {"format": "MJPG", "width": 1280, "height": 720, "fps": [30]},
+                    {"format": "H264", "width": 1920, "height": 1080, "fps": [30]},
+                ],
+            }],
+            "csi_cameras": [],
+        }):
+            cameras = MODULE.camera_inventory()
+        self.assertEqual({mode["format"] for mode in cameras[0]["modes"]}, {"MJPG", "H264"})
+
+    def test_h264_selection_forces_rtmp_and_starts_rtsp_service(self):
+        camera = {
+            "kind": "usb", "id": "usb-kiyo", "device": "/dev/video0",
+            "physical_path": "/sys/devices/usb1/1-1",
+            "modes": [{"format": "H264", "width": 1920, "height": 1080, "fps": [30]}],
+        }
+        previous_camera = {**MODULE.parse_config(), "SOURCE": "usb", "FORMAT": "MJPG",
+                           "RESOLUTION": "1280x720", "FPS": "30"}
+        with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \
+                mock.patch.object(MODULE, "parse_config", return_value=previous_camera), \
+                mock.patch.object(MODULE, "load_rtmp_config", side_effect=[{"enabled": False}, {"enabled": True}]), \
+                mock.patch.object(MODULE, "save_rtmp_config") as save_rtmp, \
+                mock.patch.object(MODULE, "load_timelapse_config", return_value={"enabled": False}), \
+                mock.patch.object(MODULE, "load_motion_config", return_value={"enabled": False}), \
+                mock.patch.object(MODULE.Path, "is_file", return_value=True), \
+                mock.patch.object(MODULE, "apply_config") as apply, \
+                mock.patch.object(MODULE.subprocess, "run", side_effect=[
+                    mock.Mock(returncode=1), mock.Mock(returncode=0, stderr=""),
+                ]) as run:
+            MODULE.save_selection({
+                "kind": "usb", "camera_id": "usb-kiyo",
+                "mode": {"format": "H264", "width": 1920, "height": 1080, "fps": 30},
+            })
+        self.assertEqual(apply.call_args.args[0]["FORMAT"], "H264")
+        save_rtmp.assert_called_once_with({"enabled": True})
+        self.assertEqual(run.call_args.args[0], [
+            "sudo", "/usr/local/sbin/petcam-rtmp-service", "enable"
+        ])
+
+    def test_h264_selection_is_rejected_when_mjpeg_consumers_are_enabled(self):
+        camera = {
+            "kind": "usb", "id": "usb-kiyo", "device": "/dev/video0",
+            "modes": [{"format": "H264", "width": 1920, "height": 1080, "fps": [30]}],
+        }
+        with mock.patch.object(MODULE, "camera_inventory", return_value=[camera]), \
+                mock.patch.object(MODULE, "parse_config", return_value=MODULE.parse_config()), \
+                mock.patch.object(MODULE, "load_rtmp_config", return_value={"enabled": False}), \
+                mock.patch.object(MODULE, "load_timelapse_config", return_value={"enabled": True}), \
+                mock.patch.object(MODULE, "load_motion_config", return_value={"enabled": False}), \
+                mock.patch.object(MODULE.Path, "is_file", return_value=True), \
+                mock.patch.object(MODULE.subprocess, "run", return_value=mock.Mock(returncode=1)), \
+                mock.patch.object(MODULE, "apply_config") as apply:
+            with self.assertRaisesRegex(ValueError, "Disable timelapse and motion detection"):
+                MODULE.save_selection({
+                    "kind": "usb", "camera_id": "usb-kiyo",
+                    "mode": {"format": "H264", "width": 1920, "height": 1080, "fps": 30},
+                })
+        apply.assert_not_called()
 
     def test_valid_selection_uses_transactional_config_apply(self):
         original = MODULE.camera_inventory
@@ -443,6 +511,27 @@ class WebManagerTests(unittest.TestCase):
         self.assertNotIn('id="live-preview"', MODULE.PAGE)
         self.assertNotIn('rtmp-encoder', MODULE.PAGE)
         self.assertIn("saved camera settings are selected", MODULE.PAGE)
+
+    def test_explicit_h264_capture_uses_native_v4l2_and_mpegts_transport(self):
+        script = Path("stage-petcam/02-configure-petcam/00-run-chroot.sh").read_text()
+        self.assertIn('if [[ "$FORMAT" == "H264" ]]', script)
+        self.assertIn("-input_format h264", script)
+        self.assertIn("udp://127.0.0.1:10000", script)
+        self.assertIn("H.264 capture cannot run while timelapse or motion detection requires MJPEG", script)
+
+    def test_browser_source_is_rejected_when_h264_capture_is_active(self):
+        class Request:
+            path = "/"
+            def __init__(self):
+                self.errors = []
+            def send_error(self, status, message):
+                self.errors.append((status, message))
+
+        request = Request()
+        with mock.patch.object(MODULE, "parse_config", return_value={"FORMAT": "H264"}):
+            MODULE.StreamHandler.do_GET(request)
+        self.assertEqual(request.errors[0][0], 503)
+        self.assertIn("Use the OBS RTSP Media Source", request.errors[0][1])
 
     def test_camera_page_displays_measured_capture_rate_separately_from_configured_fps(self):
         self.assertIn("Actual captured rate:", MODULE.PAGE)

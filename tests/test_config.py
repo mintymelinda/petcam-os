@@ -75,7 +75,7 @@ class ConfigValidationTests(unittest.TestCase):
     def test_rejects_invalid_enums_ranges_and_reserved_ports(self):
         invalid = [
             ({"SOURCE": "network"}, "SOURCE must be"),
-            ({"FORMAT": "H264"}, "FORMAT must be"),
+            ({"FORMAT": "H265"}, "FORMAT must be"),
             ({"RESOLUTION": "0x720"}, "dimensions"),
             ({"FPS": "0"}, "FPS must be greater"),
             ({"FPS": "241"}, "FPS must be greater"),
@@ -88,6 +88,15 @@ class ConfigValidationTests(unittest.TestCase):
             with self.subTest(updates=updates):
                 with self.assertRaisesRegex(MODULE.ConfigError, expected):
                     MODULE.validate_config({**MODULE.DEFAULTS, **updates})
+
+    def test_h264_is_valid_only_for_usb_capture(self):
+        usb = MODULE.validate_config({
+            **MODULE.DEFAULTS, "SOURCE": "usb", "FORMAT": "H264",
+            "RESOLUTION": "1920x1080", "FPS": "30",
+        })
+        self.assertEqual(usb["FORMAT"], "H264")
+        with self.assertRaisesRegex(MODULE.ConfigError, "requires SOURCE=usb"):
+            MODULE.validate_config({**MODULE.DEFAULTS, "SOURCE": "csi", "FORMAT": "H264"})
 
     def test_validates_stable_physical_camera_paths_and_source_compatibility(self):
         usb = MODULE.validate_config({
@@ -220,6 +229,37 @@ class TransactionalApplyTests(unittest.TestCase):
             self.assertTrue(acquired)
             self.assertTrue(MODULE.configuration_change_in_progress(self.config))
         self.assertFalse(MODULE.configuration_change_in_progress(self.config))
+
+    def test_native_h264_readiness_receives_udp_transport_packets(self):
+        class Receiver:
+            def __init__(self):
+                self.bound = None
+                self.closed = False
+            def setsockopt(self, *_args):
+                pass
+            def bind(self, address):
+                self.bound = address
+            def settimeout(self, _timeout):
+                pass
+            def recvfrom(self, _size):
+                return b"mpegts", ("127.0.0.1", 10000)
+            def close(self):
+                self.closed = True
+
+        receiver = Receiver()
+        with mock.patch.object(MODULE.socket, "socket", return_value=receiver):
+            self.assertTrue(MODULE.wait_for_native_h264(timeout=1))
+        self.assertEqual(receiver.bound, ("127.0.0.1", 10000))
+        self.assertTrue(receiver.closed)
+
+    def test_configured_capture_readiness_uses_native_h264_for_h264_mode(self):
+        ready = mock.Mock(return_value=True)
+        with mock.patch.object(MODULE, "wait_for_native_h264", return_value=True) as h264_ready:
+            self.assertTrue(MODULE.wait_for_configured_capture(
+                {"FORMAT": "H264", "PORT": "8081"}, ready
+            ))
+        h264_ready.assert_called_once_with()
+        ready.assert_not_called()
 
     def test_successful_apply_commits_and_updates_last_known_good(self):
         restart = mock.Mock()
