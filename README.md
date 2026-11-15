@@ -99,7 +99,7 @@ An optional MQTT 3.1.1 publisher exposes health and stream-status entities throu
 
 ### RTMP output
 
-An optional FFmpeg publisher can encode the existing MJPEG feed to H.264 and send video to an RTMP/RTMPS endpoint. It is disabled by default, runs independently from camera capture and the OBS/browser MJPEG feed, and reports its measured output FPS separately. See [docs/rtmp-output.md](docs/rtmp-output.md).
+An optional GStreamer RTSP server exposes the camera feed to OBS. USB cameras with native H.264 support are served directly from V4L2 as RTP without decoding or re-encoding; MJPEG cameras retain the existing browser feed and can be packetized for RTSP. See [docs/rtmp-output.md](docs/rtmp-output.md).
 
 ## Runtime status and diagnostics
 
