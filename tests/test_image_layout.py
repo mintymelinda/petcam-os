@@ -66,6 +66,22 @@ class ImageLayoutTests(unittest.TestCase):
         )
         self.assertIn("visudo -cf /etc/sudoers.d/petcam-rtmp", script)
         self.assertIn("/usr/bin/systemctl start --no-block petcam-update.service", script)
+        self.assertIn(
+            "/usr/bin/journalctl -u petcam-stream.service -n 300 --no-pager",
+            script,
+        )
+        self.assertIn(
+            "/usr/bin/journalctl -u petcam-stream.service -u petcam-web.service -n 120 --no-pager -o short-iso",
+            script,
+        )
+        camera = (
+            STAGE / "00-install-files/files/usr/local/lib/petcam/camera.py"
+        ).read_text()
+        diagnostics = (
+            STAGE / "00-install-files/files/usr/local/lib/petcam/network_diagnostics.py"
+        ).read_text()
+        self.assertIn('["sudo", "-n", "/usr/bin/journalctl"', camera)
+        self.assertIn('"sudo", "-n", "/usr/bin/journalctl"', diagnostics)
         self.assertNotIn("cat > /usr/local/sbin/petcam-rtmp-service", script)
 
     def test_stream_backend_uses_loopback_port_separate_from_web_ui(self):
