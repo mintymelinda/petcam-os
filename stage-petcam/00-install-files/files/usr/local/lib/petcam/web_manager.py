@@ -33,6 +33,7 @@ TLS_CERT = Path("/etc/petcam/web-manager.crt")
 TLS_KEY = Path("/etc/petcam/web-manager.key")
 HEALTH_FILE = Path("/var/lib/petcam/health.json")
 RTMP_STATUS_FILE = Path("/run/petcam/rtmp-status.json")
+UPDATE_STATE_FILE = Path("/var/lib/petcam/update/status.json")
 _login_attempts = {}
 _login_lock = threading.Lock()
 _STREAM_METRICS_LOCK = threading.Lock()
@@ -285,10 +286,36 @@ async function refreshHealth(){try{const h=await request("/api/health");$("healt
 const autoCheck=$("auto-check");autoCheck.checked=localStorage.getItem("petcam-auto-update-check")==="true";
 autoCheck.onchange=()=>localStorage.setItem("petcam-auto-update-check",String(autoCheck.checked));
 let updateAvailable=false,updateBusy=false;
-async function updateStatus(){try{const s=await request("/api/update/status");const wasBusy=updateBusy;updateBusy=s.active;$("update-state").textContent=s.active?"Installing…":s.result==="failed"?"Last install failed":s.result==="success"?"Installed":"Idle";$("update-logs").textContent=s.logs||"";if(!s.active&&wasBusy){updateBusy=false;await refreshSystemInfo();await checkUpdates()}$("install-update").hidden=!updateAvailable;$("install-update").disabled=!updateAvailable||s.active}catch(e){$("update-message").textContent=e.message}}
+let updatePollTimer=null,updatePollInFlight=false;
+function scheduleUpdatePoll(delay=2000){if(updatePollTimer)clearTimeout(updatePollTimer);updatePollTimer=setTimeout(updateStatus,delay)}
+async function updateStatus(){
+ if(updatePollInFlight)return;
+ updatePollInFlight=true;
+ try{
+  const s=await request("/api/update/status"),wasBusy=updateBusy;
+  updateBusy=!!s.active;
+  const labels={starting:"Starting",checking:"Checking release",downloading:"Downloading",staging:"Staging files",installing:"Installing",restarting:"Restarting services",authenticating:"Verifying signed release",verifying:"Verifying installation",complete:"Complete",failed:"Failed",idle:"Idle"};
+  $("update-state").textContent=(labels[s.stage]||s.stage||"Unknown")+(s.active?"…":"");
+  const detail=s.message||"No update has been run yet.";
+  const stamp=s.updated_at?new Date(s.updated_at*1000).toLocaleTimeString():"";
+  $("update-message").textContent=detail+(stamp?" · Updated "+stamp:"")+(s.warning?" · Warning: "+s.warning:"");
+  $("update-logs").textContent=s.logs||s.log_warning||"No installer output is available.";
+  if(s.active){$("install-update").disabled=true;$("check-updates").disabled=true;scheduleUpdatePoll(2000)}
+  else{
+   $("check-updates").disabled=false;
+   $("install-update").hidden=!updateAvailable;
+   $("install-update").disabled=!updateAvailable;
+   if(wasBusy){updateBusy=false;await refreshSystemInfo();if(s.stage==="complete")await checkUpdates()}
+  }
+ }catch(e){
+  $("update-state").textContent=updateBusy?"Reconnecting…":"Status unavailable";
+  $("update-message").textContent=updateBusy?"The manager connection was interrupted. The installer may still be running; reconnecting automatically.":("Unable to read installer status: "+e.message);
+  if(updateBusy)scheduleUpdatePoll(2500);
+ }finally{updatePollInFlight=false}
+}
 async function checkUpdates(){const b=$("check-updates");updateAvailable=false;$("install-update").hidden=true;b.disabled=true;$("update-message").textContent="Checking signed release metadata…";try{const d=await request("/api/update/check");updateAvailable=d.update_available;$("install-update").hidden=!updateAvailable;if(d.status==="no-complete-release"){$("update-state").textContent="No complete release";$("update-message").textContent="No complete signed PetCam release is currently available. Incomplete releases are skipped automatically; try again later."}else{$("update-state").textContent=updateAvailable?"Update available":"Up to date";$("update-message").textContent=updateAvailable?"A verified application release is available. Review the notes before installing.":"This device is running the latest published PetCam application."}$("release-notes").textContent=(d.releases||[]).find(r=>r.update_available)?.release_notes||((d.releases||[])[0]?.release_notes)||"No release notes provided by the latest verified release.";const releaseList=(d.releases||[]).map(r=>r.version+" · "+Math.ceil(r.archive_size/1048576)+" MiB"+(r.update_available?" · update":" · installed/current")+(r.release_notes?"\n"+r.release_notes:"")).join("\n\n");$("update-details").textContent="Installed: "+(d.installed_version||"unknown")+" · Newest valid: "+(d.available_version||"none")+"\n\nRecent verified releases\n"+(releaseList||"No complete signed releases found.");$("install-update").disabled=!updateAvailable||updateBusy}catch(e){$("update-state").textContent="Check failed";$("update-message").textContent=e.message}finally{b.disabled=false}}
 $("check-updates").onclick=checkUpdates;
-async function installUpdate(){if(!updateAvailable||updateBusy)return;$("update-confirmation").hidden=true;$("install-update").disabled=true;$("check-updates").disabled=true;$("update-message").textContent="Starting verified update…";try{await request("/api/update/install",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});updateBusy=true;$("update-state").textContent="Installing…";$("update-message").textContent="The update is downloading and staging. This page may briefly disconnect while services restart.";const poll=async()=>{await updateStatus();if(updateBusy)setTimeout(poll,2000)};setTimeout(poll,1500)}catch(e){$("update-message").textContent=e.message;$("install-update").disabled=false}finally{$("check-updates").disabled=false}}
+async function installUpdate(){if(!updateAvailable||updateBusy)return;$("update-confirmation").hidden=true;$("install-update").disabled=true;$("check-updates").disabled=true;updateBusy=true;$("update-message").textContent="Starting verified update…";try{await request("/api/update/install",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});$("update-state").textContent="Starting…";$("update-message").textContent="The update has been accepted. Progress is saved on the device; this page will reconnect automatically if the manager restarts.";scheduleUpdatePoll(500)}catch(e){$("update-message").textContent="The start request did not complete: "+e.message+" Checking whether the updater started…";scheduleUpdatePoll(500)}}
 $("install-update").onclick=()=>{if(!updateAvailable||updateBusy)return;$("update-confirmation").hidden=false;$("confirm-update-install").focus()};
 $("cancel-update-install").onclick=()=>{$("update-confirmation").hidden=true;$("install-update").focus()};
 $("confirm-update-install").onclick=installUpdate;
@@ -884,19 +911,55 @@ def update_status():
         raise RuntimeError(result.stderr.strip() or "Unable to read update service status")
     values = result.stdout.splitlines()
     values += ["unknown"] * (3 - len(values))
+    active = values[0] in ("active", "activating", "deactivating")
+    try:
+        state = json.loads(UPDATE_STATE_FILE.read_text(encoding="utf-8"))
+        if not isinstance(state, dict):
+            state = {}
+    except (OSError, ValueError):
+        state = {}
+    stage = str(state.get("stage") or ("starting" if active else "idle"))
+    if active and stage in ("complete", "failed", "idle"):
+        stage = "starting"
+    if not active and stage not in ("complete", "failed", "idle"):
+        stage = "failed"
+        state["message"] = (
+            "The updater stopped before reporting completion. Check the installer log; "
+            "the previous release may have been restored."
+        )
     logs = subprocess.run(
         ["sudo", "-n", "/usr/bin/journalctl", "-u", "petcam-update.service",
          "-n", "20", "--no-pager", "-o", "cat"],
         capture_output=True, text=True, timeout=5, check=False,
     )
-    return {"active": values[0] in ("active", "activating", "deactivating"),
-            "result": "success" if values[1] == "success" else ("failed" if values[1] == "exit-code" else values[1]),
-            "exit_code": values[2], "logs": logs.stdout[-6000:] if logs.returncode == 0 else ""}
+    return {
+        "active": active,
+        "stage": stage,
+        "message": str(state.get("message") or ""),
+        "updated_at": state.get("updated_at"),
+        "started_at": state.get("started_at"),
+        "finished_at": state.get("finished_at"),
+        "target_version": state.get("target_version"),
+        "installed_version": state.get("installed_version"),
+        "previous_version": state.get("previous_version"),
+        "rollback": state.get("rollback"),
+        "warning": state.get("warning"),
+        "result": "success" if stage == "complete" else ("failed" if stage == "failed" else values[1]),
+        "exit_code": values[2],
+        "logs": logs.stdout[-8000:] if logs.returncode == 0 else "",
+        "log_warning": logs.stderr.strip() if logs.returncode else "",
+    }
 
 
 def start_update():
+    status = subprocess.run(
+        ["/usr/bin/systemctl", "is-active", "--quiet", "petcam-update.service"],
+        capture_output=True, text=True, timeout=5, check=False,
+    )
+    if status.returncode == 0:
+        raise RuntimeError("An update is already running. Reconnect to its progress instead of starting it again.")
     result = subprocess.run(
-        ["sudo", "-n", "/usr/bin/systemctl", "start", "petcam-update.service"],
+        ["sudo", "-n", "/usr/bin/systemctl", "start", "--no-block", "petcam-update.service"],
         capture_output=True, text=True, timeout=10, check=False,
     )
     if result.returncode:

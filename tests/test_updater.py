@@ -503,8 +503,11 @@ class RecentReleaseDiscoveryTests(unittest.TestCase):
             "update_available": False,
             "available_version": "1.2.3",
         }
-        with mock.patch("updater.check_update", return_value=status) as check:
+        with mock.patch("updater.check_update", return_value=status) as check, \
+                mock.patch("updater.write_update_state") as write_state:
             result = install_update(config)
+        write_state.assert_any_call("checking", "Checking signed release metadata")
+        write_state.assert_any_call("complete", "No update was needed", installed_version=None)
         self.assertEqual(result["status"], "up-to-date")
         check.assert_called_once_with(config, max_releases=1)
 
