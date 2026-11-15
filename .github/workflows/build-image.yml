@@ -71,7 +71,7 @@ jobs:
             stage-petcam/00-install-files/files/usr/local/lib/petcam/timelapse.py \
             stage-petcam/00-install-files/files/usr/local/lib/petcam/motion_detection.py \
             tools/create_imager_os_list.py tools/create_update_release.py \
-            tools/validate_image_build.py
+            tools/assemble_image.py
           bash -n stage-petcam-base/prerun.sh stage-petcam/prerun.sh \
             stage-petcam/00-install-files/00-run.sh \
             stage-petcam/02-configure-petcam/00-run-chroot.sh \
@@ -142,9 +142,9 @@ jobs:
         uses: usimd/pi-gen-action@v1.11.0
         with:
           image-name: PetCamOS
-          stage-list: stage0 stage1 stage2 stage-petcam-base stage-petcam
+          stage-list: stage0 stage1 stage2
           release: trixie
-          compression: xz
+          compression: none
           compression-level: 6
           hostname: petcam
           locale: en_CA.UTF-8
@@ -170,7 +170,7 @@ jobs:
 
       - name: Prepare containerized image validation
         env:
-          IMAGE_PATH: ${{ steps.pigen.outputs.image-path }}
+          BASE_IMAGE_PATH: ${{ steps.pigen.outputs.image-path }}
           IMAGE_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/petcam-os-${{ github.ref_name }}.img.xz
         run: |
           set -euo pipefail
@@ -178,31 +178,35 @@ jobs:
           curl --fail --silent --show-error \
             https://raw.githubusercontent.com/raspberrypi/rpi-imager/main/doc/json-schema/os-list-schema.json \
             -o .build/os-list-schema.json
-          IMAGE_PATH="${IMAGE_PATH#${GITHUB_WORKSPACE}/}"
-          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+          BASE_IMAGE_PATH="${BASE_IMAGE_PATH#${GITHUB_WORKSPACE}/}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            OUTPUT_IMAGE_PATH="build/output/petcam-os-${GITHUB_REF_NAME}.img.xz"
+          else
+            OUTPUT_IMAGE_PATH="build/output/petcam-os-${RELEASE_VERSION}.img.xz"
             IMAGE_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           fi
           {
-            echo "IMAGE_PATH=${IMAGE_PATH}"
+            echo "BASE_IMAGE_PATH=${BASE_IMAGE_PATH}"
+            echo "OUTPUT_IMAGE_PATH=${OUTPUT_IMAGE_PATH}"
             echo "IMAGE_URL=${IMAGE_URL}"
           } >> "${GITHUB_ENV}"
 
       - name: Set up Docker Buildx for native BuildKit caching
         uses: docker/setup-buildx-action@v3
 
-      - name: Build image assembly and validation container with native layer caching
+      - name: Build post-pi-gen image assembly container with native layer caching
         uses: docker/build-push-action@v6
         with:
           context: .
           file: build/Dockerfile
           push: false
           load: true
-          tags: petcam-image-validation:local
+          tags: petcam-image-assembly:local
           cache-from: type=gha,scope=petcam-image-validation
           cache-to: type=gha,scope=petcam-image-validation,mode=max
 
       - name: Validate image and generate Imager catalogue
-        run: docker compose --file build/compose.yaml run --rm --no-build image-validation
+        run: docker compose --file build/compose.yaml run --rm --no-build image-assembly
 
       - name: Upload manually built image
         if: github.event_name == 'workflow_dispatch'
@@ -210,7 +214,7 @@ jobs:
         with:
           name: petcam-os-${{ steps.version.outputs.release_version }}
           path: |
-            ${{ steps.pigen.outputs.image-path }}
+            build/output/petcam-os-${{ steps.version.outputs.release_version }}.img.xz
             petcam-os-os-list.json
           if-no-files-found: error
           retention-days: 14
@@ -220,7 +224,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PETCAM_UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.PETCAM_UPDATE_SIGNING_PRIVATE_KEY }}
-          IMAGE_PATH: ${{ steps.pigen.outputs.image-path }}
+          IMAGE_PATH: ${{ github.workspace }}/build/output/petcam-os-${{ github.ref_name }}.img.xz
         run: |
           set -euo pipefail
           if [[ -z "${PETCAM_UPDATE_SIGNING_PRIVATE_KEY}" ]]; then
