@@ -294,7 +294,7 @@ async function updateStatus(){
  try{
   const s=await request("/api/update/status"),wasBusy=updateBusy;
   updateBusy=!!s.active;
-  const labels={starting:"Starting",checking:"Checking release",verifying:"Verifying signature",downloading:"Downloading",staging:"Staging files",installing:"Installing",restarting:"Restarting services",authenticating:"Verifying signed release",verifying:"Verifying installation",complete:"Complete",failed:"Failed",idle:"Idle"};
+  const labels={starting:"Starting",checking:"Checking release",downloading:"Downloading",staging:"Staging files",installing:"Installing",restarting:"Restarting services",authenticating:"Verifying signed release",verifying:"Verifying installation",complete:"Complete",failed:"Failed",idle:"Idle"};
   $("update-state").textContent=(labels[s.stage]||s.stage||"Unknown")+(s.active?"…":"");
   const detail=s.message||"No update has been run yet.";
   const stamp=s.updated_at?new Date(s.updated_at*1000).toLocaleTimeString():"";
