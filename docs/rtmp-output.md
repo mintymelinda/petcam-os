@@ -1,60 +1,42 @@
-# OBS camera output (RTSP)
+# OBS camera output
 
-PetCam can expose its camera as a local-network RTSP feed for OBS. **PetCam does not publish to Twitch, YouTube, or another streaming platform.** OBS remains the final production and publishing application: use it for scenes, overlays, audio, encoding, and destination stream keys.
+PetCam exposes two local-network sources for OBS. It does not publish to Twitch, YouTube, or another streaming platform; OBS remains responsible for scenes, audio, encoding, and destination stream keys.
 
-The OBS feed is disabled by default. Enable it in **System → OBS Output**, save the settings, and add a **Media Source** in OBS using:
+## HTTP Browser Source
+
+Use the page URL as an OBS Browser Source:
+
+```
+http://PETCAM_HOST:8080/
+```
+
+The page contains a transparent, full-size image element backed by the existing MJPEG HTTP stream. PetCam forwards the MJPEG multipart response unchanged. There is no dashboard preview connection and no additional camera capture process.
+
+## RTSP Media Source
+
+Enable **System → OBS Output → Enable OBS RTSP feed**, then add this address as an OBS Media Source:
 
 ```
 rtsp://PETCAM_HOST:8554/petcam
 ```
 
-Replace `PETCAM_HOST` with the PetCam hostname or LAN IP address. The dashboard pre-fills the address using the hostname currently used to open the manager. The host portion is editable; if the manager was opened through a reverse proxy or OBS cannot resolve that hostname, replace it with the PetCam LAN IP or another address reachable from the OBS computer.
+When the camera supplies native H.264 through the existing capture status interface, PetCam uses the native H.264 packet-copy path. Otherwise, the MJPEG path packet-copies the original JPEG frames into RTSP. Neither path decodes, scales, changes frame rate, or re-encodes video. Output controls are limited to enable/disable because the camera's advertised capture mode determines the stream format.
 
-## Video path
+## MJPEG-only features
 
-For CSI cameras, PetCam uses one Picamera2 camera session with simultaneous encoders:
+Timelapse and motion detection continue to consume the MJPEG capture stream. They are not moved to H.264 and do not start a second camera capture session.
 
-- MJPEG continues to serve the existing dashboard preview and stable MJPEG URL.
-- Native H.264 is published to the local RTSP server without decoding or re-encoding on supported hardware.
+## Network and troubleshooting
 
-USB cameras and unsupported CSI configurations use the MJPEG-to-FFmpeg H.264 fallback. The RTSP endpoint remains the same in either case. Raspberry Pi 4 and earlier can use dedicated H.264/MJPEG encoder hardware; Raspberry Pi 5 uses software encoders through FFmpeg libraries.
-
-MediaMTX provides the RTSP server. PetCam bundles a version-pinned MediaMTX binary for 32-bit armhf images (ARMv6-compatible, including older Pi Zero hardware), with release SHA-256 verification during image creation. The server accepts publishers only from localhost and allows read-only clients on the local network.
-
-## Configure
-
-Open **System → OBS Output**:
-
-- **Enable OBS RTSP feed** — starts or stops the PetCam publisher.
-- **OBS Media Source URL** — the address to paste into OBS.
-- **Fallback video encoder** — used only for USB cameras or when native CSI H.264 cannot be used.
-- **Output resolution, FPS, and bitrate** — controls the output stream. Native CSI mode requires the output resolution not to exceed the selected capture mode and output FPS to divide capture FPS evenly; unsupported combinations fall back to MJPEG transcoding.
-
-No external server URL or stream key is needed in PetCam. Configure your Twitch/YouTube destination and stream key only in OBS.
-
-## OBS setup
-
-1. Confirm the PetCam and OBS computers are on the same trusted LAN.
-2. In OBS, add **Sources → + → Media Source**.
-3. Disable **Local File**.
-4. Paste the RTSP URL shown in PetCam's System tab.
-5. Apply the source settings and confirm video appears.
-6. Configure audio, scenes, and streaming destination in OBS as usual.
-
-If OBS cannot connect, confirm TCP port **8554** is reachable from the OBS computer and that the PetCam RTSP service is running. Do not expose the RTSP port directly to the public internet.
-
-## Performance and troubleshooting
-
-RTSP publishing is additional work on the Pi. The publisher service has CPU and memory limits. Start with 640×360 or 854×480 at 10–15 FPS on slower hardware. Native H.264 stream copy avoids a second encode when the CSI capture path supports the requested output.
+The HTTP Browser Source listener is unauthenticated and intended for a trusted local network. Do not expose port 8080 to the public internet. The RTSP server accepts publishers only from localhost and permits read-only clients on the LAN; do not expose port 8554 publicly.
 
 Useful SSH checks:
 
 ```bash
-sudo systemctl status mediamtx.service
+sudo systemctl status petcam-stream.service
 sudo systemctl status petcam-rtmp.service
-sudo journalctl -u mediamtx.service -n 100 --no-pager
 sudo journalctl -u petcam-rtmp.service -n 100 --no-pager
 sudo /usr/bin/python3 /opt/petcam/current/lib/rtmp_output.py --check
 ```
 
-The feed is video-only. OBS should handle microphone and other audio sources. The existing MJPEG preview and endpoint remain available whether the OBS RTSP feed is enabled or disabled.
+The feed is video-only. Add microphones and other audio sources in OBS.

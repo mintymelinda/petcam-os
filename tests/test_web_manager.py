@@ -17,7 +17,7 @@ SPEC.loader.exec_module(MODULE)
 class WebManagerTests(unittest.TestCase):
     def test_management_page_uses_the_four_tab_layout(self):
         self.assertIn("Refresh", MODULE.PAGE)
-        self.assertIn("Live preview", MODULE.PAGE)
+        self.assertIn("Browser Source", MODULE.PAGE)
         self.assertIn('role="tablist"', MODULE.PAGE)
         tab_order = [MODULE.PAGE.index('data-tab="camera"'), MODULE.PAGE.index('data-tab="timelapse"'),
                      MODULE.PAGE.index('data-tab="motion"'), MODULE.PAGE.index('data-tab="system"')]
@@ -26,11 +26,6 @@ class WebManagerTests(unittest.TestCase):
         self.assertNotIn(">OBS</button>", MODULE.PAGE)
         self.assertNotIn(">Streams</button>", MODULE.PAGE)
         self.assertNotIn("copy-media-source", MODULE.PAGE)
-        self.assertIn('id="toggle-live-preview" type="checkbox"', MODULE.PAGE)
-        self.assertIn('aspect-ratio:16/9', MODULE.PAGE)
-        self.assertIn('id="preview-disabled"', MODULE.PAGE)
-        self.assertIn('localStorage.getItem("petcam-preview-enabled")!=="false"', MODULE.PAGE)
-        self.assertIn('preview.removeAttribute("src")', MODULE.PAGE)
         self.assertIn('id="panel-camera"', MODULE.PAGE)
         self.assertIn('id="panel-timelapse"', MODULE.PAGE)
         self.assertIn('id="panel-motion"', MODULE.PAGE)
@@ -379,8 +374,8 @@ class WebManagerTests(unittest.TestCase):
     def test_camera_page_restores_saved_camera_and_mode_and_refreshes_preview(self):
         self.assertIn("activeCameraMatches", MODULE.PAGE)
         self.assertIn("activeConfig", MODULE.PAGE)
-        self.assertIn("refreshLivePreview", MODULE.PAGE)
-        self.assertIn("if(livePreviewEnabled)", MODULE.PAGE)
+        self.assertNotIn("refreshLivePreview", MODULE.PAGE)
+        self.assertNotIn("dashboard-preview", MODULE.PAGE)
         self.assertIn("MJPEG delivered FPS", MODULE.PAGE)
         self.assertIn("OBS Feed FPS (RTSP)", MODULE.PAGE)
         self.assertIn("rtmp.enabled", MODULE.PAGE)
@@ -388,7 +383,9 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn('id="rtmp-output"', MODULE.PAGE)
         self.assertIn('id="obs-rtsp-url"', MODULE.PAGE)
         self.assertIn('id="obs-rtsp-url" type="text"', MODULE.PAGE)
-        self.assertIn('id="live-preview"', MODULE.PAGE)
+        self.assertIn('http://petcam.local:8080/', MODULE.PAGE)
+        self.assertNotIn('id="live-preview"', MODULE.PAGE)
+        self.assertNotIn('rtmp-encoder', MODULE.PAGE)
         self.assertIn("saved camera settings are selected", MODULE.PAGE)
 
     def test_camera_page_displays_measured_capture_rate_separately_from_configured_fps(self):
