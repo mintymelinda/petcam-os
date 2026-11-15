@@ -123,7 +123,21 @@ def main() -> int:
             target = rootfs / name
             run("mount", "--bind", str(Path("/") / name), str(target))
             mounted.append(target)
-        assemble(rootfs)
+
+        # Debian images commonly point resolv.conf at systemd-resolved's stub.
+        # Supply the container's working DNS configuration only for this chroot build.
+        resolver_stub = rootfs / "run/systemd/resolve/stub-resolv.conf"
+        resolver_stub.parent.mkdir(parents=True, exist_ok=True)
+        resolver_existed = resolver_stub.exists()
+        resolver_backup = resolver_stub.read_bytes() if resolver_existed else None
+        shutil.copyfile("/etc/resolv.conf", resolver_stub)
+        try:
+            assemble(rootfs)
+        finally:
+            if resolver_existed and resolver_backup is not None:
+                resolver_stub.write_bytes(resolver_backup)
+            else:
+                resolver_stub.unlink(missing_ok=True)
     finally:
         for target in reversed(mounted):
             subprocess.run(["umount", str(target)], check=False)
