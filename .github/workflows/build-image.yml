@@ -137,7 +137,7 @@ jobs:
       # The pinned upstream pi-gen revision is the existing 32-bit/armhf target.
       # The ARM64 runner executes the build tooling natively without changing the
       # image architecture or dropping support for original Raspberry Pi Zero boards.
-      - name: Build base Raspberry Pi OS and PetCam stages
+      - name: Build base Raspberry Pi OS
         id: pigen
         uses: usimd/pi-gen-action@v1.11.0
         with:
@@ -168,7 +168,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Prepare containerized image validation
+      - name: Prepare post-image assembly inputs
         env:
           BASE_IMAGE_PATH: ${{ steps.pigen.outputs.image-path }}
           IMAGE_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/petcam-os-${{ github.ref_name }}.img.xz
@@ -202,10 +202,10 @@ jobs:
           push: false
           load: true
           tags: petcam-image-assembly:local
-          cache-from: type=gha,scope=petcam-image-validation
+          cache-from: type=gha,scope=petcam-image-assembly
           cache-to: type=gha,scope=petcam-image-validation,mode=max
 
-      - name: Validate image and generate Imager catalogue
+      - name: Assemble PetCam and validate Imager catalogue
         run: docker compose --file build/compose.yaml run --rm --no-build image-assembly
 
       - name: Upload manually built image
