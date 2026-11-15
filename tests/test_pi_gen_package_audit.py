@@ -7,9 +7,9 @@ PI_GEN_COMMIT = "6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78"
 
 
 class PiGenPackageAuditTests(unittest.TestCase):
-    def test_cached_petcam_package_list_avoids_packages_already_installed_by_pi_gen(self):
+    def test_petcam_package_manifest_avoids_upstream_duplicates(self):
         packages = set(
-            (ROOT / "stage-petcam-base/01-install-packages/00-packages")
+            (ROOT / "build/apt-packages.txt")
             .read_text(encoding="utf-8")
             .split()
         )
@@ -22,14 +22,16 @@ class PiGenPackageAuditTests(unittest.TestCase):
             "python3-minimal",
         }
         self.assertFalse(packages & upstream_duplicates)
-        # Keep discovery utilities available for future network diagnostics.
         self.assertIn("avahi-utils", packages)
-        config = (ROOT / "config").read_text(encoding="utf-8")
-        self.assertIn("stage-petcam-base stage-petcam", config)
+        stage_packages = (
+            ROOT / "stage-petcam-base/01-install-packages/00-packages"
+        ).read_text(encoding="utf-8").split()
+        self.assertEqual(packages, set(stage_packages))
 
-    def test_release_build_uses_a_fixed_pi_gen_commit(self):
+    def test_image_build_uses_pinned_pi_gen_action_and_revision(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
-        self.assertIn(f"ref: {PI_GEN_COMMIT}", workflow)
+        self.assertIn("uses: usimd/pi-gen-action@v1.11.0", workflow)
+        self.assertIn(f"pi-gen-version: {PI_GEN_COMMIT}", workflow)
         self.assertNotIn("ref: master", workflow)
 
     def test_release_exports_final_installed_package_inventory(self):
