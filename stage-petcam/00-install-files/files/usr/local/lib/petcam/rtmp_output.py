@@ -175,6 +175,7 @@ def main():
     native_h264 = camera_status.get("native_h264") is True
     source = "native_h264" if native_h264 else "mjpeg_copy"
     launch = build_gstreamer_launch(camera_status)
+    check_gstreamer_runtime()
     GLib, _Gst, GstRtspServer = _load_gstreamer()
     if args.check:
         print(json.dumps({
