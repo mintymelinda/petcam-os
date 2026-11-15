@@ -1,6 +1,5 @@
 #!/bin/bash -e
-# Build the pinned uStreamer binary once in the reusable PetCam base rootfs.
-# The resulting /opt/petcam/ustreamer tree is captured by the base-rootfs cache.
+# Build the pinned uStreamer binary once in the PetCam base root filesystem.
 set -euo pipefail
 
 USTREAMER_COMMIT="11fd828ab00c01a39bd0843ef442ef0b6d3cac41"
@@ -91,10 +90,6 @@ done < <(ldd "$USTREAMER_BIN" | awk '{ for (i = 1; i <= NF; i++) if (index($i, "
 
 apt-get purge -y --auto-remove build-essential pkg-config git libevent-dev libjpeg-dev libbsd-dev libv4l-dev
 
-# Detach pi-gen's shared archive cache before cleaning the target rootfs.
-if [[ -n "${APT_ARCHIVE_CACHE:-}" ]]; then
-    umount /var/cache/apt/archives
-fi
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 find /usr/share/doc -mindepth 1 -maxdepth 1 ! -name copyright -exec rm -rf {} +
