@@ -301,8 +301,6 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
-          VERSION="${TAG#v}"
-
           mapfile -t IMAGES < <(find pi-gen/deploy -maxdepth 1 -type f -name '*.img.xz' -print)
           if [[ "${#IMAGES[@]}" -ne 1 ]]; then
             echo "Expected exactly one .img.xz image; found ${#IMAGES[@]}." >&2
@@ -351,10 +349,10 @@ jobs:
           sudo mount -o ro "${ROOT_PARTITION}" "${ROOTFS_MOUNT}"
           PACKAGE_INVENTORY="${RUNNER_TEMP}/${TAG}-installed-packages.tsv"
           sudo dpkg-query --admindir="${ROOTFS_MOUNT}/var/lib/dpkg" \
-            --show --showformat='${binary:Package}\\t${Version}\\t${db:Status-Abbrev}\\t${Installed-Size}\\n' \
-            | awk -F '\\t' '$3 ~ /^ii/' \
+            --show --showformat='${binary:Package}\t${Version}\t${db:Status-Abbrev}\t${Installed-Size}\n' \
+            | awk -F '\t' '$3 ~ /^ii/' \
             | sort -k4,4nr > "${PACKAGE_INVENTORY}"
-          printf 'PetCam OS release: %s\\npi-gen commit: %s\\n\\n' "${TAG}" \
+          printf 'PetCam OS release: %s\npi-gen commit: %s\n\n' "${TAG}" \
             '6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78' > "${RUNNER_TEMP}/${TAG}-build-info.txt"
           sudo umount "${ROOTFS_MOUNT}"
 
