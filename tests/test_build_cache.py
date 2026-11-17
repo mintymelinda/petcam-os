@@ -62,7 +62,7 @@ class BuildCacheContractTests(unittest.TestCase):
         self.assertIn("if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'", workflow)
         for step in (
             "name: Prepare release",
-            "name: Prepare and publish signed application update",
+            "name: Publish image and Raspberry Pi Imager catalogue",
         ):
             start = workflow.index(step)
             following = workflow.find("\n      - name:", start + len(step))
