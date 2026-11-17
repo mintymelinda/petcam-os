@@ -25,13 +25,12 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertEqual(VERSION, STAGE_VERSION)
         self.assertRegex(VERSION, re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$"))
 
-    def test_install_stage_creates_versioned_release_and_manifest(self):
+    def test_install_stage_creates_versioned_release(self):
         script = INSTALL.read_text()
         self.assertIn('/opt/petcam/releases/${APP_VERSION}', script)
         self.assertIn('"$RELEASE_DIR/lib/camera.py"', script)
         self.assertIn('"$RELEASE_DIR/lib/csi_stream.py"', script)
         self.assertIn('"$RELEASE_DIR/lib/web_manager.py"', script)
-        self.assertIn('"$RELEASE_DIR/manifest.json"', script)
         self.assertNotIn("camera_profiles.py", script)
         self.assertIn('"$RELEASE_DIR/lib/home_assistant.py"', script)
         self.assertIn('"$RELEASE_DIR/lib/light_sensor.py"', script)
@@ -41,7 +40,6 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn('"${ROOTFS_DIR}/etc/petcam/light-sensor.conf"', script)
         self.assertIn('"$RELEASE_DIR/systemd/petcam-home-assistant.service"', script)
         self.assertIn('"$RELEASE_DIR/etc/petcam/home-assistant.conf"', script)
-        self.assertIn('"architecture":"armhf"', script)
 
     def test_timelapse_service_can_write_to_local_and_network_storage(self):
         service = TIMELAPSE_SERVICE.read_text()
@@ -58,14 +56,9 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertIn('/opt/petcam/current/lib/web_manager.py', script)
         self.assertIn('/opt/petcam/current/lib/csi_stream.py', script)
 
-    def test_updater_sandbox_can_install_privileged_assets(self):
+    def test_runtime_sandbox_and_privileged_helpers(self):
         script = CONFIGURE.read_text()
-        self.assertIn(
-            "ReadWritePaths=/opt/petcam /var/lib/petcam/update /etc/systemd/system /etc/petcam /usr/local/sbin /etc/sudoers.d",
-            script,
-        )
         self.assertIn("visudo -cf /etc/sudoers.d/petcam-rtmp", script)
-        self.assertIn("/usr/bin/systemctl start --no-block petcam-update.service", script)
         self.assertIn("ReadWritePaths=/etc/petcam /var/lib/petcam /run/sudo/ts", script)
         self.assertIn(
             "/usr/bin/journalctl -u petcam-stream.service -n 300 --no-pager",
@@ -155,11 +148,6 @@ class ImageLayoutTests(unittest.TestCase):
         self.assertNotIn("systemctl enable petcam-home-assistant.service", script)
         self.assertIn("RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", service)
 
-    def test_release_manifest_schema_is_versioned(self):
-        script = INSTALL.read_text()
-        self.assertIn('"schema_version":1', script)
-        self.assertIn('"version":"%s"', script)
-        self.assertIn('"ustreamer_commit"', script)
 
 
 if __name__ == "__main__":

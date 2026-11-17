@@ -52,13 +52,13 @@ jobs:
 
       - name: Validate PetCam scripts
         run: |
-          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py stage-petcam/00-install-files/files/usr/local/lib/petcam/rtmp_output.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_auth.py stage-petcam/00-install-files/files/usr/local/lib/petcam/health_monitor.py stage-petcam/00-install-files/files/usr/local/lib/petcam/config.py stage-petcam/00-install-files/files/usr/local/lib/petcam/network_diagnostics.py stage-petcam/00-install-files/files/usr/local/lib/petcam/factory_reset.py stage-petcam/00-install-files/files/usr/local/lib/petcam/home_assistant.py stage-petcam/00-install-files/files/usr/local/lib/petcam/timelapse.py stage-petcam/00-install-files/files/usr/local/lib/petcam/motion_detection.py tools/create_imager_os_list.py stage-petcam/00-install-files/files/usr/local/lib/petcam/updater.py tools/create_update_release.py tools/prepare_pigen_build.py
+          python3 -m py_compile stage-petcam/00-install-files/files/usr/local/lib/petcam/camera.py stage-petcam/00-install-files/files/usr/local/lib/petcam/csi_stream.py stage-petcam/00-install-files/files/usr/local/lib/petcam/rtmp_output.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_manager.py stage-petcam/00-install-files/files/usr/local/lib/petcam/web_auth.py stage-petcam/00-install-files/files/usr/local/lib/petcam/health_monitor.py stage-petcam/00-install-files/files/usr/local/lib/petcam/config.py stage-petcam/00-install-files/files/usr/local/lib/petcam/network_diagnostics.py stage-petcam/00-install-files/files/usr/local/lib/petcam/factory_reset.py stage-petcam/00-install-files/files/usr/local/lib/petcam/home_assistant.py stage-petcam/00-install-files/files/usr/local/lib/petcam/timelapse.py stage-petcam/00-install-files/files/usr/local/lib/petcam/motion_detection.py tools/create_imager_os_list.py tools/prepare_pigen_build.py
           bash -n stage-petcam-base/prerun.sh stage-petcam/prerun.sh stage-petcam/00-install-files/00-run.sh stage-petcam/02-configure-petcam/00-run-chroot.sh stage-petcam-base/02-build-ustreamer/00-run-chroot.sh
 
       - name: Install test-only image processing dependency
         run: sudo apt-get update && sudo apt-get install -y python3-pil
 
-      - name: Test camera, RTMP output, updater, timelapse, motion detection, and Imager catalogue generation
+      - name: Test camera, RTMP output, timelapse, motion detection, and Imager catalogue generation
         run: python3 -m unittest discover -s tests -v
 
   warm-base-cache:
@@ -153,7 +153,7 @@ jobs:
         uses: actions/checkout@v7
 
       # Reuse an existing release regardless of draft state. Assets are uploaded
-      # after the image and signed updater package have been built and verified.
+      # after the image and Imager catalogue have been built and verified.
       - name: Prepare release
         if: github.ref_type == 'tag'
         env:
@@ -294,30 +294,13 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Prepare and publish signed application update
+      - name: Publish image and Raspberry Pi Imager catalogue
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-          PETCAM_UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.PETCAM_UPDATE_SIGNING_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          if [[ -z "${PETCAM_UPDATE_SIGNING_PRIVATE_KEY}" ]]; then
-            echo "Missing PETCAM_UPDATE_SIGNING_PRIVATE_KEY Actions secret; refusing to publish an unsigned update." >&2
-            exit 1
-          fi
-
           TAG="${GITHUB_REF_NAME}"
-          VERSION="${TAG#v}"
-          KEY_FILE="${RUNNER_TEMP}/petcam-update-private.pem"
-          DERIVED_PUBLIC_KEY="${RUNNER_TEMP}/petcam-update-public.pem"
-          printf '%s\n' "${PETCAM_UPDATE_SIGNING_PRIVATE_KEY}" > "${KEY_FILE}"
-          chmod 0600 "${KEY_FILE}"
-          openssl pkey -in "${KEY_FILE}" -pubout -out "${DERIVED_PUBLIC_KEY}"
-          if ! cmp -s "${DERIVED_PUBLIC_KEY}" stage-petcam/00-install-files/files/etc/petcam/update-signing.pub; then
-            echo "The configured signing private key does not match the public key pinned in the Pi image." >&2
-            exit 1
-          fi
-
           mapfile -t IMAGES < <(find pi-gen/deploy -maxdepth 1 -type f -name '*.img.xz' -print)
           if [[ "${#IMAGES[@]}" -ne 1 ]]; then
             echo "Expected exactly one .img.xz image; found ${#IMAGES[@]}." >&2
@@ -345,15 +328,17 @@ jobs:
 
           RAW_IMAGE="${RUNNER_TEMP}/petcam-os.img"
           ROOTFS_MOUNT="${RUNNER_TEMP}/petcam-rootfs"
-          RELEASE_DIR="${RUNNER_TEMP}/petcam-update-release"
-          xz --decompress --stdout "${IMAGES[0]}" > "${RAW_IMAGE}"
-          LOOP_DEVICE="$(sudo losetup --find --show --partscan "${RAW_IMAGE}")"
+          LOOP_DEVICE=""
           cleanup() {
             sudo umount "${ROOTFS_MOUNT}" 2>/dev/null || true
-            sudo losetup -d "${LOOP_DEVICE}" 2>/dev/null || true
-            rm -f "${RAW_IMAGE}" "${KEY_FILE}" "${DERIVED_PUBLIC_KEY}"
+            if [[ -n "${LOOP_DEVICE}" ]]; then
+              sudo losetup -d "${LOOP_DEVICE}" 2>/dev/null || true
+            fi
+            rm -f "${RAW_IMAGE}"
           }
           trap cleanup EXIT
+          xz --decompress --stdout "${IMAGES[0]}" > "${RAW_IMAGE}"
+          LOOP_DEVICE="$(sudo losetup --find --show --partscan "${RAW_IMAGE}")"
           sudo udevadm settle
           ROOT_PARTITION="${LOOP_DEVICE}p2"
           if [[ ! -b "${ROOT_PARTITION}" ]]; then
@@ -369,32 +354,17 @@ jobs:
             | sort -k4,4nr > "${PACKAGE_INVENTORY}"
           printf 'PetCam OS release: %s\npi-gen commit: %s\n\n' "${TAG}" \
             '6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78' > "${RUNNER_TEMP}/${TAG}-build-info.txt"
-          sudo cp -a "${ROOTFS_MOUNT}/opt/petcam/releases/${VERSION}" "${RELEASE_DIR}"
-          sudo chown -R "$(id -u):$(id -g)" "${RELEASE_DIR}"
           sudo umount "${ROOTFS_MOUNT}"
 
-          ARCHIVE_NAME="petcam-${VERSION}-armhf.tar.gz"
-          ARCHIVE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ARCHIVE_NAME}"
-          python3 tools/create_update_release.py \
-            --release-dir "${RELEASE_DIR}" \
-            --version "${VERSION}" \
-            --archive-url "${ARCHIVE_URL}" \
-            --private-key "${KEY_FILE}" \
-            --output-dir "${RUNNER_TEMP}/petcam-update-assets"
-
           gh release upload "${TAG}" "${IMAGE_NAME}" petcam-os-os-list.json \
-            "${PACKAGE_INVENTORY}" "${RUNNER_TEMP}/${TAG}-build-info.txt" \
-            "${RUNNER_TEMP}/petcam-update-assets/${ARCHIVE_NAME}" \
-            "${RUNNER_TEMP}/petcam-update-assets/petcam-update-manifest.json" \
-            "${RUNNER_TEMP}/petcam-update-assets/petcam-update-manifest.json.sig" --clobber
+            "${PACKAGE_INVENTORY}" "${RUNNER_TEMP}/${TAG}-build-info.txt" --clobber
 
           ASSETS="$(gh release view "${TAG}" --json assets --jq '[.assets[].name]')"
-          for REQUIRED_ASSET in "${ARCHIVE_NAME}" "petcam-update-manifest.json" "petcam-update-manifest.json.sig"; do
+          for REQUIRED_ASSET in "${IMAGE_NAME}" "petcam-os-os-list.json"; do
             if ! jq -e --arg asset "${REQUIRED_ASSET}" 'index($asset) != null' <<<"${ASSETS}" >/dev/null; then
               echo "Release ${TAG} is missing required asset: ${REQUIRED_ASSET}" >&2
               exit 1
             fi
           done
 
-          # Publish only after the updater archive, manifest, and signature exist.
           gh release edit "${TAG}" --draft=false

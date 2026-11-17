@@ -6,7 +6,6 @@ if [[ ! "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 RELEASE_DIR="${ROOTFS_DIR}/opt/petcam/releases/${APP_VERSION}"
-install -D -o root -g root -m 0644 files/etc/petcam/update-signing.pub "${ROOTFS_DIR}/etc/petcam/update-signing.pub"
 install -d -m 0755 "$RELEASE_DIR/lib" "$RELEASE_DIR/systemd" "$RELEASE_DIR/etc/petcam" "$RELEASE_DIR/etc/sudoers.d"
 install -d -m 0755 "$RELEASE_DIR/bin"
 install -d -m 0755 "${ROOTFS_DIR}/mnt/petcam-network"
@@ -45,6 +44,3 @@ install -m 0644 files/etc/systemd/system/petcam-home-assistant.service "$RELEASE
 install -m 0644 files/etc/petcam/home-assistant.conf "$RELEASE_DIR/etc/petcam/home-assistant.conf"
 install -D -m 0644 files/etc/systemd/system/petcam-home-assistant.service "${ROOTFS_DIR}/etc/systemd/system/petcam-home-assistant.service"
 install -D -m 0640 files/etc/petcam/home-assistant.conf "${ROOTFS_DIR}/etc/petcam/home-assistant.conf"
-install -m 0755 files/usr/local/lib/petcam/updater.py "${ROOTFS_DIR}/usr/local/bin/petcam-update"
-printf '{"schema_version":1,"application":"petcam-os","version":"%s","architecture":"armhf","ustreamer_commit":"11fd828ab00c01a39bd0843ef442ef0b6d3cac41"}\n' "$APP_VERSION" > "$RELEASE_DIR/manifest.json"
-chmod 0644 "$RELEASE_DIR/manifest.json"

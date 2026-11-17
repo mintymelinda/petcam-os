@@ -98,8 +98,9 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn('id="apply-camera-controls" type="button" hidden disabled', MODULE.PAGE)
         self.assertIn('grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))', MODULE.PAGE)
         self.assertIn('id="system-info"', MODULE.PAGE)
-        self.assertIn('id="release-notes"', MODULE.PAGE)
-        self.assertIn('id="install-update" hidden disabled', MODULE.PAGE)
+        self.assertNotIn('id="release-notes"', MODULE.PAGE)
+        self.assertNotIn('id="install-update"', MODULE.PAGE)
+        self.assertNotIn("/api/update", MODULE.PAGE)
         self.assertIn('OBS Feed FPS (RTSP)', MODULE.PAGE)
         self.assertIn("rtmp.enabled", MODULE.PAGE)
         self.assertIn("rtmp.state", MODULE.PAGE)
@@ -267,20 +268,6 @@ class WebManagerTests(unittest.TestCase):
         self.assertEqual(request.response[0], 409)
         initialize.assert_not_called()
 
-    def test_update_install_uses_in_page_confirmation_not_native_dialogs(self):
-        self.assertIn('id="update-confirmation" hidden', MODULE.PAGE)
-        self.assertIn('id="cancel-update-install"', MODULE.PAGE)
-        self.assertIn('id="confirm-update-install"', MODULE.PAGE)
-        self.assertIn('$("update-confirmation").hidden=false', MODULE.PAGE)
-        self.assertIn('$("confirm-update-install").onclick=installUpdate', MODULE.PAGE)
-        self.assertNotIn('confirm("Install the signed PetCam application update now?"', MODULE.PAGE)
-
-    def test_update_check_uses_fixed_privileged_command(self):
-        completed = mock.Mock(returncode=0, stdout='{"update_available": false}', stderr="")
-        with mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run:
-            self.assertFalse(MODULE.update_check()["update_available"])
-        self.assertEqual(run.call_args.args[0], ["sudo", "-n", "/usr/local/bin/petcam-update", "check"])
-
     def test_set_rtmp_service_uses_noninteractive_scoped_helper(self):
         completed = mock.Mock(returncode=0, stderr="")
         with mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run:
@@ -294,17 +281,6 @@ class WebManagerTests(unittest.TestCase):
         self.assertNotIn('["sudo", "/usr/bin/systemctl"', source)
         self.assertNotIn('["sudo", "/usr/local/sbin/petcam-rtmp-service"', source)
         self.assertIn('["sudo", "-n", "/usr/local/sbin/petcam-rtmp-service", "restart"]', source)
-
-    def test_update_status_reports_active_state_and_recent_logs(self):
-        outputs = [
-            mock.Mock(returncode=0, stdout="active\nsuccess\n0\n", stderr=""),
-            mock.Mock(returncode=0, stdout="Downloading release\n", stderr=""),
-        ]
-        with mock.patch.object(MODULE.subprocess, "run", side_effect=outputs):
-            status = MODULE.update_status()
-        self.assertTrue(status["active"])
-        self.assertEqual(status["result"], "success")
-        self.assertIn("Downloading release", status["logs"])
 
     def test_camera_inventory_uses_shared_discovery_and_exposes_h264_modes(self):
         usb_devices = [{

@@ -87,7 +87,7 @@ def reset():
         )
 
     # Preserve the OS, networking, SSH, device identity, TLS certificate/key,
-    # updater trust configuration, and installed application releases.
+    # and installed application releases.
     (ETC / "web-auth.json").unlink(missing_ok=True)
     (ETC / "petcam.conf.last-good").unlink(missing_ok=True)
     (ETC / "cameras.json").unlink(missing_ok=True)
