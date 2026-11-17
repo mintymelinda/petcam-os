@@ -98,8 +98,9 @@ class WebManagerTests(unittest.TestCase):
         self.assertIn('id="apply-camera-controls" type="button" hidden disabled', MODULE.PAGE)
         self.assertIn('grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))', MODULE.PAGE)
         self.assertIn('id="system-info"', MODULE.PAGE)
-        self.assertIn('id="release-notes"', MODULE.PAGE)
-        self.assertIn('id="install-update" hidden disabled', MODULE.PAGE)
+        self.assertNotIn('id="release-notes"', MODULE.PAGE)
+        self.assertNotIn('id="install-update"', MODULE.PAGE)
+        self.assertNotIn("/api/update", MODULE.PAGE)
         self.assertIn('OBS Feed FPS (RTSP)', MODULE.PAGE)
         self.assertIn("rtmp.enabled", MODULE.PAGE)
         self.assertIn("rtmp.state", MODULE.PAGE)
@@ -280,17 +281,6 @@ class WebManagerTests(unittest.TestCase):
         self.assertNotIn('["sudo", "/usr/bin/systemctl"', source)
         self.assertNotIn('["sudo", "/usr/local/sbin/petcam-rtmp-service"', source)
         self.assertIn('["sudo", "-n", "/usr/local/sbin/petcam-rtmp-service", "restart"]', source)
-
-    def test_update_status_reports_active_state_and_recent_logs(self):
-        outputs = [
-            mock.Mock(returncode=0, stdout="active\nsuccess\n0\n", stderr=""),
-            mock.Mock(returncode=0, stdout="Downloading release\n", stderr=""),
-        ]
-        with mock.patch.object(MODULE.subprocess, "run", side_effect=outputs):
-            status = MODULE.update_status()
-        self.assertTrue(status["active"])
-        self.assertEqual(status["result"], "success")
-        self.assertIn("Downloading release", status["logs"])
 
     def test_camera_inventory_uses_shared_discovery_and_exposes_h264_modes(self):
         usb_devices = [{
