@@ -153,7 +153,7 @@ jobs:
         uses: actions/checkout@v7
 
       # Reuse an existing release regardless of draft state. Assets are uploaded
-      # after the image and signed updater package have been built and verified.
+      # after the image and Imager catalogue have been built and verified.
       - name: Prepare release
         if: github.ref_type == 'tag'
         env:
