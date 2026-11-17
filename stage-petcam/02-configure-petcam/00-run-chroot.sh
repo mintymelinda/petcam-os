@@ -235,41 +235,6 @@ chmod 0640 /etc/petcam/rtmp.json
 chown root:petcam /etc/petcam/home-assistant.conf
 chmod 0640 /etc/petcam/home-assistant.conf
 
-cat > /etc/petcam/update.conf <<'UPDATE'
-# Stable GitHub Releases endpoint; independent of the Raspberry Pi Imager catalogue.
-MANIFEST_URL=https://github.com/mintymelinda/petcam-os/releases/latest/download/petcam-update-manifest.json
-PUBLIC_KEY=/etc/petcam/update-signing.pub
-UPDATE
-chown root:root /etc/petcam/update.conf
-chmod 0600 /etc/petcam/update.conf
-install -d -o root -g root -m 0755 /var/lib/petcam/update
-install -d -o root -g root -m 0755 /var/lib/petcam/update/staging
-
-cat > /etc/systemd/system/petcam-update.service <<'UNIT'
-[Unit]
-Description=Install a verified PetCam application release
-Documentation=https://github.com/mintymelinda/petcam-os
-After=network-online.target
-Wants=network-online.target
-ConditionPathExists=/etc/petcam/update.conf
-
-[Service]
-Type=oneshot
-User=root
-Group=root
-ExecStart=/usr/local/bin/petcam-update install
-TimeoutStartSec=360
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-PrivateTmp=true
-ReadWritePaths=/opt/petcam /var/lib/petcam/update /etc/systemd/system /etc/petcam /usr/local/sbin /etc/sudoers.d
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-
 cat > /etc/systemd/system/petcam-stream.service <<'UNIT'
 [Unit]
 Description=PetCam USB UVC or Raspberry Pi CSI camera streamer
@@ -299,7 +264,7 @@ systemctl enable avahi-daemon.service
 systemctl enable petcam-stream.service
 
 cat > /etc/sudoers.d/petcam-web <<'SUDO'
-petcam ALL=(root) NOPASSWD: /usr/bin/systemctl restart petcam-stream.service, /usr/local/sbin/petcam-stream-service, /usr/local/bin/petcam-update check, /usr/bin/systemctl start --no-block petcam-update.service, /usr/bin/journalctl -u petcam-update.service -n 20 --no-pager -o cat
+petcam ALL=(root) NOPASSWD: /usr/bin/systemctl restart petcam-stream.service, /usr/local/sbin/petcam-stream-service
 petcam ALL=(root) NOPASSWD: /usr/bin/journalctl -u petcam-stream.service -n 300 --no-pager, /usr/bin/journalctl -u petcam-stream.service -u petcam-web.service -n 120 --no-pager -o short-iso
 SUDO
 chmod 0440 /etc/sudoers.d/petcam-web

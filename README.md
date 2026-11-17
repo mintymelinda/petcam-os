@@ -11,7 +11,6 @@ A minimal Raspberry Pi OS image for Raspberry Pi boards, USB UVC webcams, and Ra
 - Optional scheduled timelapse JPEG capture and motion-triggered event snapshots.
 - Optional read-only Home Assistant MQTT discovery.
 - Optional standalone H.264 RTMP/RTMPS publishing from the existing MJPEG feed.
-- Signed application updates with staged installation and rollback.
 
 See the feature guides:
 - [Building and installing](docs/building.md)
@@ -19,7 +18,6 @@ See the feature guides:
 - [Optional RTMP output](docs/rtmp-output.md)
 - [Motion detection](docs/motion-detection.md)
 - [Timelapse capture](docs/timelapse.md)
-- [Application update engine](docs/update-engine.md)
 
 ## Supported hardware
 
@@ -45,7 +43,7 @@ USB modes are discovered through V4L2. CSI cameras and advertised sensor modes a
 
 PetCam uses the official [Raspberry Pi pi-gen](https://github.com/RPi-Distro/pi-gen) build system. Docker is used on the build host; Docker is not installed on the Pi.
 
-The GitHub Actions workflow validates Python and shell syntax and runs the unit test suite for pull requests, pushes to `main`, and manual workflow dispatches. A full image build and publication happens for version tags matching `vMAJOR.MINOR.PATCH`. Tagged builds remove build-only packages and caches, then publish pi-gen's compressed image directly with first-boot root-filesystem expansion retained. Releases publish that optimized image, the generated Raspberry Pi Imager OS sublist, and signed application-update assets. See [docs/building.md](docs/building.md) for the exact workflow and local build instructions.
+The GitHub Actions workflow validates Python and shell syntax and runs the unit test suite for pull requests, pushes to `main`, and manual workflow dispatches. A full image build and publication happens for version tags matching `vMAJOR.MINOR.PATCH`. Tagged builds remove build-only packages and caches, then publish pi-gen's compressed image directly with first-boot root-filesystem expansion retained. Releases publish that optimized image, the generated Raspberry Pi Imager OS sublist, and build diagnostics. See [docs/building.md](docs/building.md) for the exact workflow and local build instructions.
 
 The image installs PetCam application files into versioned releases under `/opt/petcam/releases/`, with `/opt/petcam/current` selecting the active release. Device configuration and runtime data live outside that versioned tree.
 
@@ -116,12 +114,6 @@ The diagnostics command checks the capture backend, HTTPS manager, OBS stream pr
 
 These probes run on the Pi and cannot prove that a remote OBS client can reach it. Check remote firewall rules, Wi-Fi client isolation, VLAN segmentation, and mDNS support from the client computer. A cumulative dropped-frame counter is reported as unavailable when the active driver does not expose a reliable value; PetCam does not estimate one.
 
-## Application updates
-
-The image includes a root-owned updater for signed PetCam application releases. It downloads a manifest from GitHub Releases, verifies its Ed25519 signature and archive digest, stages a versioned release, switches `/opt/petcam/current` atomically, and rolls back if the web manager health check fails. It does not update Raspberry Pi OS, the kernel, firmware, or boot partition.
-
-Version tags matching `vMAJOR.MINOR.PATCH` trigger the image and signed application-release pipeline. Raspberry Pi Imager's catalogue is not involved in update discovery or installation. Existing devices created before the update trust key and manifest URL were added to the image need the one-time public-key/configuration bootstrap in [docs/update-engine.md](docs/update-engine.md). Updates are checked and installed manually; a browser-local preference can check when the manager is opened, but does not schedule background checks or install updates automatically.
-
 ## First boot and Raspberry Pi Imager
 
 The tagged-release workflow generates a Raspberry Pi Imager OS sublist using the published schema, HTTPS release asset URLs, compressed and extracted SHA-256 hashes, supported 32-bit Pi device tags, and `init_format: cloudinit-rpi`. The generated sublist is attached to each versioned GitHub Release. Inclusion in Raspberry Pi Imager's default catalogue is subject to Raspberry Pi's catalogue review and should not be assumed until it is approved.
@@ -160,10 +152,10 @@ On first boot, open the manager from another device on the same network:
 - The first-run setup is one-time and signs the browser in automatically. SSH is not required.
 - Complete first-run setup while the Pi is on a trusted private network; do not expose the manager to the public internet.
 
-This manager password is separate from the Linux administrator account configured in Raspberry Pi Imager. If the manager password is lost, run `sudo petcam-admin` locally or over SSH to perform a confirmed PetCam factory reset. This clears PetCam settings, camera profiles, administrator credentials, timelapse frames, motion snapshots, and integration settings, then restores the browser first-run setup. It preserves Raspberry Pi OS, Wi-Fi/network configuration, hostname, SSH, the device TLS certificate, updater trust configuration, and installed software. It is deliberately not available as an unauthenticated network endpoint.
+This manager password is separate from the Linux administrator account configured in Raspberry Pi Imager. If the manager password is lost, run `sudo petcam-admin` locally or over SSH to perform a confirmed PetCam factory reset. This clears PetCam settings, camera profiles, administrator credentials, timelapse frames, motion snapshots, and integration settings, then restores the browser first-run setup. It preserves Raspberry Pi OS, Wi-Fi/network configuration, hostname, SSH, the device TLS certificate, and installed software. It is deliberately not available as an unauthenticated network endpoint.
 
 Password hashes use PBKDF2-HMAC-SHA256 and are stored in `/etc/petcam/web-auth.json`. Each device generates its own self-signed HTTPS certificate, so the browser will show a certificate warning until the certificate is explicitly trusted. Sessions are HTTP-only, Secure, SameSite=Strict, expire after eight hours, and are invalidated when the password changes or the manager service restarts.
 
-The manager listens on HTTPS port `8443`. Port `8080` is a separate unauthenticated HTTP stream-only endpoint for OBS; it exposes stream paths, not management or update routes. The camera capture backend listens only on loopback. Keep the device on a trusted private network and do not port-forward either public port to the internet.
+The manager listens on HTTPS port `8443`. Port `8080` is a separate unauthenticated HTTP stream-only endpoint for OBS; it exposes stream paths, not management routes. The camera capture backend listens only on loopback. Keep the device on a trusted private network and do not port-forward either public port to the internet.
 
 Camera mode discovery and automatic selection do not prove sustained performance on a particular Pi, camera, USB hub, power supply, or network. Validate the intended configuration on the actual hardware.

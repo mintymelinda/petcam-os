@@ -6,7 +6,7 @@ The workflow is named **Build PetCam OS image**.
 
 - Pull requests, pushes to `main`, and manual workflow dispatches run validation: Python byte-compilation, shell syntax checks, and the unit test suite.
 - A full Raspberry Pi OS image build and GitHub Release publication runs when a version tag matching `vMAJOR.MINOR.PATCH` is pushed. A manual workflow dispatch can also run a non-publishing image build for cache benchmarking.
-- The tagged release job checks out the official Raspberry Pi [pi-gen](https://github.com/RPi-Distro/pi-gen) project at a fixed commit, adds the PetCam stage, builds the image, inventories the packages in the final root filesystem, generates and validates the Raspberry Pi Imager OS sublist, packages the exact application release from the built image, signs the update manifest, and uploads the resulting assets to the GitHub Release.
+- The tagged release job checks out the official Raspberry Pi [pi-gen](https://github.com/RPi-Distro/pi-gen) project at a fixed commit, adds the PetCam stage, builds the image, inventories the packages in the final root filesystem, generates and validates the Raspberry Pi Imager OS sublist, and uploads the image, catalogue, package inventory, and build information to the GitHub Release.
 
 The pi-gen revision is pinned to `6e3ff62bfd9c690a6a3d1d7de259d5e0af40cb78`. This prevents upstream stage/package changes from silently changing release contents. Each release also includes a TSV inventory of installed packages (including versions and installed sizes) and a build-info file recording the pi-gen commit.
 
@@ -77,8 +77,6 @@ A successful version-tag build publishes:
 
 - `petcam-os-vMAJOR.MINOR.PATCH.img.xz`: standard pi-gen compressed flashable image, without a post-build shrink/recompress pass. First-boot root-filesystem expansion remains enabled so the installed system grows to use the target card.
 - `petcam-os-os-list.json`: generated Raspberry Pi Imager OS sublist.
-- `petcam-MAJOR.MINOR.PATCH-armhf.tar.gz`: versioned PetCam application archive.
-- `petcam-update-manifest.json` and `petcam-update-manifest.json.sig`: signed update metadata and detached Ed25519 signature.
 
 The Imager sublist includes the HTTPS image URL, compressed and extracted SHA-256 hashes and sizes, supported 32-bit device tags for Pi 1 through Pi 5 families, `architecture: armhf`, and `init_format: cloudinit-rpi`. The workflow validates the generated JSON against Raspberry Pi's published schema before publishing it.
 
@@ -112,7 +110,7 @@ The PetCam manager is configured from a browser; an SSH session is not required 
 4. On a new image, the manager displays a one-time administrator setup form. Create and confirm a password of at least 12 characters. The browser is signed in automatically after setup.
 5. Continue with camera discovery and configuration in the manager.
 
-The PetCam manager password is separate from the Linux account created in Imager. The first-run endpoint refuses to replace an existing password, so it cannot be used to reset an established device. If the manager password is lost, run `sudo petcam-admin` locally or over SSH and type `RESET` to confirm a PetCam factory reset. This restores application settings and credentials to first-run defaults, removes camera profiles and PetCam-generated timelapse/motion data, and preserves Raspberry Pi OS, Wi-Fi/network configuration, hostname, SSH, TLS identity, updater trust, and installed software. Complete first-run setup on a trusted private network and do not expose the manager to the public internet.
+The PetCam manager password is separate from the Linux account created in Imager. The first-run endpoint refuses to replace an existing password, so it cannot be used to reset an established device. If the manager password is lost, run `sudo petcam-admin` locally or over SSH and type `RESET` to confirm a PetCam factory reset. This restores application settings and credentials to first-run defaults, removes camera profiles and PetCam-generated timelapse/motion data, and preserves Raspberry Pi OS, Wi-Fi/network configuration, hostname, SSH, TLS identity and installed software. Complete first-run setup on a trusted private network and do not expose the manager to the public internet.
 
 The manager uses a per-device self-signed HTTPS certificate. The browser will warn that the certificate is not trusted until you explicitly trust it; verify that you are connecting to your own device before proceeding.
 
