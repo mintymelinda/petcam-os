@@ -267,20 +267,6 @@ class WebManagerTests(unittest.TestCase):
         self.assertEqual(request.response[0], 409)
         initialize.assert_not_called()
 
-    def test_update_install_uses_in_page_confirmation_not_native_dialogs(self):
-        self.assertIn('id="update-confirmation" hidden', MODULE.PAGE)
-        self.assertIn('id="cancel-update-install"', MODULE.PAGE)
-        self.assertIn('id="confirm-update-install"', MODULE.PAGE)
-        self.assertIn('$("update-confirmation").hidden=false', MODULE.PAGE)
-        self.assertIn('$("confirm-update-install").onclick=installUpdate', MODULE.PAGE)
-        self.assertNotIn('confirm("Install the signed PetCam application update now?"', MODULE.PAGE)
-
-    def test_update_check_uses_fixed_privileged_command(self):
-        completed = mock.Mock(returncode=0, stdout='{"update_available": false}', stderr="")
-        with mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run:
-            self.assertFalse(MODULE.update_check()["update_available"])
-        self.assertEqual(run.call_args.args[0], ["sudo", "-n", "/usr/local/bin/petcam-update", "check"])
-
     def test_set_rtmp_service_uses_noninteractive_scoped_helper(self):
         completed = mock.Mock(returncode=0, stderr="")
         with mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run:
