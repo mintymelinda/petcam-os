@@ -65,7 +65,6 @@ dialog{max-width:min(28rem,calc(100% - 2rem));width:100%;background:#22262c;colo
 .dialog-heading{display:flex;justify-content:space-between;align-items:center;gap:1rem}.dialog-heading h2{margin:.2rem 0}
 .camera-actions{display:flex;justify-content:space-between;align-items:center;margin:1rem 0}.camera-actions-right{display:flex;gap:.5rem}
 .advanced-dialog{max-width:min(760px,calc(100% - 2rem));max-height:85vh;overflow:auto}.advanced-dialog section{margin:.75rem 0}
-.release-notes{white-space:pre-wrap;line-height:1.5;background:#1a1d22;border-radius:8px;padding:.85rem;max-height:18rem;overflow:auto}
 @media(max-width:600px){.camera-select-grid{grid-template-columns:1fr}.tab-nav{gap:.2rem}.tab-nav button{font-size:.85rem;padding:.5rem}}</style>
 <body><h1>PetCam <small>Camera</small></h1>
 <section id="first-run" hidden><h2>Welcome to PetCam</h2><p>Create the administrator password for this camera. You can do this from your browser; SSH is not required.</p><form id="first-run-form"><label for="setup-password">Administrator password (12–1024 characters)</label><input id="setup-password" type="password" minlength="12" maxlength="1024" autocomplete="new-password" required><label for="setup-password-confirm">Confirm password</label><input id="setup-password-confirm" type="password" minlength="12" maxlength="1024" autocomplete="new-password" required><p id="setup-message" role="status" aria-live="polite"></p><button id="setup-submit" type="submit">Create administrator password</button></form></section>
