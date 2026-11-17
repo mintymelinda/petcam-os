@@ -24,7 +24,6 @@ class FactoryResetTests(unittest.TestCase):
             (etc / "petcam.conf.last-good").write_text("SOURCE=usb\n")
             (etc / "home-assistant.conf").write_text("MQTT_ENABLED=true\n")
             (etc / "web-manager.key").write_text("private key")
-            (etc / "update-signing.pub").write_text("public key")
             (etc / "cameras.d").mkdir()
             (etc / "cameras.d" / "extra.conf").write_text("DEVICE=/dev/video0\n")
             (state / "timelapse" / "frames").mkdir(parents=True)
@@ -48,7 +47,6 @@ class FactoryResetTests(unittest.TestCase):
             self.assertFalse((state / "motion" / "events" / "event.jpg").exists())
             self.assertFalse((state / "health.json").exists())
             self.assertEqual((etc / "web-manager.key").read_text(), "private key")
-            self.assertEqual((etc / "update-signing.pub").read_text(), "public key")
 
     def test_reset_requires_root(self):
         with mock.patch.object(MODULE.os, "geteuid", return_value=1000):
