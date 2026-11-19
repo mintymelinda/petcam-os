@@ -21,7 +21,7 @@ See the feature guides:
 
 ## Supported hardware
 
-The published image is 32-bit Raspberry Pi OS (armhf). The Imager device list covers these Raspberry Pi families:
+The published image is a single 32-bit Raspberry Pi OS image (armhf), explicitly selected in the pi-gen build configuration. Raspberry Pi lists its current 32-bit OS as compatible with all Raspberry Pi models. PetCam declares compatibility with the five Imager 32-bit family tags (Pi 1 through Pi 5), rather than publishing separate downloads for individual board variants:
 
 - Raspberry Pi 1 family, including the original Zero and Zero W.
 - Raspberry Pi 2 family.
