@@ -27,6 +27,14 @@ class PiGenPackageAuditTests(unittest.TestCase):
         config = (ROOT / "config").read_text(encoding="utf-8")
         self.assertIn("stage-petcam-base stage-petcam", config)
 
+    def test_build_is_explicitly_one_armhf_image(self):
+        config = (ROOT / "config").read_text(encoding="utf-8")
+        self.assertIn('ARCH="armhf"', config)
+        workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
+        self.assertIn('Expected exactly one .img.xz image', workflow)
+        self.assertIn('IMAGE_ARCH="$(sudo dpkg-query', workflow)
+        self.assertIn('Expected one armhf image', workflow)
+
     def test_release_build_uses_a_fixed_pi_gen_commit(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text(encoding="utf-8")
         self.assertIn(f"ref: {PI_GEN_COMMIT}", workflow)

@@ -347,6 +347,11 @@ jobs:
           fi
           sudo mkdir -p "${ROOTFS_MOUNT}"
           sudo mount -o ro "${ROOT_PARTITION}" "${ROOTFS_MOUNT}"
+          IMAGE_ARCH="$(sudo dpkg-query --admindir="${ROOTFS_MOUNT}/var/lib/dpkg" --show --showformat='${Architecture}' dpkg)"
+          if [[ "${IMAGE_ARCH}" != "armhf" ]]; then
+            echo "Expected one armhf image; built image reports ${IMAGE_ARCH}." >&2
+            exit 1
+          fi
           PACKAGE_INVENTORY="${RUNNER_TEMP}/${TAG}-installed-packages.tsv"
           sudo dpkg-query --admindir="${ROOTFS_MOUNT}/var/lib/dpkg" \
             --show --showformat='${binary:Package}\t${Version}\t${db:Status-Abbrev}\t${Installed-Size}\n' \
